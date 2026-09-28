@@ -62,7 +62,10 @@ function Rombos({ n }: { n: number }) {
 export function Medidor({ evaluacion }: { evaluacion: Evaluacion }) {
   const disponible = evaluacion.memoriaParaIaGb
   if (disponible === null) return null
-  const tope = Math.max(12, Math.ceil(disponible))
+  // La escala llega al perfil más exigente (o a lo disponible, si es más), redondeada a par para
+  // que la marca central sea un número entero.
+  const mayor = Math.max(disponible, ...evaluacion.perfiles.map((p) => p.memoriaGb))
+  const tope = Math.ceil(mayor / 2) * 2
   const pct = (v: number) => `${Math.min(100, (v / tope) * 100)}%`
   return (
     <div className="medidor">

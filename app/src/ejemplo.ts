@@ -4,10 +4,8 @@
 // por sus tests (p. ej. `deck_16gb_maximo_justo_recomienda_equilibrado`).
 
 import type { Api } from './api'
-import catalogoJson from '../catalogo/catalogo.json'
-import type { Catalogo, Config, Equipo, Evaluacion, PerfilEvaluado } from './tipos'
-
-const catalogo = catalogoJson as Catalogo
+import { catalogo, descargaGb as descargaDe } from './catalogo'
+import type { Config, Equipo, Evaluacion, PerfilEvaluado } from './tipos'
 
 export const configInicial = (): Config => ({
   version: 1,
@@ -38,8 +36,7 @@ export function evaluarEjemplo(equipo: Equipo | null): Evaluacion {
   const paraIa = equipo ? Math.max(0, ram - Math.max(r.reservaMinimaGb, ram * r.reservaProporcion) - r.memoriaJuegoGb) : null
   const disco = equipo ? equipo.discoLibreMb / 1024 : null
   const perfiles: PerfilEvaluado[] = catalogo.perfiles.map((p) => {
-    const descargaGb = [...new Set([p.narrador, p.cronista, p.sugerencias, p.embeddings])]
-      .reduce((a, m) => a + (catalogo.modelos[m]?.descargaGb ?? 0), 0)
+    const descargaGb = descargaDe(p)
     return {
       ...p,
       descargaGb,

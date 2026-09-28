@@ -35,3 +35,17 @@ npm run tauri build              # instaladores (.exe en Windows; .AppImage y .d
 ```
 
 `TARKOR_DATOS=/ruta` cambia la carpeta de datos (para pruebas sin tocar la real).
+
+## Prueba de punta a punta (Linux)
+
+Recorre el asistente en la app instalada pulsando los botones por su texto, guarda una captura de
+cada pantalla, comprueba `config.json` y vuelve a abrir la app para ver que no repite el asistente.
+
+```sh
+sudo apt install webkit2gtk-driver xvfb   # driver WebDriver de WebKit y pantalla virtual
+cargo install tauri-driver --locked
+npm run tauri build
+sudo dpkg -i target/release/bundle/deb/Tarkor_*_amd64.deb
+export TARKOR_DATOS=$(mktemp -d)
+xvfb-run -a sh -c 'tauri-driver & D=$!; trap "kill $D" EXIT; sleep 2; node e2e/asistente.e2e.mjs /usr/bin/tarkor capturas'
+```

@@ -56,7 +56,7 @@ Pasos completados en `moss`, paso actual en `accent`, futuros en `wood-400`.
 - Título: "Bienvenido a Tarkor".
 - Texto: qué va a pasar en 4 frases (preparar el motor de IA para tu equipo, descargar lo
   necesario, comprobar que todo funciona, jugar) y cuánto tarda: "Unos minutos, más el tiempo de
-  descarga (3-9 GB según tu equipo)".
+  descarga (1,3-9,4 GB según tu equipo)". El rango se calcula del catálogo (`12`).
 - Nota de contenido: "Contiene violencia de fantasía. Recomendado a partir de 16 años."
 - Acción: **Empezar**.
 
@@ -65,7 +65,7 @@ Pasos completados en `moss`, paso actual en `accent`, futuros en `wood-400`.
 Dos columnas:
 
 - **Se instalará:** el motor de IA (Ollama, código abierto), los modelos de lenguaje que elijas
-  en el paso 4 (3-9 GB), la base de datos de tus partidas. Dónde: la ruta real de la carpeta de
+  en el paso 4 (1,3-9,4 GB), la base de datos de tus partidas. Dónde: la ruta real de la carpeta de
   datos, con botón "Cambiar" (solo mientras no haya nada descargado).
 - **Tarkor nunca:** envía tu partida a ningún sitio · pide cuenta ni correo · recoge estadísticas
   de uso · arranca solo con el sistema · usa cámara, micrófono, ubicación o contactos.

@@ -24,7 +24,7 @@ plataformas. El instalador de Windows solo muestra un resumen corto.
 ## Instalador de Windows (NSIS)
 
 1. **Bienvenida + resumen** en castellano: qué es Tarkor, que es gratuito, que en el primer arranque
-   se pedirá permiso para descargar el motor de IA (3-9 GB según el equipo).
+   se pedirá permiso para descargar el motor de IA (1,3-9,4 GB según el perfil).
 2. **Licencia y avisos** en lenguaje claro (ver [`08-legal-y-privacidad.md`](08-legal-y-privacidad.md)).
    Casilla sin marcar.
 3. **Carpeta de instalación:** por defecto `%LOCALAPPDATA%\Programs\Tarkor`, modificable.

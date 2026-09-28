@@ -1,6 +1,10 @@
 // Todo el texto visible del asistente, en un único sitio para revisarlo de una vez
 // (docs/11-diseno-del-frontal.md, "Implementación").
 
+import { rangoDescarga } from './catalogo'
+
+const rango = rangoDescarga()
+
 export const pasos = ['Bienvenida', 'Qué se instala', 'Tu equipo', 'Perfil', 'Descarga', 'Comprobación', 'Listo']
 
 export const comun = {
@@ -17,7 +21,7 @@ export const bienvenida = {
   pasos: [
     ['Te contamos qué se instala', 'y qué no hace Tarkor nunca.'],
     ['Revisamos tu equipo', 'si nos das permiso, para recomendarte un perfil.'],
-    ['Descargamos lo necesario:', 'entre 3 y 9 GB según el perfil.'],
+    ['Descargamos lo necesario:', `entre ${rango} GB según el perfil.`],
     ['Comprobamos que todo funciona', 'con una narración de prueba.'],
   ],
   duracion: 'Tardarás unos minutos, más lo que tarde la descarga. Si cierras a medias, continuarás donde lo dejaste.',
@@ -31,7 +35,7 @@ export const queSeInstala = {
   seInstala: 'Se instalará',
   items: [
     ['El motor de IA', '(Ollama, de código abierto). Entre 50 MB y 1,5 GB según tu gráfica.'],
-    ['Los modelos de lenguaje', 'del perfil que elijas: entre 3 y 9 GB.'],
+    ['Los modelos de lenguaje', `del perfil que elijas: entre ${rango} GB.`],
     ['La base de datos de tus partidas,', 'que empieza ocupando unos pocos MB.'],
   ],
   donde: 'Dónde:',
