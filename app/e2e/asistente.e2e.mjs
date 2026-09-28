@@ -71,8 +71,8 @@ async function pulsar(texto, timeoutMs) {
   await wd('POST', s(`/element/${id}/click`), {})
 }
 
-async function texto(xpath) {
-  return wd('GET', s(`/element/${await buscar(xpath)}/text`))
+async function texto(xpath, timeoutMs) {
+  return wd('GET', s(`/element/${await buscar(xpath, timeoutMs)}/text`))
 }
 
 let n = 0
@@ -120,11 +120,24 @@ async function recorrido() {
 
   await buscar(titulo('Descargando'))
   await captura('descarga')
-  await pulsar('Comprobar la instalación', 60000)
+  if (process.env.E2E_ESPERA_ERROR_RED) {
+    // Motor real en una red que bloquea el registro de modelos: el motor se instala y arranca,
+    // y la descarga del modelo muestra un error explicado con opción de reintentar.
+    const error = await texto('//div[@role="alert"]', 600000)
+    comprobar(error.startsWith('La red de este equipo no deja descargar'), `error de red explicado: "${error.slice(0, 70)}…"`)
+    await buscar(boton('Reintentar'))
+    await captura('error-red')
+    await cerrar()
+    return
+  }
+  await pulsar('Comprobar la instalación', 600000)
 
   await buscar(titulo('Comprobación'))
-  await pulsar('Continuar', 30000)
+  const narracion = await texto('//p[@class="cita"]', 120000)
+  comprobar(narracion.includes('niebla'), `narración de prueba: ${narracion}`)
+  comprobar(/palabras por segundo/.test(await texto(conTexto('palabras por segundo'))), 'velocidad medida')
   await captura('comprobacion')
+  await pulsar('Continuar')
 
   await buscar(titulo('Todo preparado'))
   await captura('listo')

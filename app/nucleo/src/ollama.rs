@@ -35,6 +35,8 @@ fn explicar(e: &str) -> String {
     let m = e.to_ascii_lowercase();
     if m.contains("memory") || m.contains("oom") {
         format!("Tu equipo se ha quedado sin memoria al cargar el modelo. Prueba un perfil más ligero o cierra otros programas. ({e})")
+    } else if m.contains("forbidden") || m.contains("403") || m.contains("proxy") || m.contains("certificate") {
+        format!("La red de este equipo no deja descargar del servidor de modelos (puede ser un cortafuegos, un proxy o un antivirus). Prueba con otra conexión; lo ya descargado se conserva. ({e})")
     } else if m.contains("dial tcp") || m.contains("no such host") || m.contains("connection") || m.contains("timeout") {
         format!("No se pudo conectar con el servidor de modelos. Comprueba tu conexión a internet y vuelve a intentarlo; lo ya descargado se conserva. ({e})")
     } else if m.contains("no space") {
@@ -305,6 +307,14 @@ mod tests {
         let c = ollama_falso("{\"status\":\"pulling manifest\"}\n{\"error\":\"pull model manifest: dial tcp: lookup registry.ollama.ai: no such host\"}\n");
         let e = c.descargar_modelo("qwen2.5:7b", &AtomicBool::new(false), &mut |_| {}).unwrap_err();
         assert!(e.to_string().starts_with("No se pudo conectar con el servidor de modelos"), "{e}");
+    }
+
+    #[test]
+    fn red_bloqueada_explicada_al_jugador() {
+        // Mensaje real de Ollama 0.34.3 detrás de un proxy que bloquea el registro.
+        let c = ollama_falso("{\"error\":\"pull model manifest: Get \\\"https://registry.ollama.ai/v2/library/qwen2.5/manifests/1.5b-instruct\\\": Forbidden\"}\n");
+        let e = c.descargar_modelo("qwen2.5:1.5b-instruct", &AtomicBool::new(false), &mut |_| {}).unwrap_err();
+        assert!(e.to_string().starts_with("La red de este equipo no deja descargar"), "{e}");
     }
 
     #[test]

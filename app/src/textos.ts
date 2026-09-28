@@ -113,7 +113,7 @@ export const descarga = {
   total: 'Total',
   quedan: (min: number) => `quedan unos ${min} min`,
   motor: 'Motor de IA',
-  estados: { cola: 'En cola', bajando: 'Descargando', pausa: 'En pausa', verificando: 'Verificando', extrayendo: 'Preparando', listo: 'Listo' },
+  estados: { cola: 'En cola', bajando: 'Descargando', pausa: 'En pausa', verificando: 'Verificando', extrayendo: 'Preparando', detenida: 'Detenida', listo: 'Listo' },
   verificado: 'Descargado de las fuentes oficiales y verificado al terminar cada archivo.',
   pausar: 'Pausar',
   reanudar: 'Reanudar',

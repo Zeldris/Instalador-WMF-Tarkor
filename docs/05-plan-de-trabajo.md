@@ -24,9 +24,9 @@ Objetivo: demostrar que el patrón completo funciona en Windows y en la Steam De
 - [x] **0.3b** Catálogo de modelos y perfiles en JSON (con perfil Mínimo para que cualquiera pueda
   probar) y ajustes de rendimiento de Ollama calculados por equipo (ver
   [`12`](12-catalogo-y-rendimiento.md)).
-- [ ] **0.4** Gestor de sidecars en Rust: puerto libre, arrancar y parar procesos, esperar al
+- [x] **0.4** Gestor de sidecars en Rust: puerto libre, arrancar y parar procesos, esperar al
   health-check, un reinicio automático, parada garantizada al cerrar.
-- [ ] **0.5** Ollama portable: descarga de la versión fijada (SHA256), arranque aislado
+- [x] **0.5** Ollama portable: descarga de la versión fijada (SHA256), arranque aislado
   (`OLLAMA_HOST`, `OLLAMA_MODELS`), descarga de modelos con progreso vía `/api/pull`.
 - [ ] **0.6** Prueba de empaquetado del backend: Fastify + Prisma sobre SQLite compilado a
   bytecode (camino A de [`10`](10-proteccion-del-codigo-y-build.md)); probar también Prisma sin

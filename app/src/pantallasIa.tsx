@@ -129,6 +129,7 @@ export function Descarga({ ir, config, evaluacion, actualizar }: Props) {
           const ok = f.estado === 'listo'
           const estado = ok ? t.estados.listo
             : fase === 'pausada' && f.parte > 0 ? t.estados.pausa
+            : fase === 'error' && f.estado === 'bajando' ? t.estados.detenida
             : f.estado === 'verificando' ? t.estados.verificando
             : f.estado === 'extrayendo' ? t.estados.extrayendo
             : f.estado === 'bajando' ? t.estados.bajando : t.estados.cola
