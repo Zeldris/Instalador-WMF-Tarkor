@@ -75,9 +75,33 @@ export interface Rutas {
 }
 
 export interface Catalogo {
+  motor: { version: string; paquetes: Record<string, { archivo: string; descargaGb: number }> }
   reglas: { reservaMinimaGb: number; reservaProporcion: number; memoriaJuegoGb: number; proporcionVramUtil: number; margenComodoGb: number; margenDisco: number }
   modelos: Record<string, { descargaGb: number; licencia: string; piensa?: boolean }>
   perfiles: Perfil[]
 }
 
-export const cabe = (p: PerfilEvaluado) => p.cabeEnMemoria && p.cabeEnDisco
+export interface InfoMotor {
+  version: string
+  instalado: boolean
+  enMarcha: boolean
+  descargaGb: number
+  modelosGb: Record<string, number>
+}
+
+export type ProgresoMotor =
+  | { fase: 'descargando'; hecho: number; total: number }
+  | { fase: 'verificando' }
+  | { fase: 'extrayendo' }
+  | { fase: 'listo' }
+
+export interface ProgresoModelo {
+  modelo: string
+  estado: string
+  hecho: number
+  total: number
+}
+
+export type Comprobacion = { resultado: 'ok'; detalle: string } | { resultado: 'omitida'; motivo: string }
+
+export const cabe =(p: PerfilEvaluado) => p.cabeEnMemoria && p.cabeEnDisco
