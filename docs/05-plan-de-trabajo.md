@@ -28,9 +28,11 @@ Objetivo: demostrar que el patrón completo funciona en Windows y en la Steam De
   health-check, un reinicio automático, parada garantizada al cerrar.
 - [x] **0.5** Ollama portable: descarga de la versión fijada (SHA256), arranque aislado
   (`OLLAMA_HOST`, `OLLAMA_MODELS`), descarga de modelos con progreso vía `/api/pull`.
-- [ ] **0.6** Prueba de empaquetado del backend: Fastify + Prisma sobre SQLite compilado a
-  bytecode (camino A de [`10`](10-proteccion-del-codigo-y-build.md)); probar también Prisma sin
-  motor nativo (`queryCompiler` + adaptador SQLite).
+- [x] **0.6** Prueba de empaquetado del backend compilado a bytecode (camino A de
+  [`10`](10-proteccion-del-codigo-y-build.md)): funciona con el backend real contra Postgres
+  (lecturas, crear partida, `FOR UPDATE`). Herramienta en `herramientas/empaquetar-backend.mjs`.
+  Pendiente para después de la fase 2: repetirla sobre SQLite y probar Prisma sin motor nativo
+  (`queryCompiler` + adaptador SQLite).
 - [ ] **0.7** Narrador con `system` + `options` por petición sobre `qwen2.5:7b`: comparar con
   `tarkor-narrador` (ver [`03`](03-ollama-y-modelos-ia.md)).
 - [ ] **0.8** Prueba en la Steam Deck y en un Windows limpio: tiempos de descarga, memoria real

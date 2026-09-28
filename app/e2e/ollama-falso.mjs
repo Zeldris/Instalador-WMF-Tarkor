@@ -37,6 +37,19 @@ createServer(async (req, res) => {
     descargados.add(model === 'nomic-embed-text' ? 'nomic-embed-text:latest' : model)
     return res.end()
   }
+  if (ruta === '/api/embed') {
+    // Vector determinista de 768 dimensiones (como nomic-embed-text) a partir del texto.
+    const { input } = await cuerpo(req)
+    const textos = Array.isArray(input) ? input : [input]
+    const vector = (t) => {
+      let h = 2166136261
+      return Array.from({ length: 768 }, (_, i) => {
+        h = Math.imul(h ^ (t.charCodeAt(i % Math.max(1, t.length)) || 0) ^ i, 16777619)
+        return ((h >>> 0) % 2000) / 1000 - 1
+      })
+    }
+    return json({ model: 'nomic-embed-text', embeddings: textos.map((t) => vector(String(t))) })
+  }
   if (ruta === '/api/generate') {
     const { model } = await cuerpo(req)
     if (![...descargados].some((d) => d.startsWith(model))) return json({ error: `model '${model}' not found` }, 404)
