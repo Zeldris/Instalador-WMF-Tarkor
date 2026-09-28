@@ -10,6 +10,15 @@
     "margenDisco": 1.1,
     "contextoNarrador": 8192
   },
+  "motor": {
+    "version": "0.34.3",
+    "urlBase": "https://github.com/ollama/ollama/releases/download/v0.34.3/",
+    "notas": "Paquetes oficiales de Ollama (MIT). Sumas copiadas de sha256sum.txt de la release. Incluyen soporte NVIDIA y Vulkan; el paquete extra de ROCm no se descarga por defecto porque Vulkan ya cubre las gráficas AMD.",
+    "paquetes": {
+      "linux": { "archivo": "ollama-linux-amd64.tar.zst", "sha256": "e83a089fd0cd2f79ee2933cca2085846a2065f497adbc6467c402177c68423f9", "descargaGb": 1.33 },
+      "windows": { "archivo": "ollama-windows-amd64.zip", "sha256": "306ce9e81e3491d147f558e60d7a389499f244d10f71859c6e4e899241d1b4ae", "descargaGb": 1.36 }
+    }
+  },
   "modelos": {
     "qwen2.5:7b": { "descargaGb": 4.7, "licencia": "Apache-2.0", "piensa": false },
     "qwen2.5:1.5b-instruct": { "descargaGb": 1.0, "licencia": "Apache-2.0", "piensa": false },
