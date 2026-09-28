@@ -36,8 +36,8 @@ técnica sube el listón y la licencia da el derecho a reclamar.
 |---|---|---|
 | Ollama | MIT | Incluir el aviso de copyright y la licencia |
 | `qwen2.5:7b`, `qwen2.5:1.5b-instruct` | Apache 2.0 | Incluir la licencia y los avisos |
-| `qwen2.5:3b` (perfil Ligero, `09`) | **Qwen Research License** — no es Apache 2.0 | Revisar antes de usarlo: puede no permitir este uso. Si no lo permite, buscar otro narrador ligero |
-| `qwen3.5:4b` | Verificar | — |
+| `qwen3.5:0.8b`, `2b`, `4b`, `9b` | Apache 2.0 | Incluir la licencia y los avisos |
+| `qwen2.5:3b` | **Qwen Research License**, no es Apache 2.0 | **Descartado** del catálogo; el perfil Ligero usa `qwen3.5:2b` |
 | `nomic-embed-text` | Apache 2.0 | Incluir la licencia |
 | Tauri, dependencias de Rust y npm | Mayoritariamente MIT / Apache 2.0 | Aviso de licencias de terceros generado en el build (`cargo-about` y `license-checker`) |
 | Fuentes Cinzel e Inter | SIL Open Font License | Incluir la licencia al empaquetarlas |
@@ -81,6 +81,6 @@ en la bienvenida del asistente. Sin sistema de verificación de edad.
 
 - Confirmar la licencia del juego (propuesta: todos los derechos reservados).
 - Decidir la licencia de este repositorio público.
-- Confirmar las licencias de los modelos (en especial el narrador del perfil Ligero) y de las
-  imágenes.
+- Confirmar en la fuente oficial las licencias de los modelos del catálogo (un test exige Apache
+  2.0 para todos, ver `12`) y las de las imágenes.
 - Redactar el texto legal definitivo y revisarlo.

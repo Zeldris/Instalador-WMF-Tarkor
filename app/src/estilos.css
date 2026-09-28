@@ -95,7 +95,9 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
 .marca-perfil.fuera span { color: var(--danger-400); }
 .escala { display: flex; justify-content: space-between; font-size: 11px; color: var(--wood-500); }
 
-.tarjetas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.tarjetas { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.resultado { font-size: 12.5px; line-height: 1.45; color: var(--wood-300); flex: 1; }
+.etiqueta.exp { color: var(--cost-400); border-color: var(--cost-500); }
 .tarjeta { text-align: left; font: inherit; color: inherit; cursor: pointer; border: 1px solid var(--iron-700); border-radius: 12px; padding: 16px; background: color-mix(in srgb, var(--wood-950) 40%, transparent); display: flex; flex-direction: column; gap: 10px; }
 .tarjeta:hover:not(:disabled) { border-color: var(--wood-500); }
 .tarjeta.sel { border-color: var(--accent-400); background: color-mix(in srgb, var(--accent-500) 12%, var(--wood-900)); box-shadow: 0 0 0 1px var(--accent-400) inset; }

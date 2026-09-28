@@ -14,7 +14,7 @@ OLLAMA_KV_CACHE_TYPE=q8_0 ollama serve`):
 |---|---|---|---|
 | Narrador | `tarkor-narrador` (`FROM qwen2.5:7b`) | `ollama pull qwen2.5:7b` + `ollama create tarkor-narrador -f Modelfile` | 4,7 GB |
 | Cronista (clasificación de acciones) | `qwen2.5:1.5b-instruct` | `ollama pull` | 1 GB |
-| Sugerencias ("Sugerir") | `qwen3.5:4b` | `ollama pull` | ~3 GB (verificar) |
+| Sugerencias ("Sugerir") | `qwen3.5:4b` | `ollama pull` | 3,4 GB |
 | Embeddings (RAG de lore y hechos de partida) | `nomic-embed-text` | `ollama pull` | 0,3 GB |
 
 Unos 9 GB de descarga en total y un paso de construcción propio para el narrador. Un jugador final
@@ -44,9 +44,9 @@ La app de Tauri arranca y para su **propia instancia de Ollama**, igual que hace
   tiene Ollama para otras cosas, no se tocan ni se mezclan.
 - **Sin root ni instalación en el sistema:** imprescindible en la Steam Deck (sistema de solo
   lectura) y coherente con instalar sin permisos de administrador en Windows.
-- **Mismos ajustes que hoy en desarrollo:** `OLLAMA_FLASH_ATTENTION=1`, `OLLAMA_KV_CACHE_TYPE=q8_0`,
-  `OLLAMA_IGPU_ENABLE=1`, más los que fije el perfil (`OLLAMA_MAX_LOADED_MODELS`,
-  `OLLAMA_KEEP_ALIVE`).
+- **Ajustes de rendimiento calculados para cada equipo y perfil** (caché de contexto cuantizada,
+  Vulkan, una sola petición a la vez, reserva de VRAM...): ver
+  [`12-catalogo-y-rendimiento.md`](12-catalogo-y-rendimiento.md).
 - **Descarga de modelos** con la API de Ollama (`POST /api/pull`, que da progreso), mostrando una
   barra por modelo en el asistente. Se puede pausar y reanudar.
 
@@ -76,8 +76,8 @@ controlado por variable de entorno, sin romper el modo actual con `tarkor-narrad
   piezas, pero obliga a reescribir `lib/ollama.ts`, `ollamaQueue.ts` y el formato JSON forzado que
   hoy da Ollama, y a empaquetar binarios nativos de llama.cpp por plataforma dentro del backend. Se
   guarda como plan de reserva si Ollama da problemas serios en la prueba de concepto.
-- **C. Modelos más pequeños** ya no es una alternativa aparte: queda integrada como perfil
-  **Ligero** en `09`.
+- **C. Modelos más pequeños** ya no es una alternativa aparte: quedan integrados como perfiles
+  **Mínimo** y **Ligero** del catálogo (ver [`12`](12-catalogo-y-rendimiento.md)).
 
 ## Qué falta validar (fase 0)
 

@@ -55,7 +55,7 @@ export function Pagina({ titulo, lead, barra, sola, children }: {
 }
 
 function Rombos({ n }: { n: number }) {
-  return <span className="rombos" aria-label={`${n} de 3`}>{'◆'.repeat(n)}<i>{'◆'.repeat(3 - n)}</i></span>
+  return <span className="rombos" aria-label={`${n} de 4`}>{'◆'.repeat(n)}<i>{'◆'.repeat(4 - n)}</i></span>
 }
 
 /** Barra de memoria disponible para la IA con la marca de cada perfil (docs/11, pantalla 4). */
@@ -108,7 +108,9 @@ export function Tarjetas({ evaluacion, seleccionado, onSeleccionar, mostrarNoRec
                 {analizado && evaluacion.maximoSeguro === p.id && <span className="etiqueta max">{t.maximoSeguro}</span>}
                 {analizado && !p.cabeEnMemoria && <span className="etiqueta fuera">{t.supera}</span>}
                 {analizado && p.cabeEnMemoria && !p.cabeEnDisco && <span className="etiqueta fuera">{t.sinDisco}</span>}
+                {p.experimental && <span className="etiqueta exp">{t.experimental}</span>}
               </span>
+              <span className="resultado">{p.resultado}</span>
               <dl>
                 <dt>{t.memoria}</dt><dd>{fmt(p.memoriaGb)} GB</dd>
                 <dt>{t.descarga}</dt><dd>{fmt(p.descargaGb)} GB</dd>

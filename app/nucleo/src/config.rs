@@ -5,7 +5,7 @@
 //! partidas.
 
 use crate::equipo::Equipo;
-use crate::perfiles::{PerfilId, UsoCpu};
+use crate::perfiles::UsoCpu;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io;
@@ -23,7 +23,8 @@ pub struct Config {
     /// `None` = todavía no se ha preguntado; `Some(false)` = eligió "a mano".
     pub permiso_analisis: Option<bool>,
     pub equipo: Option<Equipo>,
-    pub perfil: Option<PerfilId>,
+    /// Id de un perfil del catálogo.
+    pub perfil: Option<String>,
     pub uso_cpu: UsoCpu,
     pub modelos_descargados: Vec<String>,
     /// Último paso alcanzado, para continuar si se cerró la app a medias.
@@ -134,7 +135,7 @@ mod tests {
         let c = Config {
             consentimiento_aceptado: true,
             permiso_analisis: Some(false),
-            perfil: Some(PerfilId::Equilibrado),
+            perfil: Some("equilibrado".into()),
             uso_cpu: UsoCpu::Alto,
             modelos_descargados: vec!["qwen2.5:7b".into()],
             paso_asistente: 5,
@@ -149,7 +150,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join(NOMBRE_CONFIG), r#"{"version":1,"perfil":"maximo"}"#).unwrap();
         let c = Config::cargar(dir.path());
-        assert_eq!(c.perfil, Some(PerfilId::Maximo));
+        assert_eq!(c.perfil.as_deref(), Some("maximo"));
         assert_eq!(c.uso_cpu, UsoCpu::Moderado);
     }
 
@@ -163,7 +164,7 @@ mod tests {
 
     #[test]
     fn formato_json_en_camel_case() {
-        let json = serde_json::to_value(Config { perfil: Some(PerfilId::Ligero), ..Config::default() }).unwrap();
+        let json = serde_json::to_value(Config { perfil: Some("ligero".into()), ..Config::default() }).unwrap();
         assert_eq!(json["perfil"], "ligero");
         assert_eq!(json["asistenteCompletado"], false);
         assert_eq!(json["usoCpu"], "moderado");

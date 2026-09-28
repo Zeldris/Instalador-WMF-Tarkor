@@ -16,11 +16,14 @@ Marcar cada punto al terminarlo.
 
 Objetivo: demostrar que el patrón completo funciona en Windows y en la Steam Deck.
 
-- [ ] **0.1** Proyecto Tauri v2 en `app/` con el asistente (React + Vite + TypeScript) usando los
+- [x] **0.1** Proyecto Tauri v2 en `app/` con el asistente (React + Vite + TypeScript) usando los
   tokens visuales del juego. Pantallas según [`11`](11-diseno-del-frontal.md).
-- [ ] **0.2** Detección de equipo en Rust (`sysinfo`, gráfica por plataforma) y cálculo de perfiles
+- [x] **0.2** Detección de equipo en Rust (`sysinfo`, gráfica por plataforma) y cálculo de perfiles
   de [`09`](09-deteccion-de-equipo-y-perfiles.md), con tests unitarios.
-- [ ] **0.3** `config.json` en la carpeta de datos: al abrir, asistente si no está completado.
+- [x] **0.3** `config.json` en la carpeta de datos: al abrir, asistente si no está completado.
+- [x] **0.3b** Catálogo de modelos y perfiles en JSON (con perfil Mínimo para que cualquiera pueda
+  probar) y ajustes de rendimiento de Ollama calculados por equipo (ver
+  [`12`](12-catalogo-y-rendimiento.md)).
 - [ ] **0.4** Gestor de sidecars en Rust: puerto libre, arrancar y parar procesos, esperar al
   health-check, un reinicio automático, parada garantizada al cerrar.
 - [ ] **0.5** Ollama portable: descarga de la versión fijada (SHA256), arranque aislado
@@ -31,7 +34,8 @@ Objetivo: demostrar que el patrón completo funciona en Windows y en la Steam De
 - [ ] **0.7** Narrador con `system` + `options` por petición sobre `qwen2.5:7b`: comparar con
   `tarkor-narrador` (ver [`03`](03-ollama-y-modelos-ia.md)).
 - [ ] **0.8** Prueba en la Steam Deck y en un Windows limpio: tiempos de descarga, memoria real
-  de cada perfil, palabras por segundo. Ajustar las cifras de `09` con lo medido.
+  de cada perfil, tokens por segundo, Vulkan frente a ROCm en la Deck, calidad de narración de
+  Mínimo y Ligero. Ajustar el catálogo con lo medido.
 
 ## Fase 1 — Decisiones pendientes
 
@@ -39,7 +43,8 @@ Se pueden resolver en paralelo a la fase 0. Ver la tabla del [README](../README.
 
 - [ ] Firma de código en Windows.
 - [ ] Licencia del juego (propuesta: todos los derechos reservados) y de este repo.
-- [ ] Perfil Ligero: narrador y licencia (tras probar calidad en 0.8).
+- [x] Perfiles pequeños: se ofrecen Mínimo y Ligero con modelos Apache 2.0, avisando del
+  resultado (calidad a confirmar en 0.8).
 - [ ] Perfiles por encima del máximo seguro: bloqueados o con aviso.
 - [ ] Confirmar licencias de modelos e imágenes.
 
@@ -68,7 +73,8 @@ Ver [`06`](06-inventario-exclusiones.md).
 - [ ] **3.4** Backend: build sin rutas ni servicios de curación (ruta de image-prompt, orquestador
   cloud, `LiveTeacherCapture`, scripts).
 - [ ] **3.5** Backend: `SYSTEM` del narrador incrustado en build; narrador con modelo base +
-  `system` por petición detrás de variable de entorno.
+  `system` por petición detrás de variable de entorno; leer `TARKOR_NUM_THREAD`,
+  `TARKOR_NUM_BATCH`, `TARKOR_NUM_CTX_NARRADOR` y `TARKOR_MODELOS_SIN_PENSAR` (ver `12`).
 - [ ] **3.6** Backend: CORS restringido y escucha solo en `127.0.0.1` en modo empaquetado; rutas de
   imágenes y datos por variable de entorno.
 - [ ] **3.7** Menú del juego: enlace a Ajustes → Rendimiento de la IA.
@@ -79,8 +85,10 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
 
 - [ ] **4.1** Integrar el build del juego (frontend + backend en bytecode + plantilla) en la app de
   Tauri.
-- [ ] **4.2** Asistente real de punta a punta: descargas y comprobaciones de verdad.
-- [ ] **4.3** Ajustes → Rendimiento de la IA y pantalla de motor detenido.
+- [ ] **4.2** Asistente real de punta a punta: descargas y comprobaciones de verdad; calentar el
+  narrador al arrancar.
+- [ ] **4.3** Ajustes → Rendimiento de la IA (con uso de la gráfica vía `/api/ps`) y pantalla de
+  motor detenido.
 - [ ] **4.4** NSIS: castellano, instalación por usuario, desinstalador con las dos casillas.
 - [ ] **4.5** AppImage (+ `.deb` opcional) compilado en Ubuntu 22.04.
 - [ ] **4.6** Workflow de GitHub Actions en el repo privado que publica releases con `SHA256SUMS`

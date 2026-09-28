@@ -94,7 +94,7 @@ export function TuEquipo({ ir, config, evaluacion, analizar, elegirAMano }: Nav 
         <button type="button" className="btn pri" onClick={() => ir(4)}>{tx.comun.continuar}</button></>}>
       <FichaEquipo equipo={e} gpu={gpu} integrada={integrada} />
       {evaluacion.equipoInsuficiente
-        ? <div className="error"><b>{t.insuficienteTitulo}</b><span>{t.insuficiente(gbDeMb(e.ramTotalMb))}</span></div>
+        ? <div className="error"><b>{t.insuficienteTitulo}</b><span>{t.insuficiente(gbDeMb(e.ramTotalMb), recomendado.nombre)}</span></div>
         : <p>{t.puedes(fmt(evaluacion.memoriaParaIaGb ?? 0), recomendado.nombre)}</p>}
       {integrada && <p className="peq tenue">{t.integrada}</p>}
     </Marco>
@@ -130,7 +130,8 @@ export function ElegirPerfil({ ir, config, evaluacion, actualizar }: Nav & {
       barra={<><Atras ir={ir} paso={4} /><span className="hueco" />
         <button type="button" className="btn pri" onClick={() => { actualizar({ perfil: elegido }); ir(5) }}>{t.accion(fmt(p.descargaGb))}</button></>}>
       <Medidor evaluacion={evaluacion} />
-      <Tarjetas evaluacion={evaluacion} seleccionado={elegido} mostrarNoRecomendados={noRec || manual}
+      <p className="peq tenue">{t.calidadExplicada}</p>
+      <Tarjetas evaluacion={evaluacion} seleccionado={elegido} mostrarNoRecomendados={noRec || manual || evaluacion.equipoInsuficiente}
         onSeleccionar={(id: PerfilId) => actualizar({ perfil: id })} />
       <ControlUsoCpu uso={config.usoCpu} hilos={hilos} onCambiar={(usoCpu) => actualizar({ usoCpu })} />
       <div className="fila">

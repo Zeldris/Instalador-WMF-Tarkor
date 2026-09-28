@@ -1,9 +1,13 @@
 // Datos de ejemplo para abrir el asistente en un navegador normal y para los tests. Equipo tipo
-// Steam Deck; la evaluación es la que devuelve `nucleo` para ese equipo (ver el test
-// `deck_16gb_maximo_justo_recomienda_equilibrado` en nucleo/src/perfiles.rs).
+// Steam Deck. Usa el mismo catálogo que la app (catalogo/catalogo.json) y reproduce el cálculo de
+// nucleo/src/perfiles.rs solo para este modo sin Tauri; la fuente de verdad es la de Rust, cubierta
+// por sus tests (p. ej. `deck_16gb_maximo_justo_recomienda_equilibrado`).
 
 import type { Api } from './api'
-import type { Config, Equipo, Evaluacion, PerfilEvaluado } from './tipos'
+import catalogoJson from '../catalogo/catalogo.json'
+import type { Catalogo, Config, Equipo, Evaluacion, PerfilEvaluado } from './tipos'
+
+const catalogo = catalogoJson as Catalogo
 
 export const configInicial = (): Config => ({
   version: 1,
@@ -28,27 +32,28 @@ export const equipoEjemplo: Equipo = {
   sistema: 'Linux (SteamOS 3.7)',
 }
 
-const base = { cronista: 'qwen2.5:1.5b-instruct', embeddings: 'nomic-embed-text' }
-const perfiles = (cabeMaximo: boolean): PerfilEvaluado[] => [
-  { ...base, id: 'ligero', nombre: 'Ligero', memoriaGb: 3.5, descargaGb: 3.3, velocidad: 3, calidad: 1, narrador: 'qwen2.5:3b', sugerencias: base.cronista, maxModelosCargados: 1, keepAlive: '2m', cabeEnMemoria: true, cabeEnDisco: true },
-  { ...base, id: 'equilibrado', nombre: 'Equilibrado', memoriaGb: 7, descargaGb: 6, velocidad: 2, calidad: 2, narrador: 'qwen2.5:7b', sugerencias: base.cronista, maxModelosCargados: 2, keepAlive: '5m', cabeEnMemoria: true, cabeEnDisco: true },
-  { ...base, id: 'maximo', nombre: 'Máximo', memoriaGb: 10.5, descargaGb: 9, velocidad: 2, calidad: 3, narrador: 'qwen2.5:7b', sugerencias: 'qwen3.5:4b', maxModelosCargados: 4, keepAlive: '5m', cabeEnMemoria: cabeMaximo, cabeEnDisco: true },
-]
-
-export const evaluacionEjemplo: Evaluacion = {
-  memoriaParaIaGb: 11,
-  perfiles: perfiles(true),
-  maximoSeguro: 'maximo',
-  recomendado: 'equilibrado',
-  equipoInsuficiente: false,
-}
-
-export const evaluacionManual: Evaluacion = {
-  memoriaParaIaGb: null,
-  perfiles: perfiles(true),
-  maximoSeguro: null,
-  recomendado: 'ligero',
-  equipoInsuficiente: false,
+export function evaluarEjemplo(equipo: Equipo | null): Evaluacion {
+  const r = catalogo.reglas
+  const ram = equipo ? equipo.ramTotalMb / 1024 : 0
+  const paraIa = equipo ? Math.max(0, ram - Math.max(r.reservaMinimaGb, ram * r.reservaProporcion) - r.memoriaJuegoGb) : null
+  const disco = equipo ? equipo.discoLibreMb / 1024 : null
+  const perfiles: PerfilEvaluado[] = catalogo.perfiles.map((p) => {
+    const descargaGb = [...new Set([p.narrador, p.cronista, p.sugerencias, p.embeddings])]
+      .reduce((a, m) => a + (catalogo.modelos[m]?.descargaGb ?? 0), 0)
+    return {
+      ...p,
+      descargaGb,
+      cabeEnMemoria: paraIa === null || p.memoriaGb <= paraIa,
+      cabeEnDisco: disco === null || descargaGb * r.margenDisco <= disco,
+    }
+  })
+  const masLigero = perfiles.find((p) => !p.experimental)!.id
+  if (paraIa === null) return { memoriaParaIaGb: null, perfiles, maximoSeguro: null, recomendado: masLigero, equipoInsuficiente: false }
+  const caben = perfiles.filter((p) => p.cabeEnMemoria && p.cabeEnDisco && !p.experimental)
+  const ultimo = caben.at(-1)
+  let recomendado = ultimo?.id ?? masLigero
+  if (ultimo && caben.length > 1 && paraIa - ultimo.memoriaGb < r.margenComodoGb) recomendado = caben.at(-2)!.id
+  return { memoriaParaIaGb: paraIa, perfiles, maximoSeguro: ultimo?.id ?? null, recomendado, equipoInsuficiente: !ultimo }
 }
 
 let guardada = configInicial()
@@ -58,5 +63,5 @@ export const ejemplo: Api = {
   cargarConfig: async () => structuredClone(guardada),
   guardarConfig: async (c) => { guardada = structuredClone(c) },
   analizarEquipo: async () => equipoEjemplo,
-  evaluarPerfiles: async (equipo) => (equipo ? evaluacionEjemplo : evaluacionManual),
+  evaluarPerfiles: async (equipo) => evaluarEjemplo(equipo),
 }

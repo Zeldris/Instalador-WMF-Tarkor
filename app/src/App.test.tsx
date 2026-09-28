@@ -35,14 +35,26 @@ describe('asistente de primer arranque', () => {
     expect(await boton('Descargar 6 GB')).toBeTruthy()
 
     fireEvent.click(await boton(/^Máximo/))
-    expect(await boton('Descargar 9 GB')).toBeTruthy()
+    expect(await boton('Descargar 9,4 GB')).toBeTruthy()
+
+    // Ultra no cabe en la Deck: deshabilitado salvo que se pidan los no recomendados.
+    expect(await boton(/^Ultra/)).toHaveProperty('disabled', true)
+    expect(screen.getByText('Experimental')).toBeTruthy()
   })
 
-  it('eligiendo a mano no hay medidor y parte de Ligero', async () => {
+  it('cada perfil explica qué resultado esperar', async () => {
+    await hastaElPermiso()
+    fireEvent.click(await boton('Analizar mi equipo'))
+    fireEvent.click(await boton('Continuar'))
+    expect(await screen.findByText(/Para probar Tarkor en casi cualquier equipo/)).toBeTruthy()
+    expect(screen.getByText(/La experiencia para la que se diseñó Tarkor/)).toBeTruthy()
+  })
+
+  it('eligiendo a mano no hay medidor y parte del perfil más ligero', async () => {
     await hastaElPermiso()
     fireEvent.click(await boton('Prefiero elegir a mano'))
-    const ligero = await boton(/^Ligero/)
-    expect(ligero.getAttribute('aria-pressed')).toBe('true')
+    const minimo = await boton(/^Mínimo/)
+    expect(minimo.getAttribute('aria-pressed')).toBe('true')
     expect(screen.queryByText(/Tu equipo puede dedicar/)).toBeNull()
     expect(screen.queryByText('Recomendado')).toBeNull()
   })

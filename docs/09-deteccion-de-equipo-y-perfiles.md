@@ -29,7 +29,7 @@ buenos.
 7. **Cambiarlo después** desde Ajustes → Rendimiento de la IA, repitiendo la detección.
 
 Si el jugador elige "a mano", se le muestran los mismos perfiles sin marcar ningún máximo, con
-**Ligero** preseleccionado y el aviso de que un perfil demasiado alto puede dejar el equipo lento o
+**Mínimo** preseleccionado y el aviso de que un perfil demasiado alto puede dejar el equipo lento o
 cerrar el juego.
 
 ## Qué se detecta
@@ -63,27 +63,25 @@ por dentro a una combinación de:
 | Capas en la GPU (`num_gpu`) | 0, parcial o todas | Velocidad; consume VRAM |
 | Hilos de CPU (`num_thread`) | Mitad de los núcleos, o todos menos uno | Velocidad vs. que el resto del equipo siga fluido |
 
+Los valores exactos que se aplican a cada equipo, y por qué, están en
+[`12-catalogo-y-rendimiento.md`](12-catalogo-y-rendimiento.md).
+
 **Lo que NO se toca:** `num_ctx` del narrador se queda en 8192. El propio `backend/Modelfile` del
 juego documenta que con 4096 la generación se desestabilizó (JSON corrupto, texto en otro idioma).
 Bajar el contexto no es un ajuste válido para ahorrar memoria.
 
-## Perfiles propuestos
+## Perfiles
 
-Cifras aproximadas a validar en la prueba de concepto (fase 0 del plan). La memoria es el pico
-estimado solo de la IA; el juego en sí (webview + backend) suma ~1 GB aparte.
+Los perfiles, sus modelos y sus cifras viven en el catálogo, un JSON que se cambia sin tocar
+código (ver [`12-catalogo-y-rendimiento.md`](12-catalogo-y-rendimiento.md)): **Mínimo, Ligero,
+Equilibrado, Máximo** y **Ultra** (experimental). Mínimo existe para que cualquiera pueda probar el
+juego aunque su equipo no llegue a lo básico; cada tarjeta explica qué resultado esperar. La
+memoria de cada perfil es el pico estimado solo de la IA; el juego en sí suma ~1 GB aparte.
 
-| Perfil | Narrador | Cronista | Sugerir | Embeddings | Cargados a la vez | Memoria pico IA | Descarga |
-|---|---|---|---|---|---|---|---|
-| **Ligero** | `qwen2.5:3b` | `qwen2.5:1.5b-instruct` | usa el cronista | `nomic-embed-text` | 1 | ~3,5 GB | ~3,3 GB |
-| **Equilibrado** | `qwen2.5:7b` | `qwen2.5:1.5b-instruct` | usa el cronista | `nomic-embed-text` | 2 | ~7 GB | ~6 GB |
-| **Máximo** | `qwen2.5:7b` | `qwen2.5:1.5b-instruct` | `qwen3.5:4b` | `nomic-embed-text` | todos | ~10,5 GB | ~9 GB |
-
-- **Máximo** es exactamente la configuración actual de desarrollo.
+- **Máximo** es la configuración actual de desarrollo.
 - `nomic-embed-text` está en **todos** los perfiles: el juego lo necesita mientras se juega, no
   solo para indexar el lore (ver [`02-migracion-postgres-a-sqlite.md`](02-migracion-postgres-a-sqlite.md)).
   Además tiene que ser la misma versión con la que se indexó el lore empaquetado.
-- **Ligero** usa un narrador distinto: narrará peor. Hay que probarlo en partida real antes de
-  ofrecerlo, y comprobar su licencia (`qwen2.5:3b` no es Apache 2.0 como el 7B — ver `08`).
 
 ## Cálculo del máximo seguro
 
@@ -102,16 +100,21 @@ Ejemplos:
 
 | Equipo | memoria_para_IA | Máximo seguro |
 |---|---|---|
-| Portátil 8 GB, sin GPU | 8 − 3 − 1 = 4 GB | Ligero |
+| Equipo 4 GB | 0 GB | Ninguno → se deja probar Mínimo con aviso |
+| Equipo 6 GB | 6 − 3 − 1 = 2 GB | Mínimo |
+| Portátil 8 GB, sin GPU | 8 − 3 − 1 = 4 GB | Ligero (justo). Recomendado: Mínimo |
 | Steam Deck 16 GB (compartida) | 16 − 4 − 1 = 11 GB | Máximo (justo). Recomendado: Equilibrado |
-| PC 16 GB + GPU 8 GB | 16 − 4 − 1 + 7,2 = 18,2 GB | Máximo |
-| PC 6 GB | 6 − 3 − 1 = 2 GB | Ninguno → aviso de que el equipo no llega |
+| PC 16 GB + GPU 8 GB | 16 − 4 − 1 + 7,2 = 18,2 GB | Máximo (Ultra cabe, pero es experimental) |
+
+Estos ejemplos son tests del núcleo (`app/nucleo/src/perfiles.rs`).
 
 **Recomendado vs. máximo:** el perfil preseleccionado es uno por debajo del máximo seguro cuando el
-máximo queda con menos de 1,5 GB de margen, para no dejar el equipo al límite.
+máximo queda con menos de 1,5 GB de margen, para no dejar el equipo al límite. Un perfil
+experimental nunca se recomienda ni cuenta como máximo seguro.
 
-**Si ningún perfil cabe**, se explica con claridad y se deja continuar con Ligero bajo
-responsabilidad del jugador (no se bloquea la instalación: la detección puede equivocarse).
+**Si ningún perfil cabe**, se explica con claridad, se habilitan todas las tarjetas y se recomienda
+Mínimo. No se bloquea: la detección puede equivocarse y la idea es que todo el mundo pueda
+probarlo.
 
 ## Uso de CPU
 
@@ -163,6 +166,6 @@ Ajustes → Rendimiento de la IA:
 1. **Por encima del máximo seguro:** ¿bloqueado, o permitido con aviso explícito? Propuesta:
    bloqueado por defecto, con un interruptor "Mostrar perfiles no recomendados" que lo permite con
    confirmación.
-2. **Perfil Ligero con otro narrador:** ¿se acepta peor narración a cambio de que funcione en
-   equipos de 8 GB, o se exige siempre el narrador de 7B? Hay que probarlo en partida real.
+2. **Calidad de Mínimo y Ligero:** decidido ofrecerlos avisando del resultado esperado (petición
+   de Álvaro, 2026-09-28). Queda probar en partida real que los modelos elegidos son jugables.
 3. **Prueba rápida:** propuesta incluida como opcional; confirmar que se quiere.

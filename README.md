@@ -25,7 +25,9 @@ gestión de procesos). La build final se hace desde el repo privado (ver
 | Base de datos | SQLite local, base de datos plantilla ya sembrada | Decidido | [02](docs/02-migracion-postgres-a-sqlite.md) |
 | Motor de IA | Ollama propio de la app como sidecar, descargado en el primer arranque | Propuesta, se valida en fase 0 | [03](docs/03-ollama-y-modelos-ia.md) |
 | Narrador | Modelo base + `system` por petición (sin `ollama create`) | Propuesta, se valida en fase 0 | [03](docs/03-ollama-y-modelos-ia.md) |
-| Hardware | Análisis del equipo con permiso + perfiles Ligero / Equilibrado / Máximo | Decidido | [09](docs/09-deteccion-de-equipo-y-perfiles.md) |
+| Hardware | Análisis del equipo con permiso + perfiles Mínimo / Ligero / Equilibrado / Máximo / Ultra (experimental) | Decidido | [09](docs/09-deteccion-de-equipo-y-perfiles.md) |
+| Modelos y perfiles | En `app/catalogo/catalogo.json`, sin tocar código; sustituible desde la carpeta de datos | Implementado | [12](docs/12-catalogo-y-rendimiento.md) |
+| Rendimiento | Ajustes de Ollama y del backend calculados para cada equipo y perfil | Implementado, cifras por medir | [12](docs/12-catalogo-y-rendimiento.md) |
 | Protección del código | Backend a bytecode, frontend minificado, sin *source maps* | Decidido, técnica exacta en fase 0 | [10](docs/10-proteccion-del-codigo-y-build.md) |
 | Dónde se compila | CI en el repo privado; releases en este repo | Decidido | [10](docs/10-proteccion-del-codigo-y-build.md) |
 | Instalación | NSIS por usuario sin admin (Windows); AppImage (Linux) | Decidido | [07](docs/07-flujo-de-instalacion.md) |
@@ -33,7 +35,7 @@ gestión de procesos). La build final se hace desde el repo privado (ver
 | Firma en Windows | Azure Trusted Signing / certificado / sin firma en v1 | **Abierto** | [04](docs/04-empaquetado-tauri.md) |
 | Licencia del juego | Todos los derechos reservados, uso personal gratuito | **Propuesta, confirmar** | [08](docs/08-legal-y-privacidad.md) |
 | Licencia de este repo | MIT o todos los derechos reservados | **Abierto** | [08](docs/08-legal-y-privacidad.md) |
-| Perfil Ligero | Narrador pequeño: calidad y licencia por probar | **Abierto** | [09](docs/09-deteccion-de-equipo-y-perfiles.md) |
+| Perfiles Mínimo y Ligero | Se ofrecen avisando del resultado; falta probarlos en partida | **Por validar** | [12](docs/12-catalogo-y-rendimiento.md) |
 | Por encima del máximo seguro | Bloqueado con opción "mostrar no recomendados" | **Propuesta, confirmar** | [09](docs/09-deteccion-de-equipo-y-perfiles.md) |
 
 ## Documentos
@@ -56,6 +58,8 @@ gestión de procesos). La build final se hace desde el repo privado (ver
   del código y pipeline de build.
 - [`11-diseno-del-frontal.md`](docs/11-diseno-del-frontal.md) — pantallas del asistente, ajustes y
   errores.
+- [`12-catalogo-y-rendimiento.md`](docs/12-catalogo-y-rendimiento.md) — catálogo de modelos y
+  perfiles en JSON, y ajustes de rendimiento de Ollama.
 
 ## Relación con el repositorio del juego
 
