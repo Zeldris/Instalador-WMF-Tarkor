@@ -1,7 +1,10 @@
 # Arquitectura general
 
-**Estado: decidido en líneas generales.** Las piezas concretas de cada apartado se detallan en los
-documentos siguientes (02 a 04).
+**Estado: decidido en líneas generales (actualizado 2026-09-28).** Las piezas concretas de cada
+apartado se detallan en los documentos siguientes (02 a 11).
+
+Primera versión: **Windows y Linux** (x86_64). macOS queda fuera de la v1 (ver
+[`04-empaquetado-tauri.md`](04-empaquetado-tauri.md)).
 
 ## El problema de partida
 
@@ -16,12 +19,18 @@ como una app, **y** que solo contenga lo que un jugador necesita para jugar una 
 
 ## Qué es el instalador, en una frase
 
-Una aplicación de escritorio (un único `.exe`/`.dmg`/`.AppImage` según la plataforma) que contiene
+Una aplicación de escritorio (un `.exe` en Windows, un `.AppImage` en Linux) que contiene
 una versión **recortada y ya curada** de Tarkor: el motor de juego completo, el catálogo de mundo ya
 sembrado, las imágenes ya generadas, y nada de las herramientas de desarrollo/curación que hoy viven
 en el mismo repo.
 
-## Las tres capas
+## Las capas
+
+```
+Tarkor (Tauri, Rust) ─ ventana: asistente de primer arranque ─► juego (frontend React)
+ ├─ sidecar Ollama  (127.0.0.1:puerto libre, modelos en la carpeta de datos)
+ └─ sidecar backend (127.0.0.1:puerto libre, Node + bytecode, SQLite local)
+```
 
 ### 1. Envoltorio: Tauri
 
@@ -32,9 +41,11 @@ Electron), así que el instalador resultante pesa bastante menos. Ver
 - El **frontend** ya compilado (build de Vite) se carga directamente en el webview — no hace falta
   servirlo aparte ni abrir un navegador.
 - El **backend Node** corre como proceso "sidecar" — un binario que Tauri arranca y para junto con
-  la propia app, hablando por `localhost` con el frontend exactamente igual que en desarrollo. El
-  frontend no necesita ningún cambio de arquitectura para esto: ya habla con el backend vía
-  `VITE_API_URL` (fallback a `http://localhost:3001`), solo cambia quién arranca ese proceso.
+  la propia app, hablando por `localhost` con el frontend igual que en desarrollo. Único cambio en el
+  frontend: el puerto lo elige Tauri al arrancar, así que `api.ts` tiene que pedir la URL en tiempo
+  de ejecución en vez de usar solo `VITE_API_URL` (ver `04`).
+- El backend va compilado a bytecode dentro del binario para proteger el código (ver
+  [`10-proteccion-del-codigo-y-build.md`](10-proteccion-del-codigo-y-build.md)).
 
 ### 2. Base de datos: SQLite local al paquete
 
@@ -50,8 +61,19 @@ igual que hoy en desarrollo, no se sustituye por ningún servicio en la nube (es
 contrario del objetivo: nada de depender de un dominio público, y tampoco de pagar inferencia en la
 nube por cada jugador). Lo que cambia es que el JUGADOR no es un desarrollador — no se le puede
 pedir que instale Ollama a mano y haga `ollama pull` de 4 modelos distintos por línea de comandos.
-Ver [`03-ollama-y-modelos-ia.md`](03-ollama-y-modelos-ia.md) — **sin resolver todavía**, es el hueco
-más grande del plan actual.
+
+**Propuesta elegida:** la app gestiona su propia instancia de Ollama como segundo sidecar,
+descargada en el primer arranque, aislada de cualquier otro Ollama del sistema. Ver
+[`03-ollama-y-modelos-ia.md`](03-ollama-y-modelos-ia.md).
+
+### 4. Asistente de primer arranque
+
+Pantallas propias de la app, con el estilo visual del juego, que se muestran la primera vez:
+consentimiento informado, permiso para analizar el equipo, elección de un perfil de IA según el
+hardware, descarga de Ollama y modelos, y validación final. Ver
+[`07-flujo-de-instalacion.md`](07-flujo-de-instalacion.md),
+[`09-deteccion-de-equipo-y-perfiles.md`](09-deteccion-de-equipo-y-perfiles.md) y
+[`11-diseno-del-frontal.md`](11-diseno-del-frontal.md).
 
 ## Qué NO va en el instalador
 

@@ -1,90 +1,86 @@
 # Legal y privacidad
 
-**Estado: ABIERTO.** Petición explícita de Álvaro (2026-09-16): Tarkor será gratuito para todos,
-pero quiere que el instalador sea escrupulosamente legal — explicar todo con claridad, no dejar
-nada en letra pequeña ilegible. Este documento recoge qué hay que resolver, sin decidir el texto
-legal en sí (eso necesita redactarse con cuidado, probablemente con más investigación o asesoría
-específica cuando se llegue a este punto).
+**Estado: privacidad decidida (2026-09-28); licencia propuesta; texto legal definitivo pendiente
+de redactar y revisar.**
+Petición de Álvaro (2026-09-16): Tarkor será gratuito para todos, y el instalador debe ser
+escrupulosamente legal y explicarlo todo con claridad, sin letra pequeña ilegible.
 
-## Por qué esto importa más de lo habitual en un proyecto personal
+Nada de este documento es asesoramiento legal: el texto final debe revisarlo alguien con
+conocimiento del tema antes de publicar la v1.
 
-Aunque el proyecto sea gratuito y no busque monetización, distribuir un instalador público a
-desconocidos cambia las obligaciones reales frente a tenerlo solo en una máquina de desarrollo:
+## Por qué importa
 
-- El instalador va a tocar el disco del usuario (instala archivos, puede crear una carpeta de
-  datos con partidas guardadas).
-- Si el instalador gestiona la instalación de Ollama (ver
-  [`03-ollama-y-modelos-ia.md`](03-ollama-y-modelos-ia.md)), está trayendo software de terceros.
-- El propio motor del juego usa modelos de IA (Qwen 2.5/3.5) que tienen sus propias licencias.
-- El repo del instalador será público — cualquiera puede leer el código de empaquetado, aunque el
-  repo del juego en sí siga privado.
+Distribuir un instalador público a desconocidos implica: tocar su disco, traer software de terceros
+(Ollama), usar modelos de IA con licencias propias, y publicar un repositorio con código de
+empaquetado.
 
-## Lo que hay que resolver
+## 1. Licencia del proyecto
 
-### 1. Licencia del propio proyecto Tarkor
+**Propuesta (pendiente de confirmar por Álvaro): todos los derechos reservados**, para el juego y
+su contenido, con permiso gratuito de uso personal. Es lo que encaja con proteger el código dentro del binario
+([`10-proteccion-del-codigo-y-build.md`](10-proteccion-del-codigo-y-build.md)): la protección
+técnica sube el listón y la licencia da el derecho a reclamar.
 
-Sin decidir todavía qué licencia usar para el instalador/el juego distribuido. Preguntas a
-resolver:
-- ¿El código del instalador (este repo, que será público) lleva una licencia open source estándar
-  (MIT, Apache 2.0, GPL...), o es "código visible pero no licenciado para reuso" (ver la propia
-  narrativa del juego, con contenido original que Álvaro puede querer proteger)?
-- El contenido narrativo del juego (lore, personajes, mundo de Berig/Helek Sirik) es propiedad de
-  Álvaro — ¿se distribuye bajo qué términos junto con el instalador? Probablemente distinto de la
-  licencia del código en sí.
-- Las imágenes generadas para la Enciclopedia (empaquetadas ya hechas, ver
-  [`06-inventario-exclusiones.md`](06-inventario-exclusiones.md)) — de qué proveedor de IA salieron
-  originalmente y qué términos de uso/redistribución tiene ese proveedor para imágenes generadas.
+- **El juego distribuido** (binario, contenido narrativo, lore, personajes, mundo de Helek Sirik,
+  imágenes): licencia propia de uso personal gratuito. Se permite descargar, instalar y jugar. No
+  se permite redistribuir modificado, extraer ni reutilizar el código o el contenido, ni venderlo.
+- **Este repositorio público** (documentación y código del envoltorio): **abierto, a decidir.**
+  Opciones: también todos los derechos reservados (código visible pero no reutilizable), o una
+  licencia abierta (MIT) solo para el envoltorio, que no contiene nada del juego.
+- **Imágenes de la Enciclopedia:** hay que confirmar con qué proveedor se generó cada una y que sus
+  términos permiten redistribuirlas en un producto gratuito.
 
-### 2. Licencias de terceros que el instalador trae consigo
+## 2. Licencias de terceros
 
-Cualquier pieza de software de terceros que el instalador empaquete o instale necesita que se
-respeten sus propios términos y, normalmente, que se le dé crédito visible al usuario:
+| Pieza | Licencia | Qué exige |
+|---|---|---|
+| Ollama | MIT | Incluir el aviso de copyright y la licencia |
+| `qwen2.5:7b`, `qwen2.5:1.5b-instruct` | Apache 2.0 | Incluir la licencia y los avisos |
+| `qwen2.5:3b` (perfil Ligero, `09`) | **Qwen Research License** — no es Apache 2.0 | Revisar antes de usarlo: puede no permitir este uso. Si no lo permite, buscar otro narrador ligero |
+| `qwen3.5:4b` | Verificar | — |
+| `nomic-embed-text` | Apache 2.0 | Incluir la licencia |
+| Tauri, dependencias de Rust y npm | Mayoritariamente MIT / Apache 2.0 | Aviso de licencias de terceros generado en el build (`cargo-about` y `license-checker`) |
+| Fuentes Cinzel e Inter | SIL Open Font License | Incluir la licencia al empaquetarlas |
 
-- **Ollama** (si el instalador lo gestiona) — licencia propia, revisar qué exige al redistribuir.
-- **Qwen 2.5 / Qwen 3.5** (modelos base usados por el narrador/cronista/sugerencias) — licencia de
-  Alibaba/Qwen, revisar términos de uso y redistribución de los pesos del modelo.
-- **nomic-embed-text** (modelo de embeddings) — licencia propia también.
-- **Tauri** y cualquier dependencia de Node/npm empaquetada — la mayoría son MIT/Apache 2.0 y no
-  suelen exigir mucho, pero conviene generar un aviso de "licencias de terceros" que liste todo,
-  práctica estándar en instaladores serios.
+Las licencias de los modelos hay que **comprobarlas en la fuente oficial** en el momento de
+publicar: cambian entre versiones.
 
-### 3. Qué datos toca el juego y qué se le comunica al jugador
+El juego incluye una pantalla "Licencias de terceros" (Ajustes → Acerca de) con todo lo anterior.
 
-Punto fuerte de Tarkor de cara a esto: es local-first, no hay servidor remoto ni cuenta de usuario.
-Pero aun así conviene decirlo explícitamente, no asumir que el jugador lo da por hecho:
+Los modelos y Ollama no van dentro del instalador: se descargan de sus fuentes oficiales en el
+primer arranque, con el consentimiento del jugador (ver `03` y `07`).
 
-- Las partidas guardadas viven en la máquina del jugador (SQLite local, ver
-  [`02-migracion-postgres-a-sqlite.md`](02-migracion-postgres-a-sqlite.md)) — nunca se suben a
-  ningún sitio.
-- El motor de narración corre localmente vía Ollama — ningún texto de la partida (acciones del
-  jugador, narración generada) sale de la máquina, salvo que el jugador decida algo distinto en el
-  futuro (no aplica hoy, ni con el pipeline de fine-tuning ni con las APIs cloud, que quedan fuera
-  del instalador por completo — ver `06-inventario-exclusiones.md`).
-- Si el instalador descarga algo en el primer arranque (Ollama, modelos de IA), eso sí implica
-  tráfico de red — hay que decirlo con claridad en el flujo de consentimiento (ver
-  [`07-flujo-de-instalacion.md`](07-flujo-de-instalacion.md)).
-- Sin telemetría oculta, sin analítica de uso enviada a ningún sitio, salvo que se decida
-  explícitamente lo contrario en el futuro (y en ese caso, opt-in claro, nunca activado por
-  defecto sin avisar).
+## 3. Datos y privacidad
 
-### 4. Aviso de responsabilidad / "as-is"
+Tarkor es local: no hay servidor, ni cuenta, ni telemetría. Aun así se dice explícitamente:
 
-Práctica estándar en software gratuito distribuido públicamente: un aviso claro de que el software
-se ofrece tal cual, sin garantías, y de que Álvaro no es responsable de daños derivados de su uso
-(pérdida de datos, mal funcionamiento, etc.) — redactar cuando se llegue a este punto, no inventar
-texto legal ahora sin revisión.
+- **Partidas:** en la máquina del jugador (SQLite local). Nunca se suben a ningún sitio.
+- **Narración:** la IA corre en local. Ningún texto de la partida sale del equipo. Las APIs en la
+  nube y el pipeline de entrenamiento quedan fuera del instalador (ver `06`).
+- **Análisis del equipo** (`09`): solo con permiso. Se leen RAM, CPU, gráfica, espacio en disco y
+  sistema operativo, se usan para recomendar un perfil y se guardan solo en el `config.json` local.
+  Nunca se envían.
+- **Tráfico de red:** solo las descargas del primer arranque (Ollama y modelos, desde sus fuentes
+  oficiales) y las que el jugador pida al cambiar de perfil. Nada más.
+- **Sin telemetría** ni analítica. Si algún día se añade, será opcional y desactivada por defecto.
+- **Registros de errores:** se guardan en local y solo salen del equipo si el jugador copia el
+  informe y lo envía él mismo.
 
-### 5. Menores de edad / clasificación de contenido
+## 4. Aviso "tal cual"
 
-Tarkor es un RPG de fantasía con violencia (combate, muerte permanente) — sin decidir todavía si
-hace falta algún tipo de aviso de edad/contenido recomendado, o si basta con una nota simple en la
-página de descarga.
+El software se ofrece sin garantías y sin responsabilidad por daños derivados de su uso. Se
+redacta con el texto legal definitivo.
 
-## Qué falta antes de poder escribir el texto legal real
+## 5. Contenido y edad
 
-- Decidir la licencia del código (punto 1).
-- Confirmar los términos exactos de Ollama/Qwen/nomic-embed-text para redistribución (punto 2) —
-  esto puede condicionar si el instalador puede embeber Ollama directamente o solo enlazarlo (ver
-  también `03-ollama-y-modelos-ia.md`, opción A).
-- Escribir el texto real de consentimiento/privacidad una vez estén claras las piezas anteriores —
-  no antes, para no tener que reescribirlo si cambia alguna decisión de arquitectura.
+RPG de fantasía con violencia (combate, muerte permanente). Propuesta: una nota de contenido
+("Contiene violencia de fantasía; recomendado para mayores de 16 años") en la página de descarga y
+en la bienvenida del asistente. Sin sistema de verificación de edad.
+
+## Qué falta
+
+- Confirmar la licencia del juego (propuesta: todos los derechos reservados).
+- Decidir la licencia de este repositorio público.
+- Confirmar las licencias de los modelos (en especial el narrador del perfil Ligero) y de las
+  imágenes.
+- Redactar el texto legal definitivo y revisarlo.

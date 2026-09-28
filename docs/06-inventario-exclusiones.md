@@ -1,9 +1,17 @@
 # Inventario de exclusiones
 
-**Estado: investigación hecha, cambios de código sin implementar.** Resultado de una auditoría real
+**Estado: investigación hecha, dudas de la sección D resueltas (2026-09-28); cambios de código
+sin implementar.** Resultado de una auditoría real
 del repo `World-Maker-Fantasy` (2026-09-16) para identificar con precisión qué excluir del
 instalador y qué deshabilitar en la UI. Cita las rutas de archivo reales tal como estaban en ese
 momento — pueden haberse movido para cuando se implemente esto de verdad, conviene reverificar.
+
+**Reverificación rápida 2026-09-28** (commit `ace5cd8`): las rutas del frontend (`DetailModal.tsx`,
+`CharacterSelect.tsx`) siguen igual; `POST /world/:slug/image-prompt` sigue en `world.ts` (ahora
+~línea 789); la documentación del juego se ha reorganizado en subcarpetas
+(`docs/arquitectura/15-instalacion.md`, `docs/arquitectura/20-instalador-distribuible.md`,
+`docs/ia/fine-tuning-ia-local.md`); la carpeta `tools/playwright-e2e/` ya no existe en el repo. Se
+añaden dos puntos nuevos (sección E).
 
 ## A. Excluir del instalador con certeza
 
@@ -41,7 +49,7 @@ una partida normal:
   `compare-narrador-models`, `export-dpo-dataset`, `generate-dpo-dataset`
   (`backend/src/scripts/`).
 - Script suelto en la raíz del repo: `generar-dataset-dpo.sh` (no lo invoca `iniciar-tarkor.sh`).
-- Documentación de referencia: `docs/fine-tuning-ia-local.md` — fuera de alcance del instalador
+- Documentación de referencia: `docs/ia/fine-tuning-ia-local.md` — fuera de alcance del instalador
   por completo.
 - `backend/src/services/liveTeacherCapture.ts` + tabla `LiveTeacherCapture`: activado por
   `LIVE_TEACHER_CAPTURE_ENABLED`. Cuando está activo, ~1 de cada 3 turnos narrados manda EN
@@ -70,7 +78,9 @@ una partida normal:
 
 `tools/playwright-e2e/` — herramienta de Claude para jugar/probar el juego de forma automatizada,
 ya sabido que no debe ir en el instalador. Confirmado que no hay dependencia cruzada del
-backend/frontend hacia esa carpeta.
+backend/frontend hacia esa carpeta. (2026-09-28: la carpeta ya no está en el repo; si vuelve, mismo
+criterio.) Tampoco van la carpeta `debug/` ni los `Modelfile` alternativos de `modelfiles/` y
+`backend/Modelfile.*` (pruebas de otros modelos).
 
 ### A5. Variables de entorno de las 6 APIs cloud
 
@@ -142,21 +152,43 @@ si faltan, `env.ts` las lee con `?? ''`):
    en frontend?** Si solo se oculta el botón pero la ruta sigue viva, un jugador curioso podría
    llamarla a mano y recibiría un 502 (sin claves configuradas) — no es grave, pero conviene decidir
    si el build del instalador compila el backend sin esa ruta, o si basta con el frontend recortado.
+   **Resuelto (2026-09-28):** se quita del build. El orquestador de proveedores cloud tampoco va en
+   el instalador, así que la ruta no tendría nada que llamar; además, menos código dentro del
+   binario.
 2. **`seed-catalog` en cada arranque**: ¿el instalador lo sigue corriendo en cada arranque (permite
    actualizaciones de contenido futuras sin reinstalar), o el instalador trae los datos ya sembrados
-   de una vez y se elimina ese paso visible?
+   de una vez y se elimina ese paso visible? **Resuelto (2026-09-28):** las dos cosas — el
+   instalador trae una base de datos plantilla ya sembrada y se sigue ejecutando `seed-catalog` en
+   cada arranque para llevar contenido nuevo a las partidas existentes. Ver `02`, "Primer
+   arranque".
 3. **`reindex-lore`**: confirmar que el plan es distribuir la base de datos con los `LoreChunk` ya
    pre-indexados (export/import de esa tabla), en vez de pedir que el instalador del jugador corra
-   este proceso — evita depender de que `nomic-embed-text` esté descargado en el primer arranque.
+   este proceso. **Resuelto (2026-09-28):** sí, el lore va ya indexado en la base de datos
+   plantilla. Ojo: esto NO evita descargar `nomic-embed-text` — el juego lo sigue necesitando en
+   partida (hechos de sesión y consultas de lore), ver `03`.
 4. **`iniciar-tarkor.sh`/`.bat` como base del instalador**: hoy asumen una ruta de NVM fija (propia
    del entorno de desarrollo actual) y detectan terminal gráfica para abrir ventanas — comodidades
    de desarrollo, no un mecanismo de arranque pensado para un instalador empaquetado de verdad. El
    instalador necesita su propio mecanismo de arranque (ver
    [`04-empaquetado-tauri.md`](04-empaquetado-tauri.md)), no reutilizar estos scripts tal cual.
+   **Resuelto:** Tauri arranca y para los dos sidecars; los scripts no se incluyen.
 5. **Un solo `schema.prisma` o dos**: si el instalador reutiliza el mismo schema que desarrollo
    (recomendable, evita bifurcar el modelo de datos), las tablas `ImagePrompt`/`LiveTeacherCapture`
    quedarán presentes pero sin uso en el instalador — no hace falta quitarlas del schema, solo
-   confirmar que se prefiere mantener un solo schema compartido.
+   confirmar que se prefiere mantener un solo schema compartido. **Resuelto:** un solo schema
+   fuente; el de SQLite se genera en el build (ver `02`).
+
+## E. Puntos nuevos (2026-09-28)
+
+1. **Fuentes sin conexión.** `frontend/src/index.css` carga Cinzel desde Google Fonts
+   (`@import url('https://fonts.googleapis.com/…')`). Una app de escritorio no puede depender de
+   eso (sin red se vería con Georgia, y además es una petición a un tercero que contradice `08`).
+   Acción: empaquetar Cinzel e Inter en local (p. ej. `@fontsource/cinzel`, `@fontsource/inter`)
+   en la build del instalador.
+2. **`Modelfile` leído en tiempo de ejecución.** `backend/src/lib/modelfileSystemPrompt.ts` lee
+   `../../Modelfile` del disco. En el binario hay que incrustar el texto en el build (ver `03` y
+   `10`). Además, en el instalador el narrador pasa a ser el modelo base + `system` por petición
+   (ver `03`).
 
 ## Resumen de rutas para cuando se implemente
 
@@ -174,6 +206,8 @@ si faltan, `env.ts` las lee con `?? ''`):
 - Frontend ya conforme, no tocar: `frontend/src/pages/Home.tsx`, `frontend/src/pages/
   ComingSoon.tsx`, `frontend/src/App.tsx`
 - Scripts en la raíz del repo a excluir: `generar-dataset-dpo.sh`
-- Documentación de referencia a no incluir/reescribir: `docs/fine-tuning-ia-local.md` (fuera de
-  alcance por completo), `docs/15-instalacion.md` (si se reutiliza como base, quitar la sección de
-  las 6 API keys y `LIVE_TEACHER_CAPTURE_*`)
+- Documentación de referencia a no incluir/reescribir: `docs/ia/fine-tuning-ia-local.md` (fuera de
+  alcance por completo), `docs/arquitectura/15-instalacion.md` (si se reutiliza como base, quitar la
+  sección de las 6 API keys y `LIVE_TEACHER_CAPTURE_*`)
+- Frontend a modificar también: `frontend/src/index.css` (fuentes locales),
+  `frontend/src/lib/api.ts` (URL del backend en tiempo de ejecución, ver `04`)

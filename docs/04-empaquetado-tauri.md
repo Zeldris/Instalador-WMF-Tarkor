@@ -1,69 +1,108 @@
 # Empaquetado con Tauri
 
-**Estado: ABIERTO.** La elección de Tauri sobre Electron ya está decidida (ver
-[`01-arquitectura-general.md`](01-arquitectura-general.md)), pero el detalle de cómo se empaqueta
-el backend como sidecar, cómo se firma el instalador y cómo se genera build por plataforma no está
-resuelto todavía.
+**Estado: plataformas decididas (2026-09-28); detalles técnicos a validar en la prueba de
+concepto.** Tauri (v2) sobre Electron ya estaba decidido. Nuevo: la primera versión es **solo
+Windows y Linux** (x86_64). macOS queda fuera de la v1.
 
 ## Por qué Tauri y no Electron
 
-Tauri usa el webview del sistema operativo (WebView2 en Windows, WKWebView en macOS, WebKitGTK en
-Linux) en vez de empaquetar un Chromium completo como hace Electron — el instalador resultante pesa
-bastante menos. Ya decidido en la investigación original (`docs/20-instalador-distribuible.md` del
-repo del juego, 2026-08-20); no hay motivo conocido para reabrir esta elección.
+Tauri usa el webview del sistema operativo (WebView2 en Windows, WebKitGTK en Linux) en vez de
+empaquetar un Chromium completo, así que el instalador pesa bastante menos. Decidido en la
+investigación original (`docs/arquitectura/20-instalador-distribuible.md` del repo del juego).
 
-## El backend como sidecar
+## Procesos
 
-Tauri soporta arrancar un binario externo ("sidecar") junto con la propia app, y pararlo cuando la
-app se cierra. El backend Node de Tarkor se arrancaría así — hablando por `localhost` con el
-frontend, exactamente como hoy en desarrollo (el frontend ya lee `VITE_API_URL` con fallback a
-`localhost:3001`, no necesita cambios).
+```
+Tarkor (Tauri, Rust)
+ ├─ ventana (webview): asistente de primer arranque o juego
+ ├─ sidecar 1: Ollama        127.0.0.1:<puerto libre>   modelos en <datos>/modelos
+ └─ sidecar 2: backend Node  127.0.0.1:<puerto libre>   base de datos en <datos>/tarkor.sqlite
+```
 
-Preguntas abiertas:
+Tauri arranca los dos sidecars al abrir, los para al cerrar, y es el único que conoce los puertos.
 
-- **¿Cómo se empaqueta el backend Node como binario?** Node no es un binario nativo por sí mismo —
-  hace falta algo como `pkg`, `nexe`, o el propio runtime de Node embebido junto con el código.
-  Investigar qué opción encaja mejor con Tauri y con las dependencias reales del backend (Prisma
-  Client, en concreto, suele requerir pasos especiales para empaquetarse bien porque genera código
-  nativo según la plataforma).
-- **Prisma Client y el motor de query nativo**: Prisma genera un binario de motor de query
-  específico por plataforma (`libquery_engine`). Hay que asegurarse de que el binario correcto para
-  cada plataforma de destino (Windows/macOS/Linux) viaja dentro del paquete del sidecar.
-- **Puerto del backend**: hoy fijo en `3001` vía `.env`. En un instalador, ¿se mantiene fijo (riesgo
-  de colisión si el jugador tiene otra cosa en ese puerto) o el sidecar elige un puerto libre y se
-  lo comunica al frontend de alguna forma al arrancar?
-- **Ciclo de vida**: qué pasa si el sidecar crashea a mitad de partida — ¿Tauri lo reinicia solo,
-  o hay que implementar ese comportamiento? ¿Cómo se le informa al jugador si el backend no
-  responde?
+### Puerto del backend: dinámico
+
+Hoy es fijo (`3001`). En un equipo ajeno puede estar ocupado, así que Tauri busca un puerto libre y
+se lo pasa al backend por `PORT`. Consecuencias:
+
+- `VITE_API_URL` se fija al compilar, así que el frontend **no** puede saber el puerto de
+  antemano. Cambio necesario en el juego: que `frontend/src/lib/api.ts` pida la URL al arrancar
+  (a Tauri, vía `window.__TAURI__` o una variable inyectada en la página) y solo use
+  `VITE_API_URL`/`localhost:3001` como respaldo fuera de Tauri. Es un cambio pequeño y aislado.
+- **CORS:** el webview carga la página desde un origen propio de Tauri (`http://tauri.localhost`
+  en Windows, `tauri://localhost` en Linux), no desde `localhost`. Hoy el backend acepta cualquier
+  origen (`cors, { origin: true }` en `server.ts`); en la build empaquetada se restringe a esos
+  orígenes.
+- El backend escucha **solo en 127.0.0.1**, nunca en todas las interfaces.
+
+### Ciclo de vida
+
+- Tauri espera a que `GET /health` del backend responda antes de mostrar el juego.
+- Si un sidecar se cae a mitad de partida: se reinicia solo **una vez**; si vuelve a caer, se
+  muestra la pantalla "El motor del juego se ha detenido" (ver
+  [`11-diseno-del-frontal.md`](11-diseno-del-frontal.md)) con opciones de reintentar y de ver el
+  registro.
+- Al cerrar la ventana se paran los dos procesos (en Windows, con un *Job Object* para que no
+  queden huérfanos si Tauri muere de golpe).
+
+### El backend como binario
+
+Ver [`10-proteccion-del-codigo-y-build.md`](10-proteccion-del-codigo-y-build.md): runtime de Node
+22 + bundle compilado a bytecode (preferido) o Bun compilado (reserva). `pkg`/`nexe` descartados.
 
 ## Build por plataforma
 
-- **Windows**: `.exe`/`.msi`. Investigar el mecanismo estándar de Tauri para cada uno y cuál encaja
-  mejor con el flujo de consentimiento/validación descrito en
-  [`07-flujo-de-instalacion.md`](07-flujo-de-instalacion.md).
-- **macOS**: `.dmg`. Apple exige firma de código (notarización) para que la app no dé aviso de
-  "desarrollador no identificado" — esto normalmente cuesta una cuenta de desarrollador de Apple de
-  pago. A decidir si se acepta el aviso en una primera versión gratuita del proyecto, o se paga la
-  cuenta.
-- **Linux**: `.AppImage` (mencionado en la investigación original) u otros formatos que Tauri
-  soporte (`.deb`, `.rpm`). Steam Deck/SteamOS (la máquina de desarrollo real de Álvaro) corre
-  Linux — probar el instalador ahí es un paso obligatorio antes de dar el trabajo por terminado
-  (ver [`05-plan-de-trabajo.md`](05-plan-de-trabajo.md), último paso).
+### Windows
 
-## Firma de código
+- **Formato:** instalador `.exe` con **NSIS**, instalación **solo para el usuario actual**, sin
+  permisos de administrador (`installMode: currentUser`). El `.msi` se descarta: está pensado para
+  instalaciones de sistema.
+- **WebView2:** viene de serie en Windows 10 y 11. Para equipos donde falte, se usa el
+  *bootstrapper* de Tauri, que lo descarga durante la instalación.
+- **Idioma del instalador:** castellano.
+- **Desinstalación:** registrada en "Aplicaciones instaladas". Página propia preguntando si
+  conservar partidas y modelos de IA (ver `07`).
+- **Firma de código: ABIERTO.** Sin firmar, Windows muestra "Windows protegió su PC" y hay que
+  pulsar "Más información → Ejecutar de todas formas". Además, un ejecutable con Node y bytecode
+  dentro es propenso a falsos positivos del antivirus. Opciones:
+  - Azure Trusted Signing (~10 $/mes) — comprobar si admite particulares en España.
+  - Certificado de firma clásico (~200-400 €/año).
+  - Sin firma en la v1, explicando el aviso en la página de descarga, y firmar más adelante.
 
-Relacionado con [`07-flujo-de-instalacion.md`](07-flujo-de-instalacion.md): firmar el instalador
-evita avisos de "editor desconocido"/"origen no identificado" en Windows y macOS, pero tiene un
-coste (certificados de pago, cuenta de desarrollador de Apple). Sin decidir si se firma desde la
-primera versión o se acepta el aviso al principio, dado que el proyecto es gratuito.
+### Linux
+
+- **Formato principal:** `.AppImage`. Funciona en casi cualquier distro y en la Steam Deck sin root.
+- **Opcional:** `.deb` para Ubuntu/Debian.
+- **Compilado en Ubuntu 22.04** (glibc más antigua = compatible con más distros).
+- **Sin firma de código;** se publica `SHA256SUMS`.
+- **Steam Deck:** se instala en modo escritorio. Se documenta cómo añadirlo como "juego ajeno a
+  Steam" para lanzarlo desde el modo juego. Probar en la Deck es obligatorio antes de dar la v1
+  por terminada.
+
+### Fuera de la v1
+
+- macOS (evita la cuenta de desarrollador de Apple y la notarización).
+- ARM (Windows ARM, Linux ARM).
+
+## Tamaño estimado del instalador
+
+| Pieza | Tamaño aprox. |
+|---|---|
+| Tauri + asistente + frontend del juego | 15-25 MB |
+| Runtime de Node + backend | 40-90 MB |
+| Motor de Prisma (si hace falta) | ~15 MB |
+| Imágenes de la Enciclopedia (`backend/uploads/images`) | ~270 MB |
+| Base de datos plantilla (catálogo + lore indexado) | a medir |
+| **Instalador** | **~350-450 MB** |
+| Ollama (descarga en primer arranque) | 50 MB - 1,5 GB según gráfica |
+| Modelos (descarga en primer arranque) | 3-9 GB según perfil |
+
+Las imágenes son lo que más pesa del instalador: convertirlas a WebP con buena calidad podría
+reducirlo a la mitad (a valorar).
 
 ## Qué falta antes de implementar
 
-- Elegir y probar el mecanismo de empaquetado del backend Node como binario/sidecar.
-- Confirmar que Prisma Client con SQLite (tras la migración de
-  [`02-migracion-postgres-a-sqlite.md`](02-migracion-postgres-a-sqlite.md)) empaqueta limpio en las
-  tres plataformas.
-- Decidir el manejo de puerto (fijo vs. dinámico) del sidecar.
-- Decidir la estrategia de firma de código por plataforma.
-- Primera build de prueba real (aunque sea sin todo el contenido final) para validar que el patrón
-  sidecar funciona en la práctica antes de invertir en el resto del plan.
+- Prueba de concepto: Tauri + backend sidecar + Ollama sidecar en Windows y en la Deck.
+- Decidir la firma de Windows.
+- Medir el tamaño real de la base de datos plantilla.
