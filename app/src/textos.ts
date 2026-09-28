@@ -1,6 +1,10 @@
 // Todo el texto visible del asistente, en un único sitio para revisarlo de una vez
 // (docs/11-diseno-del-frontal.md, "Implementación").
 
+import { rangoDescarga } from './catalogo'
+
+const rango = rangoDescarga()
+
 export const pasos = ['Bienvenida', 'Qué se instala', 'Tu equipo', 'Perfil', 'Descarga', 'Comprobación', 'Listo']
 
 export const comun = {
@@ -17,7 +21,7 @@ export const bienvenida = {
   pasos: [
     ['Te contamos qué se instala', 'y qué no hace Tarkor nunca.'],
     ['Revisamos tu equipo', 'si nos das permiso, para recomendarte un perfil.'],
-    ['Descargamos lo necesario:', 'entre 3 y 9 GB según el perfil.'],
+    ['Descargamos lo necesario:', `entre ${rango} GB según el perfil.`],
     ['Comprobamos que todo funciona', 'con una narración de prueba.'],
   ],
   duracion: 'Tardarás unos minutos, más lo que tarde la descarga. Si cierras a medias, continuarás donde lo dejaste.',
@@ -30,8 +34,8 @@ export const queSeInstala = {
   lead: 'Léelo con calma. Nada se descarga hasta el paso 5 y siempre te diremos el tamaño antes.',
   seInstala: 'Se instalará',
   items: [
-    ['El motor de IA', '(Ollama, de código abierto). Entre 50 MB y 1,5 GB según tu gráfica.'],
-    ['Los modelos de lenguaje', 'del perfil que elijas: entre 3 y 9 GB.'],
+    ['El motor de IA', '(Ollama, de código abierto): unos 1,4 GB.'],
+    ['Los modelos de lenguaje', `del perfil que elijas: entre ${rango} GB.`],
     ['La base de datos de tus partidas,', 'que empieza ocupando unos pocos MB.'],
   ],
   donde: 'Dónde:',
@@ -109,33 +113,35 @@ export const descarga = {
   total: 'Total',
   quedan: (min: number) => `quedan unos ${min} min`,
   motor: 'Motor de IA',
-  estados: { cola: 'En cola', bajando: 'Descargando', pausa: 'En pausa', listo: 'Listo' },
+  estados: { cola: 'En cola', bajando: 'Descargando', pausa: 'En pausa', verificando: 'Verificando', extrayendo: 'Preparando', detenida: 'Detenida', listo: 'Listo' },
   verificado: 'Descargado de las fuentes oficiales y verificado al terminar cada archivo.',
   pausar: 'Pausar',
   reanudar: 'Reanudar',
   accion: 'Comprobar la instalación',
-  nombreModelo: (m: string): string => ({
-    'qwen2.5:7b': 'Narrador',
-    'qwen2.5:3b': 'Narrador',
-    'qwen2.5:1.5b-instruct': 'Cronista',
-    'qwen3.5:4b': 'Sugerencias',
-    'nomic-embed-text': 'Memoria del mundo',
-  })[m] ?? m,
+  reintentar: 'Reintentar',
+  /** Para qué sirve cada modelo; un mismo modelo puede cumplir varios papeles (perfil Mínimo). */
+  papeles: { narrador: 'Narrador', cronista: 'Cronista', sugerencias: 'Sugerencias', embeddings: 'Memoria del mundo' },
 }
 
 export const comprobacion = {
   titulo: 'Comprobación',
   lead: 'Probamos cada pieza por separado para que, si algo falla, sepas exactamente qué.',
   pasos: [
-    ['Carpeta de datos', 'Se puede escribir en la carpeta de datos.'],
-    ['Base de datos de partidas', 'Preparada y al día.'],
-    ['Motor del juego', 'Arranca y responde.'],
-    ['Datos del mundo', 'Personajes, lugares, objetos y lore del mundo cargados.'],
-    ['Motor de IA', 'En marcha.'],
-    ['Modelos', 'Todos presentes y verificados.'],
-    ['Narración de prueba', ''],
+    { id: 'datos', nombre: 'Carpeta de datos' },
+    { id: 'basedatos', nombre: 'Base de datos de partidas' },
+    { id: 'juego', nombre: 'Motor del juego' },
+    { id: 'mundo', nombre: 'Datos del mundo' },
+    { id: 'motor', nombre: 'Motor de IA' },
+    { id: 'modelos', nombre: 'Modelos' },
+    { id: 'narracion', nombre: 'Narración de prueba' },
   ],
   comprobando: 'Comprobando…',
+  velocidad: (palabras: number, segundos: number) =>
+    `Tu equipo narra a unas ${palabras} palabras por segundo: una narración típica tardará unos ${segundos} segundos.`,
+  reintentar: 'Reintentar',
+  masLigero: 'Probar un perfil más ligero',
+  copiar: 'Copiar informe',
+  copiado: 'Informe copiado',
 }
 
 export const listo = {

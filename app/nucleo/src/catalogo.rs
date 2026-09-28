@@ -74,6 +74,37 @@ impl Perfil {
     }
 }
 
+/// Versión fijada de Ollama y su paquete por sistema operativo (docs/03, "Decisión").
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Motor {
+    pub version: String,
+    pub url_base: String,
+    #[serde(default)]
+    pub notas: String,
+    /// Clave: `std::env::consts::OS` ("linux", "windows").
+    pub paquetes: BTreeMap<String, PaqueteMotor>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaqueteMotor {
+    pub archivo: String,
+    pub sha256: String,
+    pub descarga_gb: f64,
+}
+
+impl Motor {
+    /// El paquete de este sistema operativo, si hay.
+    pub fn paquete(&self) -> Option<&PaqueteMotor> {
+        self.paquetes.get(std::env::consts::OS)
+    }
+
+    pub fn url(&self, p: &PaqueteMotor) -> String {
+        format!("{}{}", self.url_base, p.archivo)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Catalogo {
@@ -81,6 +112,7 @@ pub struct Catalogo {
     #[serde(default)]
     pub notas: String,
     pub reglas: Reglas,
+    pub motor: Motor,
     pub modelos: BTreeMap<String, Modelo>,
     /// En orden de menos a más exigente.
     pub perfiles: Vec<Perfil>,
@@ -161,6 +193,15 @@ impl Catalogo {
                 }
             }
         }
+        for (so, p) in &self.motor.paquetes {
+            let hex = p.sha256.len() == 64 && p.sha256.chars().all(|c| c.is_ascii_hexdigit());
+            if !hex {
+                return Err(format!("motor {so}: sha256 no válido"));
+            }
+        }
+        if !self.motor.url_base.starts_with("https://") || !self.motor.url_base.ends_with('/') {
+            return Err("motor: urlBase debe ser https y acabar en /".into());
+        }
         let r = &self.reglas;
         if r.reserva_minima_gb < 0.0 || !(0.0..1.0).contains(&r.reserva_proporcion) || r.margen_disco < 1.0 {
             return Err("reglas fuera de rango".into());
@@ -233,6 +274,17 @@ mod tests {
         let (cargado, origen) = Catalogo::cargar(dir.path());
         assert_eq!(cargado, Catalogo::incrustado());
         assert!(matches!(origen, Origen::ExternoInvalido { motivo } if motivo.contains("modelo-que-no-existe")));
+    }
+
+    #[test]
+    fn motor_para_las_dos_plataformas_de_la_v1() {
+        let c = Catalogo::incrustado();
+        assert!(c.motor.paquetes.contains_key("linux") && c.motor.paquetes.contains_key("windows"));
+        assert_eq!(
+            c.motor.url(&c.motor.paquetes["linux"]),
+            "https://github.com/ollama/ollama/releases/download/v0.34.3/ollama-linux-amd64.tar.zst"
+        );
+        assert!(c.motor.url_base.contains(&c.motor.version));
     }
 
     #[test]

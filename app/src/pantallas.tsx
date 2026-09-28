@@ -5,7 +5,6 @@ import { ControlUsoCpu, DetallesTecnicos, Marco, Medidor, Pagina, Tarjetas } fro
 import * as tx from './textos'
 import type { Config, Equipo, Evaluacion, PerfilId, Rutas } from './tipos'
 import { fmt, gbDeMb } from './formato'
-import { elementosDescarga, useComprobacionSimulada, useDescargaSimulada } from './simulacion'
 
 interface Nav {
   ir: (paso: number) => void
@@ -143,73 +142,6 @@ export function ElegirPerfil({ ir, config, evaluacion, actualizar }: Nav & {
         <DetallesTecnicos evaluacion={evaluacion} />
       </div>
       <p className="peq tenue">{t.pie}</p>
-    </Marco>
-  )
-}
-
-export function Descarga({ ir, config, evaluacion, actualizar }: Nav & {
-  config: Config
-  evaluacion: Evaluacion
-  actualizar: (c: Partial<Config>) => void
-}) {
-  const t = tx.descarga
-  const p = evaluacion.perfiles.find((x) => x.id === (config.perfil ?? evaluacion.recomendado))!
-  const modelos = [...new Set([p.narrador, p.cronista, p.sugerencias, p.embeddings])]
-  const conGpu = config.equipo?.gpus.some((g) => !g.integrada) ?? false
-  const [pausada, setPausada] = useState(false)
-  const elementos = useDescargaSimulada(elementosDescarga(modelos, conGpu), pausada)
-  const total = elementos.reduce((a, e) => a + e.gb, 0)
-  const hecho = elementos.reduce((a, e) => a + e.hecho, 0)
-  const fin = elementos.every((e) => e.hecho >= e.gb)
-  return (
-    <Marco paso={5} titulo={t.titulo} lead={t.lead(p.nombre)}
-      barra={<><Atras ir={ir} paso={5} /><span className="hueco" />
-        {fin
-          ? <button type="button" className="btn pri" onClick={() => { actualizar({ modelosDescargados: modelos }); ir(6) }}>{t.accion}</button>
-          : <button type="button" className="btn" onClick={() => setPausada(!pausada)}>{pausada ? t.reanudar : t.pausar}</button>}</>}>
-      <div className="descargas">
-        <div className="descarga">
-          <b>{t.total}</b>
-          <span className="mono peq">{fmt(hecho)} / {fmt(total)} GB{fin ? '' : ` · ${t.quedan(Math.max(1, Math.ceil((total - hecho) / 0.025 / 60)))}`}</span>
-          <div className="progreso"><div style={{ width: `${(hecho / total) * 100}%` }} /></div>
-        </div>
-        <div className="filete" />
-        {elementos.map((e) => {
-          const ok = e.hecho >= e.gb
-          const estado = ok ? t.estados.listo : e.hecho > 0 ? (pausada ? t.estados.pausa : t.estados.bajando) : t.estados.cola
-          return (
-            <div key={e.id} className={`descarga${ok ? ' ok' : ''}`}>
-              <span>{e.id === 'motor' ? t.motor : t.nombreModelo(e.id)} <span className="peq tenue mono">{fmt(e.gb)} GB</span></span>
-              <span className="estado">{estado}</span>
-              <div className="progreso"><div style={{ width: `${(e.hecho / e.gb) * 100}%` }} /></div>
-            </div>
-          )
-        })}
-      </div>
-      <p className="peq tenue">{t.verificado}</p>
-    </Marco>
-  )
-}
-
-export function Comprobacion({ ir }: Nav) {
-  const t = tx.comprobacion
-  const estados = useComprobacionSimulada(t.pasos.length)
-  const todo = estados.every((s) => s === 'ok')
-  return (
-    <Marco paso={6} titulo={t.titulo} lead={t.lead}
-      barra={<><Atras ir={ir} paso={6} /><span className="hueco" />
-        <button type="button" className="btn pri" disabled={!todo} onClick={() => ir(7)}>{todo ? tx.comun.continuar : t.comprobando}</button></>}>
-      <ol className="comprobaciones">
-        {t.pasos.map(([nombre, detalle], i) => (
-          <li key={nombre}>
-            <div className="cab">
-              <span className={`icono ${estados[i]}`}>{estados[i] === 'ok' ? '✓' : estados[i] === 'fallo' ? '!' : ''}</span>
-              <span>{nombre}</span>
-            </div>
-            {estados[i] === 'ok' && detalle && <p className="peq tenue">{detalle}</p>}
-          </li>
-        ))}
-      </ol>
     </Marco>
   )
 }

@@ -3,7 +3,8 @@ import { api } from './api'
 import { configInicial } from './ejemplo'
 import { errores } from './textos'
 import type { Config, Evaluacion, Rutas } from './tipos'
-import { Ajustes, Bienvenida, Comprobacion, Descarga, ElegirPerfil, Juego, Listo, QueSeInstala, TuEquipo } from './pantallas'
+import { Ajustes, Bienvenida, ElegirPerfil, Juego, Listo, QueSeInstala, TuEquipo } from './pantallas'
+import { Comprobacion, Descarga } from './pantallasIa'
 
 type Vista = 'asistente' | 'juego' | 'ajustes'
 

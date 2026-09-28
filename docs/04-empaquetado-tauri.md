@@ -95,8 +95,8 @@ Ver [`10-proteccion-del-codigo-y-build.md`](10-proteccion-del-codigo-y-build.md)
 | Imágenes de la Enciclopedia (`backend/uploads/images`) | ~270 MB |
 | Base de datos plantilla (catálogo + lore indexado) | a medir |
 | **Instalador** | **~350-450 MB** |
-| Ollama (descarga en primer arranque) | 50 MB - 1,5 GB según gráfica |
-| Modelos (descarga en primer arranque) | 3-9 GB según perfil |
+| Ollama (descarga en primer arranque) | ~1,4 GB (2,1 GB instalado) |
+| Modelos (descarga en primer arranque) | 1,3-9,4 GB según perfil (11,3 GB el experimental), ver `12` |
 
 Las imágenes son lo que más pesa del instalador: convertirlas a WebP con buena calidad podría
 reducirlo a la mitad (a valorar).

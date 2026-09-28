@@ -22,6 +22,47 @@ resto.
 | **Prompts del narrador** | Bajo — punto débil asumido | Lo que se envía a Ollama se puede ver (`localhost`). Se dificulta incrustando el texto del `SYSTEM` en el backend compilado y enviándolo en cada petición, en vez de dejar un `Modelfile` legible en disco (ver [`03-ollama-y-modelos-ia.md`](03-ollama-y-modelos-ia.md)). |
 | **Base de datos** (catálogo, lore) e **imágenes** | Bajo | Ficheros de datos legibles. Cifrar SQLite (SQLCipher) obligaría a meter la clave en el binario: solo disuade y complica el empaquetado. **No se hace en la v1.** |
 
+## Resultado de la prueba de concepto (fase 0.6, 2026-09-28)
+
+**El camino A funciona con el backend real del juego.** Herramienta:
+[`herramientas/empaquetar-backend.mjs`](../herramientas/empaquetar-backend.mjs) (vive en este repo
+porque no contiene código del juego: lo transforma desde una ruta local).
+
+Probado con una copia del backend del commit `ace5cd8`, Node 22.22.2, Prisma 6.19.3 y una base
+de datos Postgres con pgvector, migraciones del juego aplicadas y catálogo sembrado (99 PNJ, 64
+lugares, 67 fragmentos de lore):
+
+| Prueba desde el bytecode | Resultado |
+|---|---|
+| Arranque (Fastify, rutas, worker del mundo) | Correcto |
+| `GET /health` | 200 |
+| `GET /world/helek-sirik/enciclopedia` (808 KB) y `/locations` | 200 |
+| `POST /saves` (crear partida: transacción con varias tablas) y `GET /saves/:id` | 200 |
+| `POST /saves/:id/attribute-points` (bloqueo `FOR UPDATE` con SQL crudo) | Respuesta de negocio correcta |
+| Errores 500 en el registro | Ninguno |
+
+**Tamaño:** 151 MB: runtime de Node 119 MB + `servidor.jsc` 5,2 MB + cliente de Prisma recortado
+(sin los motores de otras bases de datos, ~70 MB menos). Con Prisma sin motor nativo se
+reduciría algo más.
+
+**Qué queda protegido y qué no** (comprobado buscando dentro de `servidor.jsc`):
+
+- No hay código fuente. Los nombres de funciones del motor no aparecen (p. ej.
+  `lockRowForUpdate`): el minificado los renombra antes de compilar.
+- Los **textos literales sí se leen** (descripciones de objetos, mensajes, trozos de prompts):
+  cualquier técnica los deja, porque el programa los necesita tal cual.
+- El `Modelfile` hoy viaja como fichero aparte (el backend lo lee del disco): su prompt se lee
+  entero. Se resuelve incrustándolo (fase 3.5).
+
+**Adaptaciones que hace la herramienta** y que conviene llevar al juego en la fase 3 para no
+depender de ellas:
+
+- `server.ts` usa `await` de primer nivel, que no existe en CommonJS: la herramienta envuelve el
+  arranque en una función asíncrona. Mejor: que el juego exporte una función `main()`.
+- `import.meta.dirname` (3 sitios) se sustituye por una ruta relativa a
+  `TARKOR_BACKEND_RAIZ`. Mejor: rutas de imágenes y datos por variable de entorno.
+- El backend escucha en `0.0.0.0`: en el instalador tiene que ser `127.0.0.1` (fase 3.6).
+
 ## Backend a bytecode: dos caminos
 
 Se elige uno en la prueba de concepto (fase 0 de [`05-plan-de-trabajo.md`](05-plan-de-trabajo.md)):

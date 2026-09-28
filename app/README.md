@@ -35,3 +35,33 @@ npm run tauri build              # instaladores (.exe en Windows; .AppImage y .d
 ```
 
 `TARKOR_DATOS=/ruta` cambia la carpeta de datos (para pruebas sin tocar la real).
+
+## Prueba de punta a punta (Linux)
+
+Recorre el asistente en la app instalada pulsando los botones por su texto, guarda una captura de
+cada pantalla, comprueba `config.json` y vuelve a abrir la app para ver que no repite el asistente.
+
+```sh
+sudo apt install webkit2gtk-driver xvfb   # driver WebDriver de WebKit y pantalla virtual
+cargo install tauri-driver --locked
+npm run tauri build
+sudo dpkg -i target/release/bundle/deb/Tarkor_*_amd64.deb
+export TARKOR_DATOS=$(mktemp -d)
+# Con un Ollama falso (e2e/ollama-falso.mjs) para recorrer el asistente sin descargar modelos:
+export TARKOR_OLLAMA_URL=http://127.0.0.1:11499
+xvfb-run -a sh -c 'node e2e/ollama-falso.mjs 11499 & F=$!; tauri-driver & D=$!; trap "kill $D $F" EXIT; sleep 2; node e2e/asistente.e2e.mjs /usr/bin/tarkor capturas'
+```
+
+Sin `TARKOR_OLLAMA_URL` la app instala y arranca el motor real (1,4 GB). En una red que bloquea
+el registro de modelos, `E2E_ESPERA_ERROR_RED=1` comprueba que el error se explica y se puede
+reintentar.
+
+## Motor de IA sin el asistente
+
+```sh
+cargo run --release -p tarkor-nucleo --example motor minimo   # o ligero, equilibrado...
+```
+
+Instala el motor real, lo arranca con los ajustes del perfil para este equipo, descarga los
+modelos y hace la narración de prueba mostrando los tokens por segundo. Pensado para medir en la
+Steam Deck o en un Windows (fase 0.8).

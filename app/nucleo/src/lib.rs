@@ -12,5 +12,8 @@
 pub mod catalogo;
 pub mod config;
 pub mod equipo;
+pub mod motor;
+pub mod ollama;
 pub mod perfiles;
+pub mod procesos;
 pub mod rendimiento;

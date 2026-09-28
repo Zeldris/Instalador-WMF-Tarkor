@@ -33,12 +33,17 @@ indexó el lore empaquetado.
 La app de Tauri arranca y para su **propia instancia de Ollama**, igual que hace con el backend:
 
 - **Binario:** se usa la release oficial de Ollama (licencia MIT, se puede redistribuir). Versión
-  **fijada** por el instalador, con suma SHA256 comprobada.
-- **Se descarga en el primer arranque, no va dentro del instalador.** El paquete de Ollama para
-  Windows y el de Linux con soporte de gráficas NVIDIA/AMD pesan cientos de MB o más de 1 GB. Se
-  descarga solo la variante que corresponde al equipo detectado (solo CPU, NVIDIA o AMD — ver
-  [`09-deteccion-de-equipo-y-perfiles.md`](09-deteccion-de-equipo-y-perfiles.md)). Así el
+  **fijada en el catálogo** (hoy la 0.34.3) con la suma SHA256 de cada paquete copiada de su
+  `sha256sum.txt`. Actualizar Ollama es cambiar versión, URL y sumas en `catalogo.json`.
+- **Se descarga en el primer arranque, no va dentro del instalador.** El paquete oficial pesa
+  ~1,4 GB tanto en Windows (`ollama-windows-amd64.zip`) como en Linux
+  (`ollama-linux-amd64.tar.zst`) e incluye ya soporte NVIDIA y Vulkan (Vulkan cubre también AMD e
+  Intel). El paquete extra de ROCm para AMD (0,25-1 GB) no se descarga por defecto; si en la fase
+  0.8 rinde claramente mejor que Vulkan en alguna gráfica, se añadiría solo para ella. Así el
   instalador se queda en unos cientos de MB.
+- **Implementado y probado (2026-09-28):** `app/nucleo/src/motor.rs` descarga (reanudable),
+  verifica la suma, extrae y arranca el motor. Probado aquí con el paquete real de Linux: 1.361 MB
+  en 58 s, arranque en 0,3 s, todos los ajustes de `12` aplicados según el registro de Ollama.
 - **Aislado de cualquier otro Ollama:** puerto libre elegido al arrancar (no el 11434 por defecto)
   y carpeta de modelos propia dentro de los datos de la app (`OLLAMA_MODELS`). Si el jugador ya
   tiene Ollama para otras cosas, no se tocan ni se mezclan.
