@@ -1,56 +1,70 @@
 # Instalador de Tarkor (World-Maker-Fantasy)
 
-Repositorio para empaquetar **Tarkor** como una aplicación de escritorio instalable — un único
-`.exe`/`.dmg`/`.AppImage` que cualquiera pueda descargar y abrir, sin clonar el repositorio del
-juego, sin instalar Node/Postgres/podman a mano, y sin depender de un dominio público ni de abrir
-un navegador apuntando a una URL.
+Repositorio para empaquetar **Tarkor** como una aplicación de escritorio instalable: un `.exe`
+(Windows) o un `.AppImage` (Linux) que cualquiera pueda descargar y abrir, sin clonar el repositorio
+del juego, sin instalar Node, Postgres ni Ollama a mano, y sin depender de ningún servidor.
 
-Este repositorio será público (para que cualquiera pueda descargar el instalador), a diferencia del
-repositorio del juego en sí (`World-Maker-Fantasy`), que sigue siendo privado. Aquí no vive el
-código del juego — vive la documentación de arquitectura y, más adelante, el código específico del
-empaquetado (configuración de Tauri, scripts de build, migraciones a SQLite, etc.).
+Este repositorio es público (para publicar los instaladores), a diferencia del repositorio del
+juego (`World-Maker-Fantasy`), que sigue siendo privado. Aquí no vive el código del juego: vive la
+documentación, el diseño y el envoltorio de escritorio (Tauri, asistente de primer arranque,
+gestión de procesos). La build final se hace desde el repo privado (ver
+[`docs/10`](docs/10-proteccion-del-codigo-y-build.md)).
 
 ## Estado actual
 
-**Solo documentación todavía — no se ha escrito ningún código de empaquetado.** Este repositorio
-existe para dejar la arquitectura completamente pensada y por escrito antes de ponerse a
-implementarla, así no se pierde el contexto de las decisiones entre sesiones.
+- Documentación y diseño completos para la v1 (Windows + Linux).
+- Prototipo navegable del asistente: [`diseno/prototipo-asistente.html`](diseno/prototipo-asistente.html).
+- Implementación: **fase 0 en marcha** (ver [`docs/05-plan-de-trabajo.md`](docs/05-plan-de-trabajo.md)).
 
-## Cómo se relaciona con el repositorio del juego
+## Decisiones
 
-`World-Maker-Fantasy` (repo privado, separado) es donde vive el juego real: backend Fastify,
-frontend Vite/React, catálogo del mundo, etc. Ese repositorio ya tenía una investigación inicial de
-viabilidad para este instalador — `docs/20-instalador-distribuible.md` — escrita el 2026-08-20, que
-es el punto de partida de todo lo que hay aquí. Ese documento no se borra ni se mueve del repo del
-juego; este repositorio lo desarrolla y lo amplía en documentos separados por tema.
+| Tema | Decisión | Estado | Documento |
+|---|---|---|---|
+| Plataformas v1 | Windows y Linux (x86_64). macOS fuera | Decidido | [04](docs/04-empaquetado-tauri.md) |
+| Envoltorio | Tauri v2 | Decidido | [01](docs/01-arquitectura-general.md) |
+| Base de datos | SQLite local, base de datos plantilla ya sembrada | Decidido | [02](docs/02-migracion-postgres-a-sqlite.md) |
+| Motor de IA | Ollama propio de la app como sidecar, descargado en el primer arranque | Propuesta, se valida en fase 0 | [03](docs/03-ollama-y-modelos-ia.md) |
+| Narrador | Modelo base + `system` por petición (sin `ollama create`) | Propuesta, se valida en fase 0 | [03](docs/03-ollama-y-modelos-ia.md) |
+| Hardware | Análisis del equipo con permiso + perfiles Mínimo / Ligero / Equilibrado / Máximo / Ultra (experimental) | Decidido | [09](docs/09-deteccion-de-equipo-y-perfiles.md) |
+| Modelos y perfiles | En `app/catalogo/catalogo.json`, sin tocar código; sustituible desde la carpeta de datos | Implementado | [12](docs/12-catalogo-y-rendimiento.md) |
+| Rendimiento | Ajustes de Ollama y del backend calculados para cada equipo y perfil | Implementado, cifras por medir | [12](docs/12-catalogo-y-rendimiento.md) |
+| Protección del código | Backend a bytecode, frontend minificado, sin *source maps* | Decidido, técnica exacta en fase 0 | [10](docs/10-proteccion-del-codigo-y-build.md) |
+| Dónde se compila | CI en el repo privado; releases en este repo | Decidido | [10](docs/10-proteccion-del-codigo-y-build.md) |
+| Instalación | NSIS por usuario sin admin (Windows); AppImage (Linux) | Decidido | [07](docs/07-flujo-de-instalacion.md) |
+| Consentimiento y validación | En el asistente de primer arranque | Decidido | [07](docs/07-flujo-de-instalacion.md), [11](docs/11-diseno-del-frontal.md) |
+| Firma en Windows | Azure Trusted Signing / certificado / sin firma en v1 | **Abierto** | [04](docs/04-empaquetado-tauri.md) |
+| Licencia del juego | Todos los derechos reservados, uso personal gratuito | **Propuesta, confirmar** | [08](docs/08-legal-y-privacidad.md) |
+| Licencia de este repo | MIT o todos los derechos reservados | **Abierto** | [08](docs/08-legal-y-privacidad.md) |
+| Perfiles Mínimo y Ligero | Se ofrecen avisando del resultado; falta probarlos en partida | **Por validar** | [12](docs/12-catalogo-y-rendimiento.md) |
+| Por encima del máximo seguro | Bloqueado con opción "mostrar no recomendados" | **Propuesta, confirmar** | [09](docs/09-deteccion-de-equipo-y-perfiles.md) |
 
-No confundir tampoco con `docs/15-instalacion.md` del repo del juego, que es la guía para instalar
-el **entorno de desarrollo** (clonar, `npm install`, Postgres vía podman) — eso sigue siendo válido
-para quien quiera tocar código. Este repositorio habla de un **paquete terminado** para alguien que
-solo quiere jugar.
+## Documentos
 
-## Índice de documentos
+- [`01-arquitectura-general.md`](docs/01-arquitectura-general.md) — visión de conjunto.
+- [`02-migracion-postgres-a-sqlite.md`](docs/02-migracion-postgres-a-sqlite.md) — puntos de
+  fricción con Postgres (reverificados contra el código actual) y base de datos plantilla.
+- [`03-ollama-y-modelos-ia.md`](docs/03-ollama-y-modelos-ia.md) — Ollama como sidecar y modelos.
+- [`04-empaquetado-tauri.md`](docs/04-empaquetado-tauri.md) — procesos, puertos, plataformas,
+  firma, tamaño.
+- [`05-plan-de-trabajo.md`](docs/05-plan-de-trabajo.md) — plan de implementación por fases.
+- [`06-inventario-exclusiones.md`](docs/06-inventario-exclusiones.md) — qué se quita del
+  instalador y qué se deshabilita.
+- [`07-flujo-de-instalacion.md`](docs/07-flujo-de-instalacion.md) — instalador, asistente,
+  validación, carpetas, desinstalación.
+- [`08-legal-y-privacidad.md`](docs/08-legal-y-privacidad.md) — licencias y datos.
+- [`09-deteccion-de-equipo-y-perfiles.md`](docs/09-deteccion-de-equipo-y-perfiles.md) — análisis
+  del equipo y perfiles de IA.
+- [`10-proteccion-del-codigo-y-build.md`](docs/10-proteccion-del-codigo-y-build.md) — protección
+  del código y pipeline de build.
+- [`11-diseno-del-frontal.md`](docs/11-diseno-del-frontal.md) — pantallas del asistente, ajustes y
+  errores.
+- [`12-catalogo-y-rendimiento.md`](docs/12-catalogo-y-rendimiento.md) — catálogo de modelos y
+  perfiles en JSON, y ajustes de rendimiento de Ollama.
 
-- [`docs/01-arquitectura-general.md`](docs/01-arquitectura-general.md) — visión de conjunto: Tauri,
-  el backend como sidecar, cómo encajan las piezas.
-- [`docs/02-migracion-postgres-a-sqlite.md`](docs/02-migracion-postgres-a-sqlite.md) — el obstáculo
-  real identificado (pgvector, un `FOR UPDATE`, columnas de array nativo) y cómo resolverlo.
-- [`docs/03-ollama-y-modelos-ia.md`](docs/03-ollama-y-modelos-ia.md) — qué hacer con Ollama y sus 4
-  modelos en un instalador para un usuario que no es desarrollador. **Sin resolver todavía.**
-- [`docs/04-empaquetado-tauri.md`](docs/04-empaquetado-tauri.md) — Tauri en sí: el sidecar de
-  Node, build por plataforma, firma de código, tamaño del instalador. **Sin resolver todavía.**
-- [`docs/05-plan-de-trabajo.md`](docs/05-plan-de-trabajo.md) — orden de trabajo sugerido cuando se
-  decida implementar esto de verdad, como checklist.
-- [`docs/06-inventario-exclusiones.md`](docs/06-inventario-exclusiones.md) — qué se excluye del
-  instalador (herramientas de desarrollo/curación de contenido) y qué se deshabilita en la UI pero
-  se deja visible como "en construcción" (multijugador, creación libre de personaje).
-- [`docs/07-flujo-de-instalacion.md`](docs/07-flujo-de-instalacion.md) — el proceso de instalación
-  en sí: qué se le explica al usuario antes de instalar, validación post-instalación, y una
-  checklist de lo que un instalador bien construido suele cuidar. **Sin resolver todavía.**
-- [`docs/08-legal-y-privacidad.md`](docs/08-legal-y-privacidad.md) — licencia del proyecto (gratis
-  para todos), avisos legales, qué datos toca el instalador/el juego y qué se le comunica al
-  usuario al respecto. **Sin resolver todavía.**
+## Relación con el repositorio del juego
 
-Cada documento indica en su cabecera si su contenido ya está **decidido** (una alternativa elegida,
-lista para implementar) o sigue **abierto** (hay que decidir o investigar más antes de escribir
-código).
+`World-Maker-Fantasy` es donde vive el juego: backend Fastify, frontend Vite/React, catálogo del
+mundo. Su `docs/arquitectura/20-instalador-distribuible.md` (2026-08-20) es el punto de partida de
+todo esto. No confundir con `docs/arquitectura/15-instalacion.md` del juego, que explica cómo montar
+el **entorno de desarrollo**; este repositorio habla de un **paquete terminado** para quien solo
+quiere jugar.

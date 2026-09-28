@@ -1,0 +1,47 @@
+name: Comprobar
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app
+      - name: Dependencias del sistema
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libxdo-dev libssl-dev
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: cargo test -p tarkor-nucleo
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: El núcleo compila para Windows
+        run: cargo check -p tarkor-nucleo --target x86_64-pc-windows-gnu --all-targets
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app
+      - run: cargo test -p tarkor-nucleo

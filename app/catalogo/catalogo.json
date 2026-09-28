@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "notas": "Catálogo de modelos y perfiles de IA (docs/12-catalogo-y-rendimiento.md). Se incrusta en la app al compilar; un fichero catalogo.json en la carpeta de datos lo sustituye sin recompilar. Cifras de memoria estimadas: validar en la fase 0.8 del plan.",
+  "reglas": {
+    "reservaMinimaGb": 3.0,
+    "reservaProporcion": 0.25,
+    "memoriaJuegoGb": 1.0,
+    "proporcionVramUtil": 0.9,
+    "margenComodoGb": 1.5,
+    "margenDisco": 1.1,
+    "contextoNarrador": 8192
+  },
+  "modelos": {
+    "qwen2.5:7b": { "descargaGb": 4.7, "licencia": "Apache-2.0", "piensa": false },
+    "qwen2.5:1.5b-instruct": { "descargaGb": 1.0, "licencia": "Apache-2.0", "piensa": false },
+    "qwen3.5:0.8b": { "descargaGb": 1.0, "licencia": "Apache-2.0", "piensa": true },
+    "qwen3.5:2b": { "descargaGb": 2.7, "licencia": "Apache-2.0", "piensa": true },
+    "qwen3.5:4b": { "descargaGb": 3.4, "licencia": "Apache-2.0", "piensa": true },
+    "qwen3.5:9b": { "descargaGb": 6.6, "licencia": "Apache-2.0", "piensa": true },
+    "nomic-embed-text": { "descargaGb": 0.3, "licencia": "Apache-2.0", "piensa": false }
+  },
+  "perfiles": [
+    {
+      "id": "minimo",
+      "nombre": "Mínimo",
+      "resultado": "Para probar Tarkor en casi cualquier equipo. Las narraciones serán cortas, simples y a veces se equivocarán con los detalles del mundo.",
+      "calidad": 1,
+      "velocidad": 3,
+      "memoriaGb": 2.0,
+      "narrador": "qwen2.5:1.5b-instruct",
+      "cronista": "qwen2.5:1.5b-instruct",
+      "sugerencias": "qwen2.5:1.5b-instruct",
+      "embeddings": "nomic-embed-text",
+      "maxModelosCargados": 1,
+      "keepAlive": "2m"
+    },
+    {
+      "id": "ligero",
+      "nombre": "Ligero",
+      "resultado": "Juego completo con narraciones más breves y menos matices que en Equilibrado.",
+      "calidad": 2,
+      "velocidad": 3,
+      "memoriaGb": 3.8,
+      "narrador": "qwen3.5:2b",
+      "cronista": "qwen2.5:1.5b-instruct",
+      "sugerencias": "qwen2.5:1.5b-instruct",
+      "embeddings": "nomic-embed-text",
+      "maxModelosCargados": 1,
+      "keepAlive": "2m"
+    },
+    {
+      "id": "equilibrado",
+      "nombre": "Equilibrado",
+      "resultado": "La experiencia para la que se diseñó Tarkor: el mismo narrador que en desarrollo.",
+      "calidad": 3,
+      "velocidad": 2,
+      "memoriaGb": 7.0,
+      "narrador": "qwen2.5:7b",
+      "cronista": "qwen2.5:1.5b-instruct",
+      "sugerencias": "qwen2.5:1.5b-instruct",
+      "embeddings": "nomic-embed-text",
+      "maxModelosCargados": 2,
+      "keepAlive": "5m"
+    },
+    {
+      "id": "maximo",
+      "nombre": "Máximo",
+      "resultado": "Como Equilibrado, con sugerencias de acción más ricas y todos los modelos cargados a la vez para no esperar entre turnos.",
+      "calidad": 4,
+      "velocidad": 2,
+      "memoriaGb": 11.0,
+      "narrador": "qwen2.5:7b",
+      "cronista": "qwen2.5:1.5b-instruct",
+      "sugerencias": "qwen3.5:4b",
+      "embeddings": "nomic-embed-text",
+      "maxModelosCargados": 4,
+      "keepAlive": "15m"
+    },
+    {
+      "id": "ultra",
+      "nombre": "Ultra",
+      "resultado": "Narrador más grande, pensado para gráficas potentes. Experimental: todavía no está afinado para el mundo de Tarkor.",
+      "calidad": 4,
+      "velocidad": 1,
+      "memoriaGb": 14.0,
+      "narrador": "qwen3.5:9b",
+      "cronista": "qwen2.5:1.5b-instruct",
+      "sugerencias": "qwen3.5:4b",
+      "embeddings": "nomic-embed-text",
+      "maxModelosCargados": 4,
+      "keepAlive": "15m",
+      "experimental": true
+    }
+  ]
+}

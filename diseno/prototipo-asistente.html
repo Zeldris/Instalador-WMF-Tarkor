@@ -1,0 +1,535 @@
+<title>Asistente de Tarkor</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* Tokens copiados de frontend/src/index.css del juego (tema Helek Sirik). Diseño oscuro único,
+   igual que el propio juego (color-scheme: dark). */
+:root {
+  color-scheme: dark;
+  --wood-950:#1b130c; --wood-900:#241a10; --wood-800:#332415; --wood-700:#46311d; --wood-600:#5c4126;
+  --wood-500:#7a5934; --wood-400:#a3814f; --wood-300:#c9a877; --wood-200:#e3cba8; --wood-100:#f1e4d0;
+  --iron-900:#0e0b08; --iron-800:#171310; --iron-700:#221c16;
+  --accent-300:#a8d8f0; --accent-400:#7bc4e8; --accent-500:#4aa8d8; --accent-600:#3488b8;
+  --accent2-300:#b0bec8; --accent2-400:#8a9aa8;
+  --moss-400:#8fae6a; --moss-500:#6f9450;
+  --danger-400:#f87171; --danger-500:#ef4444; --danger-600:#dc2626;
+  --cost-400:#fbbf24; --cost-500:#f59e0b;
+  --serif:"Cinzel", Georgia, serif;
+  --sans:"Inter", system-ui, "Segoe UI", Roboto, sans-serif;
+  --mono:"Cascadia Code", "SF Mono", ui-monospace, monospace;
+}
+* { box-sizing:border-box; }
+body { background:var(--wood-950); color:var(--wood-100); font-family:var(--sans); font-size:15px; line-height:1.55; -webkit-font-smoothing:antialiased; padding:20px 16px 40px; }
+.wrap { max-width:1100px; margin:0 auto; display:flex; flex-direction:column; gap:14px; }
+
+/* Barra del prototipo (no forma parte del diseño) */
+.proto { display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; font-size:13px; color:var(--wood-300); padding:10px 14px; border:1px dashed var(--wood-600); border-radius:8px; }
+.proto b { color:var(--wood-200); font-weight:600; }
+.proto select, .proto button { font:inherit; font-size:13px; background:var(--wood-900); color:var(--wood-100); border:1px solid var(--wood-600); border-radius:6px; padding:4px 8px; cursor:pointer; }
+.proto .sp { flex:1; }
+
+/* Ventana de la app */
+.win { display:grid; grid-template-columns:230px 1fr; min-height:660px; border:1px solid var(--iron-700); border-radius:12px; overflow:hidden; box-shadow:0 24px 60px -24px rgba(0,0,0,.8); }
+.rail { background-image:
+    repeating-linear-gradient(0deg, color-mix(in srgb, var(--accent2-300) 14%, transparent) 0px, transparent 1.5px, transparent 16px),
+    repeating-linear-gradient(90deg, color-mix(in srgb, var(--accent2-300) 14%, transparent) 0px, transparent 1.5px, transparent 16px),
+    linear-gradient(175deg, var(--iron-700), var(--iron-800) 55%, var(--iron-900));
+  padding:26px 18px; display:flex; flex-direction:column; gap:26px; border-right:1px solid var(--iron-900); }
+.brand { font-family:var(--serif); font-weight:700; letter-spacing:.18em; font-size:22px; color:var(--wood-100); }
+.brand small { display:block; font-family:var(--sans); font-weight:500; letter-spacing:.08em; font-size:11px; color:var(--accent2-400); text-transform:uppercase; margin-top:2px; }
+.steps { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px; }
+.steps li { display:flex; gap:10px; align-items:center; padding:7px 8px; border-radius:6px; color:var(--wood-400); font-size:14px; }
+.steps .n { width:22px; height:22px; border-radius:50%; border:1px solid currentColor; display:grid; place-items:center; font-family:var(--mono); font-size:11px; flex:none; }
+.steps li.done { color:var(--moss-400); }
+.steps li.done .n { background:color-mix(in srgb, var(--moss-500) 25%, transparent); }
+.steps li.cur { color:var(--accent-300); background:color-mix(in srgb, var(--accent-500) 12%, transparent); }
+.steps li.cur .n { border-color:var(--accent-400); background:var(--accent-600); color:var(--wood-100); }
+.rail .foot { margin-top:auto; font-size:12px; color:var(--wood-500); }
+
+.main { display:flex; flex-direction:column; min-width:0; background-image:
+    repeating-linear-gradient(1deg, rgba(0,0,0,.35) 0px, rgba(0,0,0,.35) 2px, rgba(255,255,255,.035) 2px, rgba(255,255,255,.035) 3px, transparent 3px, transparent 34px),
+    linear-gradient(155deg, var(--wood-800), var(--wood-900) 65%); }
+.content { padding:34px 38px 24px; flex:1; display:flex; flex-direction:column; gap:20px; }
+h1 { font-family:var(--serif); font-weight:600; font-size:28px; line-height:1.2; margin:0; letter-spacing:.02em; text-wrap:balance; }
+.lead { margin:0; color:var(--wood-200); max-width:62ch; }
+.hair { height:1px; background:linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent-400) 70%, transparent) 50%, transparent); }
+h2 { font-family:var(--serif); font-size:15px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--wood-300); margin:0 0 8px; }
+p { margin:0; }
+.muted { color:var(--wood-300); }
+.small { font-size:13px; }
+.mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+
+.bar { display:flex; gap:12px; align-items:center; padding:16px 38px; border-top:1px solid var(--iron-700); background:color-mix(in srgb, var(--iron-800) 70%, transparent); }
+.bar .sp { flex:1; }
+.btn { font:inherit; font-weight:600; font-size:14px; border-radius:6px; padding:10px 18px; cursor:pointer; border:1px solid var(--wood-600); background:transparent; color:var(--wood-100); }
+.btn:hover { background:var(--wood-700); }
+.btn.pri { background:var(--accent-600); border-color:var(--accent-500); color:#fff; }
+.btn.pri:hover { background:var(--accent-500); }
+.btn:disabled { opacity:.4; cursor:not-allowed; }
+.btn:focus-visible, .card:focus-visible, .seg button:focus-visible, input:focus-visible + .box { outline:2px solid var(--accent-300); outline-offset:2px; }
+.link { color:var(--accent-300); text-decoration:underline; text-underline-offset:3px; cursor:pointer; background:none; border:0; font:inherit; padding:0; }
+
+.cols { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+.box { border:1px solid var(--iron-700); border-radius:10px; padding:16px 18px; background:color-mix(in srgb, var(--wood-950) 45%, transparent); }
+ul.list { margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:8px; }
+ul.list li { display:flex; gap:10px; align-items:baseline; }
+ul.list li::before { content:""; width:6px; height:6px; border-radius:50%; background:var(--accent-400); flex:none; transform:translateY(-2px); }
+ul.list.no li::before { background:var(--danger-400); border-radius:1px; transform:translateY(-2px) rotate(45deg); }
+.check { display:flex; gap:10px; align-items:flex-start; cursor:pointer; }
+.check input { width:18px; height:18px; accent-color:var(--accent-500); margin-top:2px; }
+
+.path { font-family:var(--mono); font-size:13px; color:var(--wood-200); background:var(--iron-800); padding:3px 8px; border-radius:4px; }
+
+/* Ficha de equipo */
+.spec { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:10px; }
+.spec div { border:1px solid var(--iron-700); border-radius:8px; padding:10px 12px; }
+.spec dt { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--wood-400); }
+.spec dd { margin:2px 0 0; font-family:var(--mono); font-size:15px; }
+
+/* Medidor */
+.meter { display:flex; flex-direction:column; gap:8px; }
+.track { position:relative; height:14px; border-radius:7px; background:var(--iron-800); border:1px solid var(--iron-700); }
+.fill { position:absolute; inset:0 auto 0 0; border-radius:7px; background:linear-gradient(90deg, var(--accent-600), var(--accent-400)); }
+.tick { position:absolute; top:-6px; bottom:-6px; width:2px; background:var(--wood-200); }
+.tick span { position:absolute; top:22px; left:50%; transform:translateX(-50%); white-space:nowrap; font-size:11px; color:var(--wood-300); }
+.tick.over { background:var(--danger-400); }
+.tick.over span { color:var(--danger-400); }
+.scale { display:flex; justify-content:space-between; font-size:11px; color:var(--wood-500); margin-top:18px; }
+
+/* Tarjetas de perfil */
+.cards { display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; }
+.card { text-align:left; font:inherit; color:inherit; cursor:pointer; border:1px solid var(--iron-700); border-radius:12px; padding:16px; background:color-mix(in srgb, var(--wood-950) 40%, transparent); display:flex; flex-direction:column; gap:10px; }
+.card:hover:not(:disabled) { border-color:var(--wood-500); }
+.card.sel { border-color:var(--accent-400); background:color-mix(in srgb, var(--accent-500) 12%, var(--wood-900)); box-shadow:0 0 0 1px var(--accent-400) inset; }
+.card:disabled { cursor:not-allowed; opacity:.5; }
+.card .name { font-family:var(--serif); font-weight:700; font-size:18px; letter-spacing:.04em; }
+.card .tags { display:flex; gap:6px; flex-wrap:wrap; min-height:22px; }
+.tag { font-size:11px; font-weight:600; letter-spacing:.04em; padding:2px 8px; border-radius:999px; border:1px solid; }
+.tag.rec { color:var(--accent-300); border-color:var(--accent-500); }
+.tag.max { color:var(--wood-200); border-color:var(--wood-500); }
+.tag.over { color:var(--danger-400); border-color:var(--danger-600); }
+.card dl { margin:0; display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:13px; }
+.card dt { color:var(--wood-400); }
+.card dd { margin:0; text-align:right; font-family:var(--mono); font-variant-numeric:tabular-nums; }
+.pips { letter-spacing:2px; color:var(--accent-400); }
+.pips i { color:var(--wood-600); font-style:normal; }
+.warn { border:1px solid color-mix(in srgb, var(--cost-500) 60%, transparent); background:color-mix(in srgb, var(--cost-500) 10%, transparent); color:var(--cost-400); border-radius:8px; padding:10px 12px; font-size:13px; }
+.err { border:1px solid color-mix(in srgb, var(--danger-500) 60%, transparent); background:color-mix(in srgb, var(--danger-500) 10%, transparent); color:var(--wood-100); border-radius:8px; padding:12px 14px; font-size:14px; display:flex; flex-direction:column; gap:8px; }
+.row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+.seg { display:inline-flex; border:1px solid var(--wood-600); border-radius:6px; overflow:hidden; }
+.seg button { font:inherit; font-size:13px; padding:7px 14px; background:transparent; color:var(--wood-200); border:0; cursor:pointer; }
+.seg button.on { background:var(--wood-600); color:var(--wood-100); }
+.switch { display:flex; gap:8px; align-items:center; font-size:13px; color:var(--wood-300); cursor:pointer; }
+details summary { cursor:pointer; color:var(--accent-300); font-size:13px; }
+details table { margin-top:8px; border-collapse:collapse; font-size:13px; width:100%; }
+details td, details th { text-align:left; padding:4px 10px 4px 0; border-bottom:1px solid var(--iron-700); }
+details th { color:var(--wood-400); font-weight:500; }
+.tbl { overflow-x:auto; }
+
+/* Descargas y comprobaciones */
+.dl { display:flex; flex-direction:column; gap:12px; }
+.dl .item { display:grid; grid-template-columns:1fr auto; gap:6px 12px; align-items:center; }
+.dl .pbar { grid-column:1 / -1; height:8px; border-radius:4px; background:var(--iron-800); overflow:hidden; }
+.dl .pbar div { height:100%; background:var(--accent-500); transition:width .3s linear; }
+.dl .item.ok .pbar div { background:var(--moss-500); }
+.state { font-size:12px; color:var(--wood-300); }
+.item.ok .state { color:var(--moss-400); }
+.checks { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; }
+.checks > li { border:1px solid var(--iron-700); border-radius:8px; padding:10px 12px; display:flex; flex-direction:column; gap:8px; }
+.checks .hd { display:flex; gap:10px; align-items:center; }
+.ico { width:20px; height:20px; border-radius:50%; flex:none; display:grid; place-items:center; font-size:12px; font-weight:700; border:1px solid var(--wood-600); color:var(--wood-500); }
+.ico.run { border-color:var(--accent-400); border-top-color:transparent; animation:spin .8s linear infinite; }
+.ico.ok { background:var(--moss-500); border-color:var(--moss-500); color:var(--wood-950); }
+.ico.ko { background:var(--danger-600); border-color:var(--danger-600); color:#fff; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.quote { font-family:var(--serif); font-size:14px; color:var(--wood-200); border-left:2px solid var(--accent-500); padding-left:12px; }
+
+.overlay { background:color-mix(in srgb, var(--iron-900) 80%, transparent); flex:1; display:grid; place-items:center; padding:24px; }
+.dialog { max-width:520px; display:flex; flex-direction:column; gap:14px; padding:26px; border-radius:12px; border:1px solid var(--danger-600); background:linear-gradient(155deg, var(--wood-800), var(--wood-900)); }
+
+@media (max-width:820px) {
+  .win { grid-template-columns:1fr; }
+  .rail { padding:16px; gap:12px; }
+  .steps { flex-direction:row; flex-wrap:wrap; }
+  .steps li .t { display:none; }
+  .steps li.cur .t { display:inline; }
+  .rail .foot { display:none; }
+  .content { padding:24px 18px; }
+  .bar { padding:14px 18px; }
+  .cols, .cards { grid-template-columns:1fr; }
+}
+@media (prefers-reduced-motion:reduce) { .ico.run { animation:none; } .dl .pbar div { transition:none; } }
+</style>
+
+<div class="wrap">
+  <div class="proto" aria-label="Controles del prototipo">
+    <span><b>Prototipo</b> · datos de ejemplo</span>
+    <label>Equipo de ejemplo
+      <select id="equipo">
+        <option value="deck">Steam Deck (16 GB compartida)</option>
+        <option value="pc">PC 16 GB + gráfica 8 GB</option>
+        <option value="portatil">Portátil 8 GB sin gráfica</option>
+        <option value="viejo">Equipo 6 GB</option>
+      </select>
+    </label>
+    <label>Pantalla
+      <select id="pantalla">
+        <option value="1">1 · Bienvenida</option>
+        <option value="2">2 · Qué se instala</option>
+        <option value="3">3 · Tu equipo</option>
+        <option value="4">4 · Perfil</option>
+        <option value="5">5 · Descarga</option>
+        <option value="6">6 · Comprobación</option>
+        <option value="7">7 · Listo</option>
+        <option value="ajustes">Ajustes · Rendimiento de la IA</option>
+        <option value="error">Error · motor detenido</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="simfallo"> Simular fallo de memoria</label>
+    <span class="sp"></span>
+    <button type="button" id="reiniciar">Reiniciar</button>
+  </div>
+
+  <div class="win" id="win"></div>
+</div>
+
+<script>
+const EQUIPOS = {
+  deck:     { nombre:'Steam Deck', so:'SteamOS 3.7', cpu:'AMD Zen 2 · 4 núcleos / 8 hilos', hilos:8, ram:16, gpu:'AMD Van Gogh (integrada)', vram:0, integrada:true, disco:180 },
+  pc:       { nombre:'PC de sobremesa', so:'Windows 11', cpu:'AMD Ryzen 5 5600 · 6 núcleos / 12 hilos', hilos:12, ram:16, gpu:'NVIDIA RTX 3060 Ti', vram:8, integrada:false, disco:420 },
+  portatil: { nombre:'Portátil', so:'Windows 10', cpu:'Intel Core i5-8250U · 4 núcleos / 8 hilos', hilos:8, ram:8, gpu:'Intel UHD 620 (integrada)', vram:0, integrada:true, disco:95 },
+  viejo:    { nombre:'Equipo antiguo', so:'Ubuntu 22.04', cpu:'Intel Core i3-4130 · 2 núcleos / 4 hilos', hilos:4, ram:6, gpu:'Sin gráfica dedicada', vram:0, integrada:true, disco:60 },
+};
+const PERFILES = [
+  { id:'ligero', nombre:'Ligero', mem:3.5, descarga:3.3, velocidad:3, calidad:1, narrador:'qwen2.5:3b', sugerir:'usa el cronista', cargados:'1' },
+  { id:'equilibrado', nombre:'Equilibrado', mem:7, descarga:6, velocidad:2, calidad:2, narrador:'qwen2.5:7b', sugerir:'usa el cronista', cargados:'2' },
+  { id:'maximo', nombre:'Máximo', mem:10.5, descarga:9, velocidad:2, calidad:3, narrador:'qwen2.5:7b', sugerir:'qwen3.5:4b', cargados:'todos' },
+];
+const PASOS = ['Bienvenida','Qué se instala','Tu equipo','Perfil','Descarga','Comprobación','Listo'];
+const fmt = n => n.toLocaleString('es-ES', { maximumFractionDigits:1 });
+
+let S;
+function reset() {
+  S = { paso:1, acepto:false, analizado:false, manual:false, perfil:null, cpu:'moderado', noRec:false, dl:null, dlPausa:false, checks:null, vista:'asistente' };
+  document.getElementById('pantalla').value = '1';
+}
+
+// Cálculo de docs/09-deteccion-de-equipo-y-perfiles.md
+function calculo() {
+  const e = EQUIPOS[document.getElementById('equipo').value];
+  const reserva = Math.max(3, e.ram * 0.25);
+  let paraIA = e.ram - reserva - 1;
+  if (!e.integrada && e.vram) paraIA += e.vram * 0.9;
+  paraIA = Math.max(0, paraIA);
+  const caben = PERFILES.filter(p => p.mem <= paraIA && p.descarga * 1.1 <= e.disco);
+  const max = caben.at(-1) || null;
+  let rec = max;
+  if (max && paraIA - max.mem < 1.5 && caben.length > 1) rec = caben.at(-2);
+  return { e, paraIA, max, rec, caben: new Set(caben.map(p => p.id)) };
+}
+
+function pips(n, of = 3) { return '<span class="pips">' + '◆'.repeat(n) + '<i>' + '◆'.repeat(of - n) + '</i></span>'; }
+
+function rail() {
+  return `<aside class="rail">
+    <div class="brand">TARKOR<small>Preparación del primer arranque</small></div>
+    <ol class="steps">${PASOS.map((t, i) => {
+      const n = i + 1, c = n < S.paso ? 'done' : n === S.paso ? 'cur' : '';
+      return `<li class="${c}" ${c === 'cur' ? 'aria-current="step"' : ''}><span class="n">${n < S.paso ? '✓' : n}</span><span class="t">${t}</span></li>`;
+    }).join('')}</ol>
+    <div class="foot">Versión 1.0.0 · Todo se guarda en tu equipo</div>
+  </aside>`;
+}
+
+function shell(titulo, lead, cuerpo, barra) {
+  return rail() + `<section class="main"><div class="content">
+    <h1>${titulo}</h1>${lead ? `<p class="lead">${lead}</p>` : ''}<div class="hair"></div>${cuerpo}</div>
+    <div class="bar">${barra}</div></section>`;
+}
+const atras = `<button class="btn" data-go="back">Atrás</button>`;
+
+function tarjetas(c, modo) {
+  return `<div class="cards">${PERFILES.map(p => {
+    const cabe = c.caben.has(p.id) || S.manual;
+    const dis = !cabe && !S.noRec;
+    const tags = [];
+    if (!S.manual && c.rec && c.rec.id === p.id) tags.push('<span class="tag rec">Recomendado</span>');
+    if (!S.manual && c.max && c.max.id === p.id) tags.push('<span class="tag max">Máximo seguro</span>');
+    if (!S.manual && !c.caben.has(p.id)) tags.push('<span class="tag over">Supera tu equipo</span>');
+    return `<button type="button" class="card ${S.perfil === p.id ? 'sel' : ''}" data-perfil="${p.id}" ${dis ? 'disabled' : ''} aria-pressed="${S.perfil === p.id}">
+      <span class="name">${p.nombre}</span>
+      <span class="tags">${tags.join('')}</span>
+      <dl>
+        <dt>Memoria</dt><dd>${fmt(p.mem)} GB</dd>
+        <dt>Descarga</dt><dd>${fmt(p.descarga)} GB</dd>
+        <dt>Velocidad</dt><dd>${pips(p.velocidad)}</dd>
+        <dt>Narración</dt><dd>${pips(p.calidad)}</dd>
+      </dl>
+    </button>`;
+  }).join('')}</div>
+  ${S.perfil && !S.manual && !c.caben.has(S.perfil) ? `<div class="warn">Este perfil necesita más memoria de la que tu equipo puede dedicar. Puede dejar el equipo lento o cerrar el juego a mitad de partida.</div>` : ''}`;
+}
+
+function medidor(c) {
+  const top = 12;
+  const pct = v => Math.min(100, v / top * 100);
+  return `<div class="meter">
+    <p>Tu equipo puede dedicar unos <b class="mono">${fmt(c.paraIA)} GB</b> a la IA sin quedarse corto.</p>
+    <div class="track" role="img" aria-label="Memoria disponible para la IA: ${fmt(c.paraIA)} GB de un máximo mostrado de ${top} GB">
+      <div class="fill" style="width:${pct(c.paraIA)}%"></div>
+      ${PERFILES.map(p => `<div class="tick ${p.mem > c.paraIA ? 'over' : ''}" style="left:${pct(p.mem)}%"><span>${p.nombre}</span></div>`).join('')}
+    </div>
+    <div class="scale mono"><span>0 GB</span><span>${top / 2} GB</span><span>${top} GB</span></div>
+  </div>`;
+}
+
+const PANTALLAS = {
+  1() {
+    return shell('Bienvenido a Tarkor',
+      'Antes de jugar vamos a preparar el motor de IA que narra tus partidas. Se ejecuta entero en tu equipo, así que primero hay que ajustarlo a lo que tu equipo puede mover.',
+      `<ol class="list" style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px">
+        <li><b>Te contamos qué se instala</b> <span class="muted">y qué no hace Tarkor nunca.</span></li>
+        <li><b>Revisamos tu equipo</b> <span class="muted">si nos das permiso, para recomendarte un perfil.</span></li>
+        <li><b>Descargamos lo necesario:</b> <span class="muted">entre 3 y 9 GB según el perfil.</span></li>
+        <li><b>Comprobamos que todo funciona</b> <span class="muted">con una narración de prueba.</span></li>
+      </ol>
+      <p class="muted small">Tardarás unos minutos, más lo que tarde la descarga. Si cierras a medias, continuarás donde lo dejaste.</p>
+      <p class="small muted">Contiene violencia de fantasía. Recomendado a partir de 16 años.</p>`,
+      `<span class="sp"></span><button class="btn pri" data-go="2">Empezar</button>`);
+  },
+  2() {
+    return shell('Qué se instala',
+      'Léelo con calma. Nada se descarga hasta el paso 5 y siempre te diremos el tamaño antes.',
+      `<div class="cols">
+        <div class="box"><h2>Se instalará</h2><ul class="list">
+          <li><span><b>El motor de IA</b> (Ollama, de código abierto). Entre 50 MB y 1,5 GB según tu gráfica.</span></li>
+          <li><span><b>Los modelos de lenguaje</b> del perfil que elijas: entre 3 y 9 GB.</span></li>
+          <li><span><b>La base de datos de tus partidas</b>, que empieza ocupando unos pocos MB.</span></li>
+        </ul>
+        <p class="small muted" style="margin-top:12px">Dónde: <span class="path">%APPDATA%\\Tarkor</span> <button class="link small" type="button">Cambiar</button></p></div>
+        <div class="box"><h2>Tarkor nunca</h2><ul class="list no">
+          <li>Envía tu partida a ningún sitio.</li>
+          <li>Te pide una cuenta ni un correo.</li>
+          <li>Recoge estadísticas de uso.</li>
+          <li>Se queda funcionando al cerrarlo ni arranca con el sistema.</li>
+          <li>Usa la cámara, el micrófono, tu ubicación ni tus contactos.</li>
+        </ul></div>
+      </div>
+      <p class="muted small">Conexión a internet: solo para estas descargas, desde las fuentes oficiales de Ollama y de cada modelo.</p>
+      <label class="check"><input type="checkbox" id="acepto" ${S.acepto ? 'checked' : ''}><span>He leído lo que se va a instalar y acepto la <button class="link" type="button">licencia de uso</button> y las <button class="link" type="button">licencias de terceros</button>.</span></label>`,
+      `${atras}<span class="sp"></span><button class="btn pri" data-go="3" ${S.acepto ? '' : 'disabled'}>Aceptar y continuar</button>`);
+  },
+  3() {
+    const c = calculo(), e = c.e;
+    if (!S.analizado) {
+      return shell('¿Podemos revisar tu equipo?',
+        'Así te recomendamos el perfil de IA que mejor le va, y te mostramos hasta dónde puedes llegar sin forzarlo.',
+        `<div class="box"><h2>Lo que consultaremos</h2><ul class="list">
+          <li>Memoria RAM total y libre.</li><li>Procesador: modelo y número de núcleos.</li>
+          <li>Tarjeta gráfica y su memoria.</li><li>Espacio libre en el disco.</li><li>Sistema operativo.</li>
+        </ul></div>
+        <p class="muted">Se usa solo para recomendarte un perfil. No sale de tu equipo y no se envía a nadie.</p>`,
+        `${atras}<span class="sp"></span><button class="btn" data-act="manual">Prefiero elegir a mano</button><button class="btn pri" data-act="analizar">Analizar mi equipo</button>`);
+    }
+    return shell('Tu equipo', `Esto es lo que hemos encontrado en tu ${e.nombre.toLowerCase()}.`,
+      `<dl class="spec">
+        <div><dt>Memoria</dt><dd>${e.ram} GB${e.integrada ? ' <span class="small muted">compartida</span>' : ''}</dd></div>
+        <div><dt>Gráfica</dt><dd class="small">${e.gpu}${e.vram ? ` · ${e.vram} GB` : ''}</dd></div>
+        <div><dt>Procesador</dt><dd class="small">${e.cpu}</dd></div>
+        <div><dt>Disco libre</dt><dd>${e.disco} GB</dd></div>
+        <div><dt>Sistema</dt><dd class="small">${e.so}</dd></div>
+      </dl>
+      ${c.max ? `<p>Puedes dedicar a la IA unos <b class="mono">${fmt(c.paraIA)} GB</b>. Te recomendamos el perfil <b>${c.rec.nombre}</b>.</p>`
+              : `<div class="err"><b>Tu equipo va muy justo para la IA de Tarkor.</b><span>Con ${e.ram} GB de memoria no cabe ni el perfil Ligero sin quitarle memoria al sistema. Puedes probarlo igualmente, pero es probable que vaya lento o se cierre.</span></div>`}
+      ${e.integrada ? '<p class="small muted">Tu gráfica comparte memoria con el sistema, así que hemos calculado solo con la RAM.</p>' : ''}`,
+      `<button class="btn" data-act="reanalizar">Volver a analizar</button><span class="sp"></span><button class="btn pri" data-go="4">Continuar</button>`);
+  },
+  4() {
+    const c = calculo();
+    if (!S.perfil) S.perfil = S.manual || !c.rec ? 'ligero' : c.rec.id;
+    const p = PERFILES.find(x => x.id === S.perfil);
+    return shell('Elige cuánto dedicarle',
+      S.manual ? 'Sin analizar tu equipo no sabemos cuánto aguanta. Si dudas, empieza por Ligero: podrás subirlo después.' : 'Cuanta más memoria le dediques, mejor narra. Por encima del máximo seguro tu equipo puede ir lento o cerrar el juego.',
+      `${S.manual ? '' : medidor(c)}
+      ${tarjetas(c)}
+      <div class="row">
+        <span>Uso del procesador</span>
+        <div class="seg" role="group" aria-label="Uso del procesador">
+          <button type="button" class="${S.cpu === 'moderado' ? 'on' : ''}" data-cpu="moderado">Moderado</button>
+          <button type="button" class="${S.cpu === 'alto' ? 'on' : ''}" data-cpu="alto">Alto</button>
+        </div>
+        <span class="small muted">${S.cpu === 'moderado' ? `Usa ${c.e.hilos / 2} de ${c.e.hilos} hilos. Tu equipo sigue fluido mientras narra.` : `Usa ${c.e.hilos - 1} de ${c.e.hilos} hilos. Narra más rápido, pero el equipo va más cargado.`}</span>
+      </div>
+      <div class="row">
+        ${S.manual ? '' : `<label class="switch"><input type="checkbox" id="norec" ${S.noRec ? 'checked' : ''}> Mostrar perfiles no recomendados</label>`}
+        <details><summary>Ver detalles técnicos</summary><div class="tbl"><table>
+          <tr><th>Perfil</th><th>Narrador</th><th>Sugerir</th><th>Modelos cargados a la vez</th></tr>
+          ${PERFILES.map(x => `<tr><td>${x.nombre}</td><td class="mono">${x.narrador}</td><td class="mono">${x.sugerir}</td><td>${x.cargados}</td></tr>`).join('')}
+        </table></div><p class="small muted" style="margin-top:6px">Todos usan <span class="mono">qwen2.5:1.5b-instruct</span> como cronista y <span class="mono">nomic-embed-text</span> para la memoria del mundo.</p></details>
+      </div>
+      <p class="small muted">Podrás cambiarlo cuando quieras en Ajustes → Rendimiento de la IA.</p>`,
+      `${atras}<span class="sp"></span><button class="btn pri" data-go="5">Descargar ${fmt(p.descarga)} GB</button>`);
+  },
+  5() {
+    const p = PERFILES.find(x => x.id === (S.perfil || 'equilibrado'));
+    if (!S.dl) {
+      const items = [{ n:'Motor de IA', gb: calculo().e.vram ? 1.4 : 0.05 }, { n:'Narrador', gb: p.narrador === 'qwen2.5:3b' ? 1.9 : 4.7 }, { n:'Cronista', gb:1 }, { n:'Memoria del mundo', gb:0.3 }];
+      if (p.id === 'maximo') items.splice(3, 0, { n:'Sugerencias', gb:3 });
+      S.dl = items.map(i => ({ ...i, hecho:0 }));
+    }
+    const total = S.dl.reduce((a, i) => a + i.gb, 0), hecho = S.dl.reduce((a, i) => a + i.hecho, 0);
+    const fin = hecho >= total - 1e-6, restante = Math.ceil((total - hecho) / 0.025 / 60);
+    return shell('Descargando', `Perfil ${p.nombre}. Puedes pausar y seguir más tarde; lo ya descargado se conserva.`,
+      `<div class="dl">
+        <div class="item"><b>Total</b><span class="mono small">${fmt(hecho)} / ${fmt(total)} GB ${fin ? '' : `· quedan unos ${restante} min`}</span><div class="pbar"><div style="width:${hecho / total * 100}%"></div></div></div>
+        <div class="hair"></div>
+        ${S.dl.map(i => { const ok = i.hecho >= i.gb - 1e-6, en = !ok && i.hecho > 0;
+          return `<div class="item ${ok ? 'ok' : ''}"><span>${i.n} <span class="small muted mono">${fmt(i.gb)} GB</span></span>
+          <span class="state">${ok ? 'Listo' : en ? (S.dlPausa ? 'En pausa' : 'Descargando') : 'En cola'}</span><div class="pbar"><div style="width:${i.hecho / i.gb * 100}%"></div></div></div>`; }).join('')}
+      </div>
+      <p class="small muted">Descargado de las fuentes oficiales y verificado al terminar cada archivo.</p>`,
+      `${atras}<span class="sp"></span>${fin ? '<button class="btn pri" data-go="6">Comprobar la instalación</button>' : `<button class="btn" data-act="pausa">${S.dlPausa ? 'Reanudar' : 'Pausar'}</button>`}`);
+  },
+  6() {
+    const fallo = document.getElementById('simfallo').checked;
+    const lista = [
+      ['Carpeta de datos', 'Se puede escribir en la carpeta de datos.'],
+      ['Base de datos de partidas', 'Preparada y al día.'],
+      ['Motor del juego', 'Arranca y responde.'],
+      ['Datos del mundo', 'Personajes, lugares, objetos y lore del mundo cargados.'],
+      ['Motor de IA', 'En marcha.'],
+      ['Modelos', 'Todos presentes y verificados.'],
+      ['Narración de prueba', ''],
+    ];
+    if (!S.checks) S.checks = lista.map(() => 'pend');
+    const todo = S.checks.every(x => x === 'ok'), ko = S.checks.includes('ko');
+    return shell('Comprobación', 'Probamos cada pieza por separado para que, si algo falla, sepas exactamente qué.',
+      `<ol class="checks">${lista.map(([t, d], i) => {
+        const st = S.checks[i];
+        let det = '';
+        if (st === 'ok' && i === 6) det = `<p class="quote">«La niebla del estrecho se abre un instante y deja ver, al otro lado, las hogueras de Berig.»</p><p class="small muted">Tu equipo narra a unas <b class="mono">9 palabras por segundo</b>: una narración típica tardará unos 15 segundos.</p>`;
+        else if (st === 'ok') det = `<p class="small muted">${d}</p>`;
+        if (st === 'ko') det = `<div class="err"><b>La IA no ha respondido.</b><span>Parece que tu equipo se ha quedado sin memoria al cargar el narrador. Prueba un perfil más ligero o cierra otros programas y reinténtalo.</span>
+          <div class="row"><button class="btn pri" data-act="reintentar">Reintentar</button><button class="btn" data-go="4">Probar un perfil más ligero</button><button class="btn" data-act="copiar">Copiar informe</button><span class="small muted" id="copiado" aria-live="polite"></span></div></div>`;
+        return `<li><div class="hd"><span class="ico ${st}">${st === 'ok' ? '✓' : st === 'ko' ? '!' : ''}</span><span>${t}</span></div>${det}</li>`;
+      }).join('')}</ol>`,
+      `${atras}<span class="sp"></span>${todo ? '<button class="btn pri" data-go="7">Continuar</button>' : ko ? '' : '<button class="btn pri" disabled>Comprobando…</button>'}`);
+  },
+  7() {
+    const c = calculo(), p = PERFILES.find(x => x.id === (S.perfil || 'equilibrado'));
+    return shell('Todo preparado', 'Tarkor está listo para jugar.',
+      `<dl class="spec">
+        <div><dt>Perfil</dt><dd>${p.nombre}</dd></div>
+        <div><dt>Memoria de la IA</dt><dd>${fmt(p.mem)} GB</dd></div>
+        <div><dt>Espacio usado</dt><dd>${fmt(p.descarga + 0.3)} GB</dd></div>
+        <div><dt>Tus partidas</dt><dd class="small">${c.e.so.startsWith('Windows') ? '%APPDATA%\\Tarkor' : '~/.local/share/tarkor'}</dd></div>
+      </dl>
+      <p class="muted">Puedes cambiar el perfil o volver a analizar tu equipo en Ajustes → Rendimiento de la IA.</p>`,
+      `<span class="sp"></span><button class="btn pri" data-act="jugar">Jugar</button>`);
+  },
+  ajustes() {
+    const c = calculo();
+    if (!S.perfil) S.perfil = c.rec ? c.rec.id : 'ligero';
+    const actual = S.perfilActual || S.perfil;
+    const pa = PERFILES.find(x => x.id === actual), ps = PERFILES.find(x => x.id === S.perfil);
+    const extra = Math.max(0, ps.descarga - pa.descarga);
+    return `<section class="main" style="grid-column:1/-1"><div class="content">
+      <h1>Rendimiento de la IA</h1><p class="lead">Perfil actual: <b>${pa.nombre}</b> · usa ${fmt(pa.mem)} GB de memoria · los modelos ocupan ${fmt(pa.descarga)} GB en disco.</p>
+      <div class="hair"></div>
+      ${medidor(c)}${tarjetas(c)}
+      <div class="row"><span>Uso del procesador</span><div class="seg" role="group" aria-label="Uso del procesador">
+        <button type="button" class="${S.cpu === 'moderado' ? 'on' : ''}" data-cpu="moderado">Moderado</button>
+        <button type="button" class="${S.cpu === 'alto' ? 'on' : ''}" data-cpu="alto">Alto</button></div>
+        <label class="switch"><input type="checkbox" id="norec" ${S.noRec ? 'checked' : ''}> Mostrar perfiles no recomendados</label></div>
+      ${ps.descarga < pa.descarga ? `<p class="small muted">Al cambiar a ${ps.nombre} podrás borrar modelos que ya no usarás y liberar ${fmt(pa.descarga - ps.descarga)} GB.</p>` : ''}
+    </div><div class="bar"><button class="btn" data-act="reanalizar">Volver a analizar mi equipo</button><button class="btn" data-act="copiar">Copiar informe del sistema</button><span class="small muted" id="copiado" aria-live="polite"></span><span class="sp"></span>
+      <button class="btn pri" ${ps.id === actual ? 'disabled' : ''} data-act="cambiar">${ps.id === actual ? 'Perfil actual' : extra ? `Cambiar y descargar ${fmt(extra)} GB` : 'Cambiar de perfil'}</button></div></section>`;
+  },
+  error() {
+    return `<section class="main" style="grid-column:1/-1"><div class="overlay"><div class="dialog" role="alertdialog" aria-labelledby="errt">
+      <h1 id="errt" style="font-size:22px">El motor de IA se ha detenido</h1>
+      <p>Se ha cerrado dos veces seguidas mientras narraba. Tu partida está guardada hasta el último turno completado.</p>
+      <p class="muted small">La causa más probable es que el equipo se ha quedado sin memoria. Cerrar otros programas o bajar de perfil suele resolverlo.</p>
+      <div class="row"><button class="btn pri" data-act="reintentar-motor">Reintentar</button><button class="btn" data-act="ir-ajustes">Cambiar a un perfil más ligero</button><button class="btn" data-act="copiar">Copiar informe</button><span class="small muted" id="copiado" aria-live="polite"></span></div>
+    </div></div></section>`;
+  },
+};
+
+let timer = null;
+function tick() {
+  clearInterval(timer); timer = null;
+  if (S.vista === 'asistente' && S.paso === 5 && S.dl && !S.dlPausa && S.dl.some(x => x.hecho < x.gb - 1e-6)) {
+    timer = setInterval(() => {
+      const i = S.dl.find(x => x.hecho < x.gb - 1e-6);
+      if (!i) { clearInterval(timer); return render(); }
+      i.hecho = Math.min(i.gb, i.hecho + Math.max(0.08, i.gb / 12));
+      render(false);
+    }, 180);
+  }
+  if (S.vista === 'asistente' && S.paso === 6 && S.checks) {
+    const i = S.checks.findIndex(x => x === 'pend' || x === 'run');
+    if (i < 0 || S.checks.includes('ko')) return;
+    if (S.checks[i] === 'pend') { S.checks[i] = 'run'; return render(); }
+    timer = setTimeout(() => {
+      S.checks[i] = (i === 6 && document.getElementById('simfallo').checked) ? 'ko' : 'ok';
+      render();
+    }, i === 6 ? 1400 : 450);
+  }
+}
+
+function render(re = true) {
+  const w = document.getElementById('win');
+  w.innerHTML = S.vista === 'asistente' ? PANTALLAS[S.paso]() : PANTALLAS[S.vista]();
+  document.getElementById('pantalla').value = S.vista === 'asistente' ? String(S.paso) : S.vista;
+  if (re) tick();
+}
+
+function ir(paso) {
+  S.vista = 'asistente';
+  S.paso = Math.max(1, Math.min(7, paso));
+  if (S.paso === 4 && !S.analizado && !S.manual) S.analizado = true;
+  if (S.paso === 6) S.checks = null;
+  if (S.paso >= 5 && !S.perfil) { const c = calculo(); S.perfil = c.rec ? c.rec.id : 'ligero'; }
+  if (S.paso === 2 || S.paso === 3) S.dl = null;
+  render();
+}
+
+document.getElementById('win').addEventListener('click', ev => {
+  const t = ev.target.closest('[data-go],[data-act],[data-perfil],[data-cpu]');
+  if (!t || t.disabled) return;
+  if (t.dataset.go) return ir(t.dataset.go === 'back' ? S.paso - 1 : +t.dataset.go);
+  if (t.dataset.perfil) { S.perfil = t.dataset.perfil; S.dl = null; return render(); }
+  if (t.dataset.cpu) { S.cpu = t.dataset.cpu; return render(); }
+  const a = t.dataset.act;
+  if (a === 'analizar') { S.analizado = true; S.manual = false; S.perfil = null; return render(); }
+  if (a === 'reanalizar') { S.perfil = null; S.analizado = true; S.manual = false; return render(); }
+  if (a === 'manual') { S.manual = true; S.perfil = null; return ir(4); }
+  if (a === 'pausa') { S.dlPausa = !S.dlPausa; return render(); }
+  if (a === 'reintentar') { document.getElementById('simfallo').checked = false; S.checks[6] = 'pend'; return render(); }
+  if (a === 'jugar' || a === 'cambiar') { S.perfilActual = S.perfil; S.vista = 'ajustes'; return render(); }
+  if (a === 'ir-ajustes') { S.vista = 'ajustes'; return render(); }
+  if (a === 'reintentar-motor') { S.vista = 'asistente'; S.paso = 7; return render(); }
+  if (a === 'copiar') {
+    const c = calculo(), msg = document.getElementById('copiado');
+    const txt = `Tarkor 1.0.0 · ${c.e.so} · ${c.e.ram} GB RAM · ${c.e.gpu} · perfil ${S.perfil || '-'} · uso CPU ${S.cpu}`;
+    const ok = () => { if (msg) msg.textContent = 'Informe copiado'; };
+    try { navigator.clipboard.writeText(txt).then(ok, () => { if (msg) msg.textContent = txt; }); } catch { if (msg) msg.textContent = txt; }
+  }
+});
+document.getElementById('win').addEventListener('change', ev => {
+  if (ev.target.id === 'acepto') { S.acepto = ev.target.checked; render(); document.getElementById('acepto')?.focus(); }
+  if (ev.target.id === 'norec') { S.noRec = ev.target.checked; render(); }
+});
+document.getElementById('equipo').addEventListener('change', () => { S.perfil = null; S.dl = null; S.checks = null; render(); });
+document.getElementById('pantalla').addEventListener('change', ev => {
+  const v = ev.target.value;
+  if (v === 'ajustes' || v === 'error') { S.vista = v; return render(); }
+  if (+v >= 2) S.acepto = true;
+  if (+v >= 4) S.analizado = true;
+  ir(+v);
+});
+document.getElementById('reiniciar').addEventListener('click', () => { reset(); render(); });
+reset(); render();
+</script>

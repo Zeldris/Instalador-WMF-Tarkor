@@ -1,80 +1,104 @@
-# Plan de trabajo
+# Plan de implementación
 
-**Estado: orden sugerido, no calendarizado.** Nada de esto tiene fecha ni está decidido que se vaya
-a abordar ya — queda aquí como checklist de referencia para cuando se decida ponerse con esto de
-verdad. Basado en el orden ya sugerido en la investigación original
-(`docs/20-instalador-distribuible.md` del repo del juego), ampliado con lo que salió en la sesión
-del 2026-09-16.
+**Estado: en marcha desde el 2026-09-28.** Sustituye al checklist anterior. Ordenado por riesgo: lo
+que puede tumbar el plan (empaquetar el backend, Ollama portable, velocidad en la Deck) se prueba
+primero, antes de invertir en la migración de la base de datos.
 
-Cada punto enlaza al documento que lo detalla. Marcar como hecho a medida que se avance.
+Dónde se trabaja cada fase:
 
-## Fase 1 — Decisiones que faltan antes de escribir código
+- **Este repo (público):** envoltorio Tauri, asistente de primer arranque, gestión de sidecars.
+- **Repo del juego (privado):** migración a SQLite, recorte de funcionalidad, cambios pequeños para
+  el modo empaquetado, CI de build.
 
-Sin esto resuelto, no tiene sentido empezar a tocar el repo del juego:
+Marcar cada punto al terminarlo.
 
-- [ ] **Ollama**: decidir entre gestionarlo desde el instalador o dejarlo como requisito manual —
-  ver [`03-ollama-y-modelos-ia.md`](03-ollama-y-modelos-ia.md).
-- [ ] **Legal**: elegir licencia del código y del contenido narrativo, confirmar términos de
-  redistribución de Ollama/Qwen/nomic-embed-text — ver
-  [`08-legal-y-privacidad.md`](08-legal-y-privacidad.md).
-- [ ] **Flujo de instalación**: decidir carpeta de instalación, si se firma el código desde ya,
-  dónde vive la carpeta de datos del usuario por plataforma — ver
-  [`07-flujo-de-instalacion.md`](07-flujo-de-instalacion.md).
-- [ ] Resolver las 5 dudas abiertas de [`06-inventario-exclusiones.md`](06-inventario-exclusiones.md)
-  (sección D) sobre qué tan a fondo se recorta el backend.
+## Fase 0 — Esqueleto y prueba de concepto
 
-## Fase 2 — Migración de base de datos (sobre el repo del juego)
+Objetivo: demostrar que el patrón completo funciona en Windows y en la Steam Deck.
 
-Se puede validar contra el propio Postgres de desarrollo, no depende de tener SQLite funcionando
-todavía — ver [`02-migracion-postgres-a-sqlite.md`](02-migracion-postgres-a-sqlite.md):
+- [x] **0.1** Proyecto Tauri v2 en `app/` con el asistente (React + Vite + TypeScript) usando los
+  tokens visuales del juego. Pantallas según [`11`](11-diseno-del-frontal.md).
+- [x] **0.2** Detección de equipo en Rust (`sysinfo`, gráfica por plataforma) y cálculo de perfiles
+  de [`09`](09-deteccion-de-equipo-y-perfiles.md), con tests unitarios.
+- [x] **0.3** `config.json` en la carpeta de datos: al abrir, asistente si no está completado.
+- [x] **0.3b** Catálogo de modelos y perfiles en JSON (con perfil Mínimo para que cualquiera pueda
+  probar) y ajustes de rendimiento de Ollama calculados por equipo (ver
+  [`12`](12-catalogo-y-rendimiento.md)).
+- [ ] **0.4** Gestor de sidecars en Rust: puerto libre, arrancar y parar procesos, esperar al
+  health-check, un reinicio automático, parada garantizada al cerrar.
+- [ ] **0.5** Ollama portable: descarga de la versión fijada (SHA256), arranque aislado
+  (`OLLAMA_HOST`, `OLLAMA_MODELS`), descarga de modelos con progreso vía `/api/pull`.
+- [ ] **0.6** Prueba de empaquetado del backend: Fastify + Prisma sobre SQLite compilado a
+  bytecode (camino A de [`10`](10-proteccion-del-codigo-y-build.md)); probar también Prisma sin
+  motor nativo (`queryCompiler` + adaptador SQLite).
+- [ ] **0.7** Narrador con `system` + `options` por petición sobre `qwen2.5:7b`: comparar con
+  `tarkor-narrador` (ver [`03`](03-ollama-y-modelos-ia.md)).
+- [ ] **0.8** Prueba en la Steam Deck y en un Windows limpio: tiempos de descarga, memoria real
+  de cada perfil, tokens por segundo, Vulkan frente a ROCm en la Deck, calidad de narración de
+  Mínimo y Ligero. Ajustar el catálogo con lo medido.
 
-1. [ ] Sustituir las dos queries `<=>` (`retrieval.ts`, `worldFacts.ts`) por similitud coseno en
-   JS, guardando el embedding como JSON en vez de `vector(768)`.
-2. [ ] Sustituir el `FOR UPDATE` de `progression.ts` por un mutex en memoria por `saveId`.
-3. [ ] Convertir los campos de array nativo del schema a `String` con JSON serializado (migración
-   de schema + arreglar cada sitio que lee/escribe esos campos).
-4. [ ] Decidir si se mantienen dos `schema.prisma` o uno con `datasource` parametrizado, y aplicar
-   esa decisión.
+## Fase 1 — Decisiones pendientes
 
-## Fase 3 — Recorte de funcionalidad para el instalador
+Se pueden resolver en paralelo a la fase 0. Ver la tabla del [README](../README.md).
 
-Sobre el repo del juego, sin tocar todavía el empaquetado en sí — ver
-[`06-inventario-exclusiones.md`](06-inventario-exclusiones.md):
+- [ ] Firma de código en Windows.
+- [ ] Licencia del juego (propuesta: todos los derechos reservados) y de este repo.
+- [x] Perfiles pequeños: se ofrecen Mínimo y Ligero con modelos Apache 2.0, avisando del
+  resultado (calidad a confirmar en 0.8).
+- [ ] Perfiles por encima del máximo seguro: bloqueados o con aviso.
+- [ ] Confirmar licencias de modelos e imágenes.
 
-1. [ ] Backend: excluir del build los scripts de curación de contenido, fine-tuning/DPO, y
-   `LiveTeacherCapture` (o dejarlos fuera de la build empaquetada sin tocar el repo de desarrollo).
-2. [ ] Backend: decidir y aplicar qué hacer con `POST /world/:slug/image-prompt` (quitar del todo
-   vs. dejar inerte).
-3. [ ] Frontend: quitar `ImagePromptSlot` de `DetailModal.tsx`.
-4. [ ] Frontend: deshabilitar la pestaña "Crear desde cero" en `CharacterSelect.tsx`, marcada "en
-   construcción".
-5. [ ] Frontend: revisar el texto de `ComingSoon.tsx` (multijugador) si se quiere un wording
-   distinto al actual.
-6. [ ] Confirmar que el catálogo/imágenes/lore que se empaquetan están completos y ya curados —
-   nada de generación pendiente en el paquete final.
+## Fase 2 — Migración a SQLite (repo del juego)
 
-## Fase 4 — Empaquetado
+Ver [`02`](02-migracion-postgres-a-sqlite.md). Sin romper el modo de desarrollo con Postgres.
 
-Ver [`04-empaquetado-tauri.md`](04-empaquetado-tauri.md):
+- [ ] **2.1** Proveedor de base de datos por variable de entorno y generación de
+  `schema.sqlite.prisma` en el build, con test de sincronía.
+- [ ] **2.2** Embeddings en JSON + similitud coseno en JS (`retrieval.ts`, `worldFacts.ts`).
+- [ ] **2.3** `lockRowForUpdate()` con mutex en memoria cuando el proveedor es SQLite.
+- [ ] **2.4** Los 16 campos de lista a `Json` con capa de conversión en `lib/prisma.ts`; reescribir
+  los `push`.
+- [ ] **2.5** `mode: 'insensitive'` y `skipDuplicates`.
+- [ ] **2.6** Batería de tests del backend pasando contra SQLite.
+- [ ] **2.7** Script de build de la base de datos plantilla (migrada + catálogo + lore indexado).
 
-1. [ ] Elegir y probar el mecanismo de empaquetado del backend Node como sidecar.
-2. [ ] Confirmar que Prisma Client con SQLite empaqueta limpio en las plataformas de destino.
-3. [ ] Montar el envoltorio Tauri completo: sidecar + frontend compilado + primer arranque creando
-   el `.sqlite` local si no existe.
-4. [ ] Implementar el flujo de instalación (consentimiento + validación post-instalación) descrito
-   en [`07-flujo-de-instalacion.md`](07-flujo-de-instalacion.md).
-5. [ ] Resolver Ollama según lo decidido en la Fase 1.
+## Fase 3 — Modo empaquetado del juego (repo del juego)
+
+Ver [`06`](06-inventario-exclusiones.md).
+
+- [ ] **3.1** Frontend: URL del backend en tiempo de ejecución (`api.ts`).
+- [ ] **3.2** Frontend: fuentes Cinzel e Inter en local.
+- [ ] **3.3** Frontend: quitar `ImagePromptSlot`; deshabilitar "Crear desde cero" como "en
+  construcción"; revisar el texto de `ComingSoon.tsx`.
+- [ ] **3.4** Backend: build sin rutas ni servicios de curación (ruta de image-prompt, orquestador
+  cloud, `LiveTeacherCapture`, scripts).
+- [ ] **3.5** Backend: `SYSTEM` del narrador incrustado en build; narrador con modelo base +
+  `system` por petición detrás de variable de entorno; leer `TARKOR_NUM_THREAD`,
+  `TARKOR_NUM_BATCH`, `TARKOR_NUM_CTX_NARRADOR` y `TARKOR_MODELOS_SIN_PENSAR` (ver `12`).
+- [ ] **3.6** Backend: CORS restringido y escucha solo en `127.0.0.1` en modo empaquetado; rutas de
+  imágenes y datos por variable de entorno.
+- [ ] **3.7** Menú del juego: enlace a Ajustes → Rendimiento de la IA.
+
+## Fase 4 — Empaquetado completo y CI
+
+Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md).
+
+- [ ] **4.1** Integrar el build del juego (frontend + backend en bytecode + plantilla) en la app de
+  Tauri.
+- [ ] **4.2** Asistente real de punta a punta: descargas y comprobaciones de verdad; calentar el
+  narrador al arrancar.
+- [ ] **4.3** Ajustes → Rendimiento de la IA (con uso de la gráfica vía `/api/ps`) y pantalla de
+  motor detenido.
+- [ ] **4.4** NSIS: castellano, instalación por usuario, desinstalador con las dos casillas.
+- [ ] **4.5** AppImage (+ `.deb` opcional) compilado en Ubuntu 22.04.
+- [ ] **4.6** Workflow de GitHub Actions en el repo privado que publica releases con `SHA256SUMS`
+  en este repo.
+- [ ] **4.7** Pantalla "Licencias de terceros" generada en el build.
 
 ## Fase 5 — Prueba real
 
-- [ ] Probar el instalador real en la propia Steam Deck (o la máquina que se use) antes de dar el
-  trabajo por terminado — mismo criterio que el resto del proyecto: "probar en vivo, no solo que
-  compile".
-- [ ] Probar también en una máquina "limpia" (sin Ollama/Node/nada preinstalado) para validar la
-  experiencia real de un jugador nuevo, no solo la de una máquina de desarrollo.
-- [ ] Validar el flujo completo de desinstalación (¿qué se borra, qué se conserva?).
-
----
-
-Nada de esto está calendarizado ni decidido — queda aquí documentado para retomarlo cuando se
-decida seguir adelante.
+- [ ] En la Steam Deck (modo escritorio y como juego ajeno a Steam).
+- [ ] En un Windows 10 y un Windows 11 limpios, sin Node ni Ollama.
+- [ ] En un equipo de 8 GB: el perfil Ligero debe ser jugable.
+- [ ] Actualizar de una versión a otra sin perder partidas.
+- [ ] Desinstalar conservando y sin conservar partidas.
