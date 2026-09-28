@@ -12,6 +12,34 @@ Dónde se trabaja cada fase:
 
 Marcar cada punto al terminarlo.
 
+## Dónde lo dejamos (2026-09-28)
+
+**Hecho y en `main` de este repo:** fases 0.1-0.6 (asistente, detección de equipo, catálogo de
+perfiles, motor de IA real, backend compilado a bytecode), con pruebas de punta a punta.
+
+**A medias — fase 2 en el repo del juego**, rama `claude/instalador-empaquetado`,
+[PR #1](https://github.com/Zeldris/World-Maker-Fantasy/pull/1), **sin fusionar**:
+
+- Código hecho: el backend funciona sobre Postgres y sobre SQLite. En local, la batería completa
+  pasa igual en los dos (2710/2711; el fallo es un test ya intermitente en `main`).
+- CI nuevo (Postgres+pgvector y SQLite). Primera ejecución: SQLite 2710/2711; Postgres falló al
+  crear la extensión (`prisma db execute` sin `--schema`), ya corregido en el último commit.
+  **Falta ver ese CI en verde.**
+- Pendiente antes de fusionar:
+  1. Dos tests de `routes/turn.integration.test.ts` fallan a veces con la batería completa, en
+     Postgres y en SQLite: "OrdenProduccion … racion-carne-ahumada" y "P3.2 … retoma solo el
+     viaje" (sondea 15 s a que termine un viaje reanudado). Pasan siempre al correr el fichero
+     solo. Buscar la causa (orden entre ficheros o tiempos), no reintentarlos.
+  2. `lib/prisma.test.ts`: endurecer el test para que la transacción "tardía" coincida con otra
+     abierta (con el test actual, la versión anterior del arreglo también pasaría).
+- Nota para el día a día del juego: tras cambiar `schema.prisma` hay que correr
+  `npm run schema:sqlite` (un test y el CI lo exigen).
+
+**Siguiente:** cerrar lo de arriba y fusionar; después fase 3 (modo empaquetado del juego) y
+fase 4 (backend dentro de la app y CI de releases). Las fases 0.7, 0.8 y 5 necesitan probar en la
+Steam Deck o en Windows: `cargo run --release -p tarkor-nucleo --example motor equilibrado`
+(ver `app/README.md`).
+
 ## Fase 0 — Esqueleto y prueba de concepto
 
 Objetivo: demostrar que el patrón completo funciona en Windows y en la Steam Deck.
@@ -50,19 +78,19 @@ Se pueden resolver en paralelo a la fase 0. Ver la tabla del [README](../README.
 - [ ] Perfiles por encima del máximo seguro: bloqueados o con aviso.
 - [ ] Confirmar licencias de modelos e imágenes.
 
-## Fase 2 — Migración a SQLite (repo del juego)
+## Fase 2 — Migración a SQLite (repo del juego) — código hecho, PR #1 sin fusionar
 
 Ver [`02`](02-migracion-postgres-a-sqlite.md). Sin romper el modo de desarrollo con Postgres.
 
-- [ ] **2.1** Proveedor de base de datos por variable de entorno y generación de
+- [x] **2.1** Proveedor de base de datos por variable de entorno y generación de
   `schema.sqlite.prisma` en el build, con test de sincronía.
-- [ ] **2.2** Embeddings en JSON + similitud coseno en JS (`retrieval.ts`, `worldFacts.ts`).
-- [ ] **2.3** `lockRowForUpdate()` con mutex en memoria cuando el proveedor es SQLite.
-- [ ] **2.4** Los 16 campos de lista a `Json` con capa de conversión en `lib/prisma.ts`; reescribir
-  los `push`.
-- [ ] **2.5** `mode: 'insensitive'` y `skipDuplicates`.
-- [ ] **2.6** Batería de tests del backend pasando contra SQLite.
-- [ ] **2.7** Script de build de la base de datos plantilla (migrada + catálogo + lore indexado).
+- [x] **2.2** Embeddings en JSON + similitud coseno en JS (`retrieval.ts`, `worldFacts.ts`).
+- [x] **2.3** `lockRowForUpdate()` con mutex en memoria cuando el proveedor es SQLite.
+- [x] **2.4** Los 16 campos de lista a `Json` (sin capa de conversión: un `Json` con un array se
+  lee y escribe igual); los `push` reescritos con `anadirNpcRetirado`.
+- [x] **2.5** `mode: 'insensitive'` y `skipDuplicates`.
+- [x] **2.6** Batería de tests del backend pasando contra SQLite.
+- [x] **2.7** Script de build de la base de datos plantilla (migrada + catálogo + lore indexado).
 
 ## Fase 3 — Modo empaquetado del juego (repo del juego)
 
