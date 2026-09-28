@@ -1,0 +1,10 @@
+[workspace]
+resolver = "3"
+members = ["nucleo", "src-tauri"]
+
+[profile.release]
+# Binario final: sin símbolos y optimizado (ver docs/10-proteccion-del-codigo-y-build.md).
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"
