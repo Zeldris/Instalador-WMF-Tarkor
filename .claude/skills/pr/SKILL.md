@@ -10,10 +10,12 @@ metadata:
 ---
 
 > **En este repositorio:** cada PR a `main`, después de `/code-review` y sus arreglos. Todo en
-> español; título con los identificadores de las tareas (`CR-55`, `UX-39`…). **Evidencia:** los
-> números de `tsc`, `vitest` y `oxlint` de backend y frontend, y el test que cubre cada cambio
-> importante. **Peligro:** una migración de base de datos o un cambio de partidas guardadas es
-> puerta de un solo sentido. Al final, las líneas de atribución que pida la sesión.
+> español; título con los identificadores de las tareas (`INS-31`, `FLU-1`…). **Evidencia:** los
+> números de `cargo test -p tarkor-nucleo`, clippy, `tsc` y `vitest` (y las e2e de `app/e2e` si
+> toca pantallas o el arranque de procesos), la CI de Linux y Windows, y el test que cubre cada
+> cambio importante. **Peligro:** lo que ya está en el equipo de alguien es puerta de un solo
+> sentido: el formato de `config.json` y del catálogo, la versión y el SHA256 del motor, las rutas de
+> la carpeta de datos y cualquier cosa que pueda borrar partidas ([`REVIEW.md`](../../../REVIEW.md)). Al final, las líneas de atribución que pida la sesión.
 
 Use this template for writing the PR body:
 

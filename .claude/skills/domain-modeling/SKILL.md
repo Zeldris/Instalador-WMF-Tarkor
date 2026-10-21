@@ -3,9 +3,11 @@ name: domain-modeling
 description: Build and sharpen a project's domain model. Use when discussing codebase terminology, writing or editing a GLOSSARY.md, or recording or editing an ADR.
 ---
 
-> **En este repositorio:** escribe el glosario y los ADR en español. `GLOSSARY.md` (raíz) es el
-> vocabulario del motor y del producto; el lore canónico vive en `docs/rpgtarkor/` y **nunca se edita
-> desde aquí** (`AGENTS.md`): un término de lore se enlaza, no se redefine. ADR en `docs/adr/`.
+> **En este repositorio:** escribe el glosario y los ADR en español. `GLOSSARY.md` (raíz, se crea
+> con el primer término) es el vocabulario del instalador: perfil, máximo seguro, motor, catálogo,
+> carpeta de datos, asistente. Un término que ya define un documento de `docs/` (el 09 los perfiles,
+> el 12 el catálogo) se enlaza, no se redefine. ADR en `docs/adr/`. El juego tiene su propio
+> glosario en su repositorio: un término del juego se nombra igual que allí.
 
 # Domain Modeling
 

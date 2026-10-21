@@ -4,14 +4,15 @@ description: "Conduct a retrospective on a coding session. Use before creating e
 ---
 
 > **En este repositorio:** la lanza Claude antes de crear cada PR a `main`, tras el `/code-review` y sus
-> arreglos y tras `/opt-tokens` (usuaria, 2026-10-13 y 2026-10-19; entre lo revisado, también la propia skill
-> `opt-tokens`: si su medida o sus propuestas fallaron o se quedaron cortas), y al cerrar cada fase o hito (2026-10-06). Lo que se revisa es lo que va
+> arreglos y tras `/opt-tokens` (usuaria, en el repo del juego, 2026-10-13 y 2026-10-19; entre lo revisado, también la propia skill
+> `opt-tokens`: si su medida o sus propuestas fallaron o se quedaron cortas), y al cerrar cada fase del plan (2026-10-06). Lo que se revisa es lo que va
 > a entrar con el PR, o la fase entera,
-> que suele cruzar sesiones de las dos cuentas:
-> sus commits, la bitácora y las entradas de sus tareas en los roadmaps. Las propuestas, en español,
+> que suele cruzar varias sesiones:
+> sus commits, la bitácora y sus tareas en el plan. Las propuestas, en español,
 > se presentan a la usuaria: ella las revisa y decide, y lo aprobado se aplica en la rama antes de
 > crear el PR. Solo las que confirme
-> entran como tarea con hito en su roadmap (`CLAUDE.md`, «Ninguna tarea sin hito»).
+> entran como tarea del plan con su `INS-n` o `FLU-n`, y quedan en `docs/registros/retro-<fecha>-<tema>.md`
+> con su `**Estado:**` decidido, que `tools/qa/revisado.sh` exige.
 >
 > **Las skills propias, también** (usuaria, 2026-10-19, `QA-130`): cada retro mira cómo rindieron en lo revisado
 > las skills del proyecto (`.claude/skills/`: `opt-tokens`, `orchestrate-dealer`, `selector`, `pr`, esta misma…)
@@ -20,8 +21,8 @@ description: "Conduct a retrospective on a coding session. Use before creating e
 > la skill no lo pedía con claridad.
 >
 > **Y proponen desde ellas** (usuaria, 2026-10-20): antes de proponer, lee la tabla de
-> [`.claude/skills/README.md`](../README.md). Si lo que falló es de una skill propia (`opt-ai` para la IA del
-> juego, `opt-tokens` para el gasto, `orchestrate-dealer` para el reparto…), la propuesta cambia esa skill o la usa,
+> [`.claude/skills/README.md`](../README.md). Si lo que falló es de una skill propia (`opt-ai` para la IA
+> local, `opt-tokens` para el gasto, `orchestrate-dealer` para el reparto…), la propuesta cambia esa skill o la usa,
 > en vez de añadir una regla suelta a `CLAUDE.md` o un runbook; y no propone lo que una skill ya hace.
 
 A phase has closed, so it is time for a **retrospective**. You are suggesting improvements to the coding agent's **environment** to improve future runs.

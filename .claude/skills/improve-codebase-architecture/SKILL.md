@@ -5,7 +5,7 @@ disable-model-invocation: true
 ---
 
 > **En este repositorio:** el informe y las propuestas, en español; cada candidata aceptada entra
-> como tarea con hito en su roadmap.
+> como tarea del plan (`docs/05-plan-de-trabajo.md`) con su `INS-n` o `FLU-n`.
 
 # Improve Codebase Architecture
 

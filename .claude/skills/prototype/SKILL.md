@@ -4,16 +4,17 @@ description: Build a throwaway prototype to answer a design question. Use when t
 ---
 
 > **En este repositorio:** en español. Se usa dentro de una ronda de diseño (`grilling`) cuando
-> la usuaria tiene que decidir números o reglas que sobre el papel no se sienten (economía,
-> ganadería, probabilidades de combate, ritmo del mundo): rama de lógica, un solo HTML con botones.
+> la usuaria tiene que ver una pantalla o un flujo para decidir (pasos del asistente, Ajustes,
+> cómo se enseña el máximo seguro): sobre todo la rama de UI, en un solo HTML como
+> `diseno/prototipo-asistente.html`. La rama de lógica, para reglas que sobre el papel no se sienten
+> (qué perfil se recomienda con cada equipo, cuánto margen deja `rendimiento`).
 > Si la sesión tiene la herramienta `Artifact`, publícalo y pon el enlace en la ronda (la usuaria
-> lo abre desde el móvil); si no, envíaselo con `SendUserFile`. La rama de UI, para decisiones de
-> aspecto (`UX-*`, paneles).
+> lo abre desde el móvil); si no, envíaselo con `SendUserFile`.
 >
 > **Guardarlo:** las sesiones solo suben a su rama de trabajo, así que no hay rama aparte. El HTML
-> de lógica se queda en `docs/prototipos/<tarea>-<tema>.html`; las variantes de UI se borran al
-> elegir. El veredicto (qué pregunta resolvió y qué se eligió) va a la entrada de la tarea en su
-> roadmap, con el enlace al prototipo.
+> se queda en `diseno/<tarea>-<tema>.html`; las variantes descartadas se borran al elegir. El
+> veredicto (qué pregunta resolvió y qué se eligió) va a la tarea del plan y a su documento
+> (`docs/11-diseno-del-frontal.md` para pantallas), con el enlace al prototipo.
 
 # Prototype
 

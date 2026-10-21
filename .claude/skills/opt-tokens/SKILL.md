@@ -7,7 +7,7 @@ description: "Retrospective on token spend: measures where a session's tokens we
 > (que revisa también esta skill), y la pide la usuaria cuando quiere gastar menos (2026-10-19). Lo propio del proyecto (sus
 > herramientas y sus gastos conocidos) está en [`proyecto.md`](proyecto.md); en otro proyecto, ese archivo se
 > reescribe y lo demás vale tal cual. Todo en español; las propuestas se presentan a la usuaria y solo lo que
-> confirme entra como tarea con hito en su roadmap (`CLAUDE.md`, «Ninguna tarea sin hito»).
+> confirme entra como tarea del plan (`docs/05-plan-de-trabajo.md`) con su `INS-n` o `FLU-n`.
 
 Es una **retro de gasto**: como `/retro`, propone cambios en el **entorno** (herramientas, scripts, runbooks,
 `CLAUDE.md`) para que las próximas sesiones gasten menos sin perder calidad. No recorta el trabajo: lo abarata.
@@ -54,7 +54,7 @@ calidad: hallazgos del `/code-review` o de las rondas que vienen de él, reinten
    - **Skills propias** (usuaria, 2026-10-20). Leer la tabla de `.claude/skills/README.md` antes de proponer: un
      gasto que una skill ya resuelve (repartir con `orchestrate-dealer`, elegir modelo con `selector`) se propone
      como usarla o mejorarla, no como regla nueva; y lo que gastó una skill (su `SKILL.md` cargado, sus pasos) se
-     mide como cualquier otro contexto. La IA del juego (tiempos, modelos locales, RAG) no es de esta skill: es de `opt-ai`.
+     mide como cualquier otro contexto. La IA local (tiempos y modelos de cada perfil del catálogo) no es de esta skill: es de `opt-ai`.
    - **Modelo y razonamiento.** Mirar `POR MODELO` y `POR SUBAGENTE` de `medir.py`: qué parte de la entrada va al modelo grande en
      la sesión principal y qué subagentes usaron el grande para algo mecánico. Planificar, diseñar y revisar, con
      el grande; escribir código con un plan ya cerrado, buscar, jugar una ronda o formatear, en un subagente con un

@@ -14,7 +14,7 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs`. Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #2 (2026-09-28, `3418c2d`): fases `INS-1`…`INS-6` del plan con pruebas de punta a punta. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | `FLU-1` 🚧 traer de Tarkor su flujo de trabajo (CLAUDE.md, bitácora, ganchos, `tools/qa`, runbook, `REVIEW.md`) y sus skills, adaptados al instalador. Falta: notas de las skills, job de CI de `tools/qa`, `/code-review`, `/opt-tokens` y retro antes del PR a `main`. **Siguiente:** adaptar las notas «En este repositorio» de cada skill. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | `FLU-1` 🚧 traer de Tarkor su flujo de trabajo (CLAUDE.md, bitácora, ganchos, `tools/qa`, runbook, `REVIEW.md`) y sus skills, adaptados al instalador. Hechas las notas de las skills y el job `qa` de la CI. Falta: `/code-review`, `/opt-tokens` y retro antes del PR a `main`. **Siguiente:** `/code-review` del diff contra `main`. |
 | **Tests** | 2026-10-21: núcleo `cargo test -p tarkor-nucleo` 52, asistente `vitest` 5, `tsc -b` 0, clippy 0 avisos; `tools/qa/tests` en verde. |
 
 ## Dónde está todo (para saber qué sigue)

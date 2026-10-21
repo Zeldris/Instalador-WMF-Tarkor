@@ -3,16 +3,17 @@ name: grilling
 description: Grill the user relentlessly about a plan, decision, or idea. Use when the user wants to stress-test their thinking, or uses any 'grill' trigger phrases.
 ---
 
-> **En este repositorio:** las rondas, en español. Lo decidido se apunta en el roadmap de la tarea
-> o en la bitácora (`docs/registros/traspaso.md`), como pide `CLAUDE.md`.
+> **En este repositorio:** las rondas, en español. Lo decidido se apunta en su documento de `docs/`
+> y en el plan (`docs/05-plan-de-trabajo.md`), o en la bitácora (`docs/registros/traspaso.md`,
+> «Decisiones de la usuaria»), como pide `CLAUDE.md`.
 >
-> **Juegos de referencia** (petición de la usuaria, 2026-10-05): antes de cada ronda, busca cómo
-> resuelven esa decisión los juegos que encajen de D&D 5e, Baldur's Gate 3, X4: Foundations,
-> Bellwright y Medieval Dynasty (con `WebSearch`). Cada recomendación dice qué juego la respalda o de
-> cuál se aparta y por qué, y la ronda acaba con las fuentes enlazadas.
+> **Instaladores de referencia** (como en el repo del juego con sus juegos de referencia): antes de
+> cada ronda, busca cómo resuelven esa decisión Steam, itch.io, Heroic, LM Studio y el instalador de
+> Ollama (con `WebSearch`). Cada recomendación dice cuál la respalda o de cuál se aparta y por qué,
+> y la ronda acaba con las fuentes enlazadas.
 >
-> **Prototipo:** si una pregunta pide decidir números o reglas que sobre el papel no se sienten,
-> llama a la herramienta Skill con `prototype` y pon el enlace en esa pregunta.
+> **Prototipo:** si una pregunta pide ver una pantalla o un flujo para decidir, llama a la
+> herramienta Skill con `prototype` y pon el enlace en esa pregunta.
 
 Interview the user relentlessly until you reach a shared understanding. Map this as a **design tree**: every decision branches into the decisions that hang off it.
 

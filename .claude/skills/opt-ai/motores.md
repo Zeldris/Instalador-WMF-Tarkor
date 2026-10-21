@@ -28,7 +28,7 @@ Notas:
   confirmar en su documentación, `(?)`); en llama.cpp, flags del servidor (`-fa`, `--cache-type-k/-v`, `-np`, `(?)`).
 - En Ollama, `keep_alive` y `num_ctx` son **del modelo cargado**, no de la llamada (`QA-170`): una llamada con otro
   `num_ctx` recarga el runner y la última que llega fija cuánto sigue cargado. Al proponer o tocar uno, se buscan
-  todas las llamadas a ese modelo (`grep -rn "ollamaModel<X>" backend/src`) y se alinean con una constante
+  todas las llamadas a ese modelo (en el juego, `grep -rn "ollamaModel<X>" backend/src`) y se alinean con una constante
   compartida (como `CTX_CRONISTA` en `narrador.ts`). Así se encontró que el respaldo de `narrar` recargaba el cronista
   de `clasificar` (`QA-168`).
 - Un motor nuevo se añade con una columna aquí y su traducción en el cliente del proyecto.

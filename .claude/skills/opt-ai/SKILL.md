@@ -7,8 +7,13 @@ description: "Retrospective on local AI models: measures latency, RAG recall and
 > usuaria nota lentitud. Lo propio del proyecto (tareas, perfiles, comandos, tiempos) está en
 > [`proyecto.md`](proyecto.md); el motor que usa cada proyecto, en [`motores.md`](motores.md). En otro proyecto se
 > reescribe `proyecto.md` y lo demás vale tal cual. Todo en español. **Solo propone** (usuaria, 2026-10-20): no
-> cambia configuración, índice ni modelos; lo aprobado entra como tarea con hito (`CLAUDE.md`, «Ninguna tarea
-> sin hito»). Sin web ni motores remotos: solo local. La búsqueda de novedades irá en `scout-updates`.
+> cambia configuración, catálogo ni modelos; lo aprobado entra como tarea del plan (`docs/05-plan-de-trabajo.md`) con su `INS-n` o `FLU-n`. Sin web ni motores remotos:
+> solo local. La búsqueda de novedades es de `scout-updates`.
+>
+> **En el instalador** (`proyecto.md`): no hay registro JSONL ni RAG; las medidas salen del ejemplo `motor` del
+> núcleo y de la prueba en equipos reales (`INS-8`). El paso 2 (RAG) no aplica aquí: es del repo del juego. Lo que
+> se ajusta son los perfiles del catálogo y `rendimiento.rs`, siempre con el perfil Mínimo y la Steam Deck medidos.
+> Los `docs/ia/…`, `IA_PERFIL` y `arrancar-juego.sh` que cita abajo son del repo del juego.
 
 Es una **retro de rendimiento de la IA local**: mide y propone cambios de configuración, de RAG y de modelo para
 que la tarea tarde menos o falle menos en el hardware mínimo. **Calidad primero** (como `opt-tokens`): un ahorro

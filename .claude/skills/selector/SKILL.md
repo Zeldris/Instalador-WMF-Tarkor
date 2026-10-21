@@ -1,6 +1,6 @@
 ---
 name: selector
-description: Elegir skill y modelo para la tarea que empieza. Usar al empezar cada tarea del roadmap, al recibir un bug o una petición de diseño, y cuando la usuaria pregunte qué flujo o modelo conviene.
+description: Elegir skill y modelo para la tarea que empieza. Usar al empezar cada tarea del plan, al recibir un bug o una petición de diseño, y cuando la usuaria pregunte qué flujo o modelo conviene.
 ---
 
 # Selector de skill y modelo
@@ -10,13 +10,13 @@ Al empezar una tarea, clasifícala con la tabla y actúa según su fila. Flujo c
 
 | Caso | Skill | Modelo de la sesión | Subagentes |
 |---|---|---|---|
-| Diseño nuevo o decisión abierta (mecánica, arquitectura, UX, algo que pide a la usuaria o a Álvaro) | `grilling` + `domain-modeling` (o `/grill-with-docs` si lo lanza la usuaria); `prototype` si hay números o reglas que la usuaria tiene que probar | grande (Opus) | búsquedas con `Explore` en ligero (Haiku) |
-| Bug hallado jugando, test rojo o intermitente | `diagnosing-bugs` | grande si no es obvio; medio (Sonnet) si la causa se ve a la primera | — |
-| Cambio de varios sistemas, BD, migración, concurrencia (`CR-*`, `REI-*` de motor) | — (plan del hito) | grande | ligero para buscar usos |
-| Tarea de roadmap acotada (componente, ajuste, test, endpoint pequeño) | — | medio | — |
+| Diseño nuevo o decisión abierta (pantallas del asistente, perfiles, actualizaciones, arquitectura, algo que pide a la usuaria) | `grilling` + `domain-modeling` (o `/grill-with-docs` si lo lanza la usuaria); `prototype` si hay una pantalla o un flujo que la usuaria tiene que ver | grande (Opus) | búsquedas con `Explore` en ligero (Haiku) |
+| Bug al instalar o al arrancar, test rojo o intermitente (también solo en la CI de Windows) | `diagnosing-bugs` | grande si no es obvio; medio (Sonnet) si la causa se ve a la primera | — |
+| Cambio de varios módulos, procesos, descargas, formato de `config.json` o del catálogo, Linux y Windows a la vez | — (plan de la fase) | grande | ligero para buscar usos |
+| Tarea del plan acotada (una pantalla, un comando de Tauri, un ajuste del catálogo, un test) | — | medio | — |
 | Cambio mecánico (docs, bitácora, renombrar, adaptar tests a una firma nueva) | — | medio o ligero | ligero |
 | Revisar el diff antes de un PR a `main` | `/code-review` (de serie) y, tras los arreglos, `pr` para la descripción | grande | — |
-| Cierre de fase o de hito | `retro` (la lanza Claude; las propuestas las confirma la usuaria); cada pocas fases, `/improve-codebase-architecture` | grande | — |
+| Cierre de fase del plan | `retro` (la lanza Claude; las propuestas las confirma la usuaria); cada pocas fases, `/improve-codebase-architecture` | grande | — |
 | Escribir CLAUDE.md, skills o documentos para agentes | `writing-for-agents` | medio | — |
 
 Reglas:
@@ -29,7 +29,7 @@ Reglas:
 - Con el plan cerrado y escrito, la implementación acotada va a un subagente `sonnet` y la sesión principal
   revisa su diff (`QA-117`).
 - **Escalera de subagentes** (`QA-118`): `sonnet` con esfuerzo `low` → `sonnet` `medium` → `opus` `medium` →
-  `opus` `high`. Se empieza por el peldaño más bajo que encaje (o el `modelo:` de la tarea en su roadmap) y, si el
+  `opus` `high`. Se empieza por el peldaño más bajo que encaje (o el `modelo:` de la tarea en el plan) y, si el
   subagente no cierra el encargo, el siguiente intento sube uno. Dos fallos del mismo encargo: se para y se le
   cuenta a la usuaria. Un subagente que no llega a arrancar (error de la herramienta) se reintenta en el mismo
   peldaño y no cuenta como fallo. En trabajo largo sin supervisión, una tanda que no cierra nada para y se apunta
@@ -42,5 +42,5 @@ Reglas:
   la sesión (`recuperar.py --estado`): «presupuesto 1, desde la 15». Si se pasa, el trabajo se está quedando en
   la principal: reparte más.
 - En la duda entre dos filas, la de más riesgo.
-- Lo decidido en un `/grill-with-docs` va a su roadmap o a la bitácora (decisiones), igual que
+- Lo decidido en un `/grill-with-docs` va a su documento de `docs/`, al plan o a la bitácora (decisiones), igual que
   siempre; el glosario a `GLOSSARY.md` y las decisiones difíciles de revertir a `docs/adr/`.

@@ -3,9 +3,10 @@ name: research
 description: Investigate a question against high-trust primary sources and capture the findings as a Markdown file in the repo. Use when the user wants a topic researched, docs or API facts gathered, or reading legwork delegated to a background agent.
 ---
 
-> **En este repositorio:** es el molde de la futura skill `scout-updates` (búsqueda de actualizaciones de los
-> elementos del juego, fuera de `opt-ai` por decisión de la usuaria, 2026-10-20) y de las citas de `opt-ai`: cada
-> afirmación con su fuente primaria y la fecha de consulta. Se deja tal cual; esta nota es lo único añadido.
+> **En este repositorio:** para lo que pide fuentes antes de decidir (licencias de Ollama y de los
+> modelos, firma de código en Windows, requisitos de WebView2, versiones nuevas de Tauri): cada
+> afirmación con su fuente primaria y la fecha de consulta, en español. Es también el molde de las
+> citas de `scout-updates` y `opt-ai`. Se deja tal cual; esta nota es lo único añadido.
 
 Spin up a **background agent** to do the research, so you keep working while it reads.
 
