@@ -56,12 +56,12 @@ limpiar_rama() {
 
 echo "Commit $(git rev-parse --short HEAD) · $(git log -1 --format=%s)"
 cambiados="$(git diff --name-only HEAD^1 HEAD)"
-PARTES="app/src app/nucleo app/src-tauri"
+PARTES="app/src app/nucleo app/catalogo app/src-tauri"
 for parte in $PARTES; do
   n="$(grep -c "^$parte/" <<<"$cambiados")"
   [ "$n" -gt 0 ] && echo "  $parte: $n archivos"
 done
-otros="$(grep -vE '^app/(src|nucleo|src-tauri)/' <<<"$cambiados" | grep -c .)"
+otros="$(grep -vE '^app/(src|nucleo|catalogo|src-tauri)/' <<<"$cambiados" | grep -c .)"
 [ "$otros" -gt 0 ] && echo "  resto: $otros archivos"
 
 fallo=0
@@ -81,7 +81,7 @@ for parte in $PARTES; do
       if [ "$resultado" = OK ]; then
         (cd app && npx tsc -b >"$logs/tsc.log" 2>&1) || resultado="FAIL tsc (log en $logs/tsc.log)"
       fi ;;
-    app/nucleo)
+    app/nucleo|app/catalogo)
       (cd app && cargo test -q -p tarkor-nucleo >"$logs/nucleo.log" 2>&1) || resultado="FAIL (log en $logs/nucleo.log)" ;;
     app/src-tauri)
       (cd app && cargo check -q -p tarkor >"$logs/tauri.log" 2>&1) || resultado="FAIL (log en $logs/tauri.log)" ;;

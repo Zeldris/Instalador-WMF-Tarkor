@@ -52,7 +52,7 @@ reduciría algo más.
 - Los **textos literales sí se leen** (descripciones de objetos, mensajes, trozos de prompts):
   cualquier técnica los deja, porque el programa los necesita tal cual.
 - El `Modelfile` hoy viaja como fichero aparte (el backend lo lee del disco): su prompt se lee
-  entero. Se resuelve incrustándolo (fase 3.5).
+  entero. Se resuelve incrustándolo (`INS-35`).
 
 **Adaptaciones que hace la herramienta** y que conviene llevar al juego en la fase 3 para no
 depender de ellas:
@@ -61,7 +61,7 @@ depender de ellas:
   arranque en una función asíncrona. Mejor: que el juego exporte una función `main()`.
 - `import.meta.dirname` (3 sitios) se sustituye por una ruta relativa a
   `TARKOR_BACKEND_RAIZ`. Mejor: rutas de imágenes y datos por variable de entorno.
-- El backend escucha en `0.0.0.0`: en el instalador tiene que ser `127.0.0.1` (fase 3.6).
+- El backend escucha en `0.0.0.0`: en el instalador tiene que ser `127.0.0.1` (`INS-36`).
 
 ## Backend a bytecode: dos caminos
 

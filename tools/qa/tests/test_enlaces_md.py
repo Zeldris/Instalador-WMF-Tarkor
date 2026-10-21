@@ -5,7 +5,7 @@ import unittest
 
 from comun import QA, carpeta, escribir, git
 
-DESTINO = '# Guía\n\n## Cómo se usa\n\n## Cómo se usa\n\n<a id="propia"></a>\n'
+DESTINO = '# Guía\n\n## Cómo se usa\n\n## Cómo se usa\n\n<a id="propia"></a>\n<a id="INS-8"></a>\n'
 
 
 class EnlacesMd(unittest.TestCase):
@@ -18,7 +18,7 @@ class EnlacesMd(unittest.TestCase):
         return subprocess.run(['python3', os.path.join(QA, 'enlaces-md.py'), *args], cwd=repo, capture_output=True, text=True)
 
     def test_enlaces_y_anclas_buenos_pasan(self):
-        r = self.comprobar('[a](guia.md) [b](guia.md#cómo-se-usa-1) [c](guia.md#C%C3%B3mo-se-usa) [d](guia.md#propia) '
+        r = self.comprobar('[a](guia.md) [b](guia.md#cómo-se-usa-1) [c](guia.md#C%C3%B3mo-se-usa) [d](guia.md#propia) [g](guia.md#INS-8) '
                            '[e](https://x.y/nada) [f](#título)\n\n# Título\n')
         self.assertEqual(r.returncode, 0, r.stdout)
 

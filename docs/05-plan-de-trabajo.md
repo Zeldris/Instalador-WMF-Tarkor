@@ -11,8 +11,9 @@ Dónde se trabaja cada fase:
   el modo empaquetado, CI de build.
 
 Marcar cada punto al terminarlo. Cada tarea tiene su identificador `INS-<fase><n>` (la fase 0 va
-sin el 0: `INS-1` es la antigua 0.1), que nombran los commits y la [bitácora](registros/traspaso.md);
-las del flujo de trabajo llevan `FLU-n`.
+sin el 0: `INS-1` es la antigua 0.1, y por eso no admite más de nueve tareas: lo nuevo entra en la
+fase que toque), que nombran los commits y la [bitácora](registros/traspaso.md);
+las del flujo de trabajo llevan `FLU-n` y van en su [sección](#flujo-de-trabajo).
 
 ## Dónde lo dejamos (2026-09-28)
 
@@ -134,3 +135,13 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
 - [ ] **INS-53** En un equipo de 8 GB: el perfil Ligero debe ser jugable.
 - [ ] **INS-54** Actualizar de una versión a otra sin perder partidas.
 - [ ] **INS-55** Desinstalar conservando y sin conservar partidas.
+
+## Flujo de trabajo
+
+Cómo trabaja Claude en este repo: [`CLAUDE.md`](../CLAUDE.md), la [bitácora](registros/traspaso.md), los
+ganchos, `tools/qa` y las skills ([runbook](runbooks/skills-y-modelos.md)).
+
+- [ ] **FLU-1** Traer de Tarkor su flujo de trabajo y sus skills, adaptados al instalador: `CLAUDE.md`,
+  [`REVIEW.md`](../REVIEW.md), bitácora, ganchos de sesión y de antes de subir, `tools/qa` con sus
+  tests (job `qa` de la CI) y las skills de `.claude/skills/` con sus notas para el instalador.
+  Falta: revisión, `/opt-tokens` y retro antes del PR a `main`.

@@ -90,7 +90,7 @@ según el equipo y el perfil. Variables comprobadas contra `envconfig/config.go`
 ### Para el backend del juego
 
 Además de `OLLAMA_MODEL_*` y `OLLAMA_KEEP_ALIVE`, variables nuevas que el backend empaquetado
-tiene que leer y pasar en cada petición a Ollama (fase 3.5 del plan):
+tiene que leer y pasar en cada petición a Ollama (`INS-35` del plan):
 
 | Variable | Opción de Ollama | Valor |
 |---|---|---|
@@ -102,10 +102,10 @@ tiene que leer y pasar en cada petición a Ollama (fase 3.5 del plan):
 ### Otras mejoras de rendimiento previstas
 
 - **Calentar el narrador:** al terminar de arrancar, una petición vacía carga el narrador en
-  memoria mientras el jugador está en el menú, para que el primer turno no tarde de más (fase 4.2).
+  memoria mientras el jugador está en el menú, para que el primer turno no tarde de más (`INS-42`).
 - **Ver dónde corre la IA:** `GET /api/ps` de Ollama dice qué parte de cada modelo está en la
   gráfica. Se muestra en Ajustes ("La IA usa la gráfica al 100 %") y sirve para diagnosticar
-  (fase 4.3).
+  (`INS-43`).
 - **Velocidad real:** la prueba rápida de `09` usa `eval_count / eval_duration` de la respuesta de
   Ollama (tokens por segundo exactos), no un cronómetro.
 - **Steam Deck:** probar en `INS-8` Vulkan (por defecto) frente a ROCm con

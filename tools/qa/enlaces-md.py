@@ -35,7 +35,7 @@ def anclas_de(ruta, cache={}):
                 vistas[a] = n + 1
                 out.add(a if n == 0 else f'{a}-{n}')
             for idm in re.findall(r'<a\s+(?:name|id)="([^"]+)"', l):
-                out.add(idm)
+                out.add(idm.lower())  # el ancla del enlace se compara en minúsculas
         cache[ruta] = out
     return cache[ruta]
 

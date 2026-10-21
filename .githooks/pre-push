@@ -4,6 +4,10 @@
 # (core.hooksPath). Saltarlo solo para un `WIP:` con tests en rojo: `git push --no-verify`.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
+# Las ramas que sube llegan por la entrada; se guardan antes de que tsc o cargo puedan leerla.
+ramas_dir=$(mktemp -d)
+trap 'rm -rf "$ramas_dir"' EXIT
+cat > "$ramas_dir/entrada"
 # Los mismos comandos que la CI (`comprobar.yml`), los rápidos: tipos del asistente y clippy del workspace.
 echo "pre-push: tsc del asistente, clippy, bitácora, tests de lo que cambia…"
 (cd app && npx tsc -b > /tmp/pre-push-tsc.log 2>&1) || { tail -20 /tmp/pre-push-tsc.log; echo "pre-push: el asistente no tipa"; exit 1; }
@@ -13,9 +17,7 @@ echo "pre-push: tsc del asistente, clippy, bitácora, tests de lo que cambia…"
 python3 tools/qa/enlaces-md.py > /tmp/pre-push-enlaces.log || { cat /tmp/pre-push-enlaces.log; echo "pre-push: enlaces rotos en los .md"; exit 1; }
 # QA-66 (qué commits sube) y QA-69 (bitácora de cada commit), en `tools/qa/prepush-ramas.sh` para poder
 # probarlo (QA-74). Git pasa por la entrada «ref local, sha local, ref remota, sha remota» de cada rama.
-ramas_dir=$(mktemp -d)
-trap 'rm -rf "$ramas_dir"' EXIT
-bash tools/qa/prepush-ramas.sh "$ramas_dir/cambiados" "$ramas_dir/subidos" || exit 1
+bash tools/qa/prepush-ramas.sh "$ramas_dir/cambiados" "$ramas_dir/subidos" < "$ramas_dir/entrada" || exit 1
 subidos=$(cat "$ramas_dir/subidos")
 # QA-88: los tests de lo que cambia (vitest related del asistente, cargo test del núcleo).
 bash tools/qa/tests-relacionados.sh "$ramas_dir/cambiados" || exit 1

@@ -27,7 +27,8 @@ if [ ${#faltan[@]} -gt 0 ]; then
 fi
 
 # npm del asistente (aprovecha la caché del contenedor).
-(cd app && npm install --no-audit --no-fund --loglevel=error)
+(cd app && npm install --no-audit --no-fund --loglevel=error) \
+  || echo "AVISO: npm install falló (¿red?); sin él no corren tsc ni vitest."
 
 # Crates y el objetivo de Windows del núcleo (la CI comprueba que compila para Windows).
 (cd app && cargo fetch -q) || echo "AVISO: cargo fetch falló (¿red?); se reintentará al compilar."
