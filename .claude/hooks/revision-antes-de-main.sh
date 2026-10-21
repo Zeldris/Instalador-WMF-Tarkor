@@ -27,13 +27,18 @@ repo = f"repos/{datos.get('owner')}/{datos.get('repo')}"
 if herramienta.endswith('create_pull_request'):
     if datos.get('base') != 'main':
         sys.exit(0)
-    # Un commit revisado pero sin subir no cuenta: se mira lo que hay en GitHub.
-    remota = subprocess.run(
-        ['git', '-C', raiz, 'ls-remote', 'origin', f"refs/heads/{datos.get('head', '')}"],
-        capture_output=True, text=True,
-    ).stdout.split()
-    cabeza = remota[0] if remota else f"(la rama {datos.get('head')} no está en GitHub)"
-elif herramienta.endswith('update_pull_request'):
+    # Un commit revisado pero sin subir no cuenta: se mira lo que hay en GitHub. `head` puede venir como
+    # `dueño:rama`.
+    rama = str(datos.get('head', '')).split(':')[-1]
+    r = subprocess.run(['git', '-C', raiz, 'ls-remote', 'origin', f'refs/heads/{rama}'], capture_output=True, text=True)
+    remota = r.stdout.split()
+    if remota:
+        cabeza = remota[0]
+    elif r.returncode:
+        cabeza = f"(no se pudo consultar origin: {r.stderr.strip()[:200]})"
+    else:
+        cabeza = f"(la rama {rama} no está en GitHub)"
+elif herramienta.endswith('__update_pull_request'):
     if datos.get('base') != 'main':
         sys.exit(0)
     info = gh(f"{repo}/pulls/{datos.get('pullNumber')}")
@@ -41,6 +46,9 @@ elif herramienta.endswith('update_pull_request'):
         cabeza = info['head']['sha']
     except (KeyError, TypeError):
         cabeza = '(no se pudo consultar el PR)'
+elif not herramienta.endswith(('__merge_pull_request', '__enable_pr_auto_merge')):
+    # Otra herramienta que coja el matcher (p. ej. update_pull_request_branch): no lleva nada a main.
+    sys.exit(0)
 else:
     # Fusionar o activar la fusión automática: la base y la cabeza son las del PR, no las de este
     # checkout. Si no se pueden consultar, se bloquea (mejor un falso bloqueo que un PR sin revisar en main).

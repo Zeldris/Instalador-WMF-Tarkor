@@ -9,16 +9,17 @@ import unittest
 from comun import QA
 
 RAIZ = os.path.abspath(os.path.join(QA, '..', '..'))
-VIEJO = re.compile(r'\bfases? \d\.\d')
+VIEJO = re.compile(r'\bfases? \d+\.\d+', re.IGNORECASE)
 
 
 class IdsDelPlan(unittest.TestCase):
     def test_ningun_documento_cita_la_numeracion_vieja(self):
-        archivos = subprocess.run(['git', 'ls-files', '*.md'], cwd=RAIZ, capture_output=True, text=True).stdout.split()
+        archivos = subprocess.run(['git', 'ls-files', '-z', '*.md'], cwd=RAIZ, capture_output=True,
+                                  text=True).stdout.split('\0')
         malas = []
         for ruta in archivos:
             # Las retros cuentan lo que pasó, con las palabras de entonces.
-            if ruta.startswith(('docs/registros/', '.claude/')):
+            if not ruta or ruta.startswith('docs/registros/retro-'):
                 continue
             with open(os.path.join(RAIZ, ruta), encoding='utf-8') as f:
                 for n, linea in enumerate(f, 1):

@@ -39,3 +39,14 @@ renumeración a `INS-n` dejó «fase 3.5» en dos documentos. Todos arreglados e
    que el plan y el `README` se leen con `grep -n` y `sed -n` del tramo, no enteros: fueron lo que más
    arrastró. Riesgo para la calidad: perder contexto de otra sección; contrapeso, leer entero al
    cambiar la estructura del documento.
+
+## Revisión de lo aplicado
+
+El `/code-review` de los commits de la retro encontró doce cosas. Arregladas: el matcher del gancho de
+`main` cogía también `update_pull_request_branch` (ahora anclado, y el gancho solo trata como fusión las
+dos herramientas de fusión), `head` como `dueño:rama`, el error de `origin` se muestra, el test de ids
+viejos no distinguía mayúsculas ni números de dos cifras, saltaba la bitácora y `.claude/`, y partía
+rutas con espacios; y los tests del gancho cubren ahora cambiar la base, fusionar, la fusión automática
+y el matcher. Quedan como están: la fusión automática no revisa los commits que lleguen después de
+activarla (lo cubriría una protección de rama en GitHub), reabrir un PR sin cambiar la base, los
+estados de commit fuera de `check-runs` y que el aviso de permiso de los ganchos sea solo texto.

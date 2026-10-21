@@ -141,7 +141,8 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
 Cómo trabaja Claude en este repo: [`CLAUDE.md`](../CLAUDE.md), la [bitácora](registros/traspaso.md), los
 ganchos, `tools/qa` y las skills ([runbook](runbooks/skills-y-modelos.md)).
 
-- [ ] **FLU-1** Traer de Tarkor su flujo de trabajo y sus skills, adaptados al instalador: `CLAUDE.md`,
+- [x] **FLU-1** (2026-10-21) Traer de Tarkor su flujo de trabajo y sus skills, adaptados al instalador: `CLAUDE.md`,
   [`REVIEW.md`](../REVIEW.md), bitácora, ganchos de sesión y de antes de subir, `tools/qa` con sus
   tests (job `qa` de la CI) y las skills de `.claude/skills/` con sus notas para el instalador.
-  Falta: revisión, `/opt-tokens` y retro antes del PR a `main`.
+  Hecho, con `/code-review` (dos rondas), `/opt-tokens` y la
+  [retro](registros/retro-2026-10-21-flujo.md), cuyas cuatro propuestas se aplicaron.
