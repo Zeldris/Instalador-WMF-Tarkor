@@ -39,6 +39,9 @@ lanza la usuaria.
    cambia. Al tocar pantallas o el arranque de procesos, las pruebas de punta a punta de `app/e2e`.
    Antes del commit de un arreglo, [`REVIEW.md`](../../REVIEW.md): Linux y Windows, procesos que se
    paran, compatibilidad de `config.json` y del catálogo.
+   **Los ganchos de Claude** (`.claude/hooks/`) y `.claude/settings.json`: en modo automático el
+   clasificador bloquea editarlos; se pide permiso a la usuaria antes, no al fallar (retro del
+   2026-10-21).
 4. **Si algo falla** (test rojo, intermitente, bug): `diagnosing-bugs` antes de tocar el código.
 5. **Cerrar la tarea:** casilla marcada en el plan, bitácora al día, commit + push. El `/code-review`,
    `/opt-tokens` y la `/retro` van al final, antes de crear el PR a `main` (pasos 6 y 7), no por

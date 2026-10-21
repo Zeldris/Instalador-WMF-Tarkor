@@ -1,6 +1,6 @@
 # Retro del 2026-10-21: flujo de trabajo traído de Tarkor (`FLU-1`)
 
-**Estado:** pendiente de la usuaria.
+**Estado:** aprobadas las cuatro propuestas (usuaria, 2026-10-21); aplicadas en la rama.
 
 Lo revisado: los commits de `FLU-1` en `claude/installer-docs-review-09e7vs` (`ec5016c`…`5e640dd`), el
 `/code-review` del diff contra `main` y `/opt-tokens` de la sesión.

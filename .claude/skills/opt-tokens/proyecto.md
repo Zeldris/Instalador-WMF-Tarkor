@@ -30,4 +30,7 @@ juego (2026-10-21, `FLU-1`) lleva sus `QA-xx`; el detalle de cada uno está en e
   subagente, no enteros sus documentos.
 - **Páginas de documentación largas** (`QA-176`): un WebFetch con pregunta estrecha o un subagente que devuelva
   solo lo que se busca.
+- **Documentos largos del repo** (retro del 2026-10-21): el plan y el `README` fueron lo que más arrastró en
+  `FLU-1` (leídos enteros 19 y 10 veces). Se leen por tramos (`grep -n` y `sed -n` de la sección); enteros solo
+  al cambiar la estructura del documento.
 - **El registro de la sesión** pesa cientos de MB: medirlo con `medir.py`, nunca leerlo.
