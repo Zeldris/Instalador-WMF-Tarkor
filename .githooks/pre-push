@@ -1,0 +1,30 @@
+#!/bin/bash
+# QA-13 (de Tarkor): no se sube nada que no compila o no pasa el lint. La CI solo corre en el PR, al
+# final de un tramo de varias tareas; esto lo para en el push. Lo activa `.claude/hooks/session-start.sh`
+# (core.hooksPath). Saltarlo solo para un `WIP:` con tests en rojo: `git push --no-verify`.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+# Las ramas que sube llegan por la entrada; se guardan antes de que tsc o cargo puedan leerla.
+ramas_dir=$(mktemp -d)
+trap 'rm -rf "$ramas_dir"' EXIT
+cat > "$ramas_dir/entrada"
+# Los mismos comandos que la CI (`comprobar.yml`), los rápidos: tipos del asistente y clippy del workspace.
+echo "pre-push: tsc del asistente, clippy, bitácora, tests de lo que cambia…"
+(cd app && npx tsc -b > /tmp/pre-push-tsc.log 2>&1) || { tail -20 /tmp/pre-push-tsc.log; echo "pre-push: el asistente no tipa"; exit 1; }
+(cd app && cargo clippy -q --workspace --all-targets -- -D warnings > /tmp/pre-push-clippy.log 2>&1) \
+  || { grep -E "^(error|warning)" -A5 /tmp/pre-push-clippy.log | head -30; echo "pre-push: clippy en rojo (log completo en /tmp/pre-push-clippy.log)"; exit 1; }
+# Los enlaces de los .md (un documento movido deja enlaces rotos en los demás).
+python3 tools/qa/enlaces-md.py > /tmp/pre-push-enlaces.log || { cat /tmp/pre-push-enlaces.log; echo "pre-push: enlaces rotos en los .md"; exit 1; }
+# QA-66 (qué commits sube) y QA-69 (bitácora de cada commit), en `tools/qa/prepush-ramas.sh` para poder
+# probarlo (QA-74). Git pasa por la entrada «ref local, sha local, ref remota, sha remota» de cada rama.
+bash tools/qa/prepush-ramas.sh "$ramas_dir/cambiados" "$ramas_dir/subidos" < "$ramas_dir/entrada" || exit 1
+subidos=$(cat "$ramas_dir/subidos")
+# QA-88: los tests de lo que cambia (vitest related del asistente, cargo test del núcleo).
+bash tools/qa/tests-relacionados.sh "$ramas_dir/cambiados" || exit 1
+subidos=$(grep -v '^$' <<< "$subidos" || true)
+if [ -z "$subidos" ]; then
+  echo "pre-push: todo en verde, pero este push no sube ningún commit nuevo (¿se hizo el commit?)."
+else
+  echo "pre-push: todo en verde. Sube $(wc -l <<< "$subidos") commit(s):"
+  echo "$subidos"
+fi

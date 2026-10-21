@@ -13,7 +13,7 @@ Envoltorio Tauri v2 del juego: asistente de primer arranque, análisis del equip
 | `src-tauri/` | App de Tauri: expone el núcleo al asistente como comandos. |
 | `src/` | Asistente en React. Textos en `textos.ts`; tipos espejo de Rust en `tipos.ts`. |
 
-`src/simulacion.ts` simula la descarga y la comprobación hasta la fase 0.5: no debe llegar a una
+`src/simulacion.ts` simula la descarga y la comprobación hasta `INS-5`: no debe llegar a una
 release.
 
 ## Requisitos
@@ -64,4 +64,4 @@ cargo run --release -p tarkor-nucleo --example motor minimo   # o ligero, equili
 
 Instala el motor real, lo arranca con los ajustes del perfil para este equipo, descarga los
 modelos y hace la narración de prueba mostrando los tokens por segundo. Pensado para medir en la
-Steam Deck o en un Windows (fase 0.8).
+Steam Deck o en un Windows (`INS-8`).

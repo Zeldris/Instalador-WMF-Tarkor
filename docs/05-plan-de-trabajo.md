@@ -10,11 +10,14 @@ Dónde se trabaja cada fase:
 - **Repo del juego (privado):** migración a SQLite, recorte de funcionalidad, cambios pequeños para
   el modo empaquetado, CI de build.
 
-Marcar cada punto al terminarlo.
+Marcar cada punto al terminarlo. Cada tarea tiene su identificador `INS-<fase><n>` (la fase 0 va
+sin el 0: `INS-1` es la antigua 0.1, y por eso no admite más de nueve tareas: lo nuevo entra en la
+fase que toque), que nombran los commits y la [bitácora](registros/traspaso.md);
+las del flujo de trabajo llevan `FLU-n` y van en su [sección](#flujo-de-trabajo).
 
 ## Dónde lo dejamos (2026-09-28)
 
-**Hecho y en `main` de este repo:** fases 0.1-0.6 (asistente, detección de equipo, catálogo de
+**Hecho y en `main` de este repo:** fases `INS-1`…`INS-6` (asistente, detección de equipo, catálogo de
 perfiles, motor de IA real, backend compilado a bytecode), con pruebas de punta a punta.
 
 **A medias — fase 2 en el repo del juego**, rama `claude/instalador-empaquetado`,
@@ -36,7 +39,7 @@ perfiles, motor de IA real, backend compilado a bytecode), con pruebas de punta 
   `npm run schema:sqlite` (un test y el CI lo exigen).
 
 **Siguiente:** cerrar lo de arriba y fusionar; después fase 3 (modo empaquetado del juego) y
-fase 4 (backend dentro de la app y CI de releases). Las fases 0.7, 0.8 y 5 necesitan probar en la
+fase 4 (backend dentro de la app y CI de releases). `INS-7`, `INS-8` y la fase 5 necesitan probar en la
 Steam Deck o en Windows: `cargo run --release -p tarkor-nucleo --example motor equilibrado`
 (ver `app/README.md`).
 
@@ -44,26 +47,26 @@ Steam Deck o en Windows: `cargo run --release -p tarkor-nucleo --example motor e
 
 Objetivo: demostrar que el patrón completo funciona en Windows y en la Steam Deck.
 
-- [x] **0.1** Proyecto Tauri v2 en `app/` con el asistente (React + Vite + TypeScript) usando los
+- [x] **INS-1** Proyecto Tauri v2 en `app/` con el asistente (React + Vite + TypeScript) usando los
   tokens visuales del juego. Pantallas según [`11`](11-diseno-del-frontal.md).
-- [x] **0.2** Detección de equipo en Rust (`sysinfo`, gráfica por plataforma) y cálculo de perfiles
+- [x] **INS-2** Detección de equipo en Rust (`sysinfo`, gráfica por plataforma) y cálculo de perfiles
   de [`09`](09-deteccion-de-equipo-y-perfiles.md), con tests unitarios.
-- [x] **0.3** `config.json` en la carpeta de datos: al abrir, asistente si no está completado.
-- [x] **0.3b** Catálogo de modelos y perfiles en JSON (con perfil Mínimo para que cualquiera pueda
+- [x] **INS-3** `config.json` en la carpeta de datos: al abrir, asistente si no está completado.
+- [x] **INS-3b** Catálogo de modelos y perfiles en JSON (con perfil Mínimo para que cualquiera pueda
   probar) y ajustes de rendimiento de Ollama calculados por equipo (ver
   [`12`](12-catalogo-y-rendimiento.md)).
-- [x] **0.4** Gestor de sidecars en Rust: puerto libre, arrancar y parar procesos, esperar al
+- [x] **INS-4** Gestor de sidecars en Rust: puerto libre, arrancar y parar procesos, esperar al
   health-check, un reinicio automático, parada garantizada al cerrar.
-- [x] **0.5** Ollama portable: descarga de la versión fijada (SHA256), arranque aislado
+- [x] **INS-5** Ollama portable: descarga de la versión fijada (SHA256), arranque aislado
   (`OLLAMA_HOST`, `OLLAMA_MODELS`), descarga de modelos con progreso vía `/api/pull`.
-- [x] **0.6** Prueba de empaquetado del backend compilado a bytecode (camino A de
+- [x] **INS-6** Prueba de empaquetado del backend compilado a bytecode (camino A de
   [`10`](10-proteccion-del-codigo-y-build.md)): funciona con el backend real contra Postgres
   (lecturas, crear partida, `FOR UPDATE`). Herramienta en `herramientas/empaquetar-backend.mjs`.
   Pendiente para después de la fase 2: repetirla sobre SQLite y probar Prisma sin motor nativo
   (`queryCompiler` + adaptador SQLite).
-- [ ] **0.7** Narrador con `system` + `options` por petición sobre `qwen2.5:7b`: comparar con
+- [ ] **INS-7** Narrador con `system` + `options` por petición sobre `qwen2.5:7b`: comparar con
   `tarkor-narrador` (ver [`03`](03-ollama-y-modelos-ia.md)).
-- [ ] **0.8** Prueba en la Steam Deck y en un Windows limpio: tiempos de descarga, memoria real
+- [ ] **INS-8** Prueba en la Steam Deck y en un Windows limpio: tiempos de descarga, memoria real
   de cada perfil, tokens por segundo, Vulkan frente a ROCm en la Deck, calidad de narración de
   Mínimo y Ligero. Ajustar el catálogo con lo medido.
 
@@ -71,64 +74,75 @@ Objetivo: demostrar que el patrón completo funciona en Windows y en la Steam De
 
 Se pueden resolver en paralelo a la fase 0. Ver la tabla del [README](../README.md).
 
-- [ ] Firma de código en Windows.
-- [ ] Licencia del juego (propuesta: todos los derechos reservados) y de este repo.
-- [x] Perfiles pequeños: se ofrecen Mínimo y Ligero con modelos Apache 2.0, avisando del
-  resultado (calidad a confirmar en 0.8).
-- [ ] Perfiles por encima del máximo seguro: bloqueados o con aviso.
-- [ ] Confirmar licencias de modelos e imágenes.
+- [ ] **INS-11** Firma de código en Windows.
+- [ ] **INS-12** Licencia del juego (propuesta: todos los derechos reservados) y de este repo.
+- [x] **INS-13** Perfiles pequeños: se ofrecen Mínimo y Ligero con modelos Apache 2.0, avisando del
+  resultado (calidad a confirmar en `INS-8`).
+- [ ] **INS-14** Perfiles por encima del máximo seguro: bloqueados o con aviso.
+- [ ] **INS-15** Confirmar licencias de modelos e imágenes.
 
 ## Fase 2 — Migración a SQLite (repo del juego) — código hecho, PR #1 sin fusionar
 
 Ver [`02`](02-migracion-postgres-a-sqlite.md). Sin romper el modo de desarrollo con Postgres.
 
-- [x] **2.1** Proveedor de base de datos por variable de entorno y generación de
+- [x] **INS-21** Proveedor de base de datos por variable de entorno y generación de
   `schema.sqlite.prisma` en el build, con test de sincronía.
-- [x] **2.2** Embeddings en JSON + similitud coseno en JS (`retrieval.ts`, `worldFacts.ts`).
-- [x] **2.3** `lockRowForUpdate()` con mutex en memoria cuando el proveedor es SQLite.
-- [x] **2.4** Los 16 campos de lista a `Json` (sin capa de conversión: un `Json` con un array se
+- [x] **INS-22** Embeddings en JSON + similitud coseno en JS (`retrieval.ts`, `worldFacts.ts`).
+- [x] **INS-23** `lockRowForUpdate()` con mutex en memoria cuando el proveedor es SQLite.
+- [x] **INS-24** Los 16 campos de lista a `Json` (sin capa de conversión: un `Json` con un array se
   lee y escribe igual); los `push` reescritos con `anadirNpcRetirado`.
-- [x] **2.5** `mode: 'insensitive'` y `skipDuplicates`.
-- [x] **2.6** Batería de tests del backend pasando contra SQLite.
-- [x] **2.7** Script de build de la base de datos plantilla (migrada + catálogo + lore indexado).
+- [x] **INS-25** `mode: 'insensitive'` y `skipDuplicates`.
+- [x] **INS-26** Batería de tests del backend pasando contra SQLite.
+- [x] **INS-27** Script de build de la base de datos plantilla (migrada + catálogo + lore indexado).
 
 ## Fase 3 — Modo empaquetado del juego (repo del juego)
 
 Ver [`06`](06-inventario-exclusiones.md).
 
-- [ ] **3.1** Frontend: URL del backend en tiempo de ejecución (`api.ts`).
-- [ ] **3.2** Frontend: fuentes Cinzel e Inter en local.
-- [ ] **3.3** Frontend: quitar `ImagePromptSlot`; deshabilitar "Crear desde cero" como "en
+- [ ] **INS-31** Frontend: URL del backend en tiempo de ejecución (`api.ts`).
+- [ ] **INS-32** Frontend: fuentes Cinzel e Inter en local.
+- [ ] **INS-33** Frontend: quitar `ImagePromptSlot`; deshabilitar "Crear desde cero" como "en
   construcción"; revisar el texto de `ComingSoon.tsx`.
-- [ ] **3.4** Backend: build sin rutas ni servicios de curación (ruta de image-prompt, orquestador
+- [ ] **INS-34** Backend: build sin rutas ni servicios de curación (ruta de image-prompt, orquestador
   cloud, `LiveTeacherCapture`, scripts).
-- [ ] **3.5** Backend: `SYSTEM` del narrador incrustado en build; narrador con modelo base +
+- [ ] **INS-35** Backend: `SYSTEM` del narrador incrustado en build; narrador con modelo base +
   `system` por petición detrás de variable de entorno; leer `TARKOR_NUM_THREAD`,
   `TARKOR_NUM_BATCH`, `TARKOR_NUM_CTX_NARRADOR` y `TARKOR_MODELOS_SIN_PENSAR` (ver `12`).
-- [ ] **3.6** Backend: CORS restringido y escucha solo en `127.0.0.1` en modo empaquetado; rutas de
+- [ ] **INS-36** Backend: CORS restringido y escucha solo en `127.0.0.1` en modo empaquetado; rutas de
   imágenes y datos por variable de entorno.
-- [ ] **3.7** Menú del juego: enlace a Ajustes → Rendimiento de la IA.
+- [ ] **INS-37** Menú del juego: enlace a Ajustes → Rendimiento de la IA.
 
 ## Fase 4 — Empaquetado completo y CI
 
 Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md).
 
-- [ ] **4.1** Integrar el build del juego (frontend + backend en bytecode + plantilla) en la app de
+- [ ] **INS-41** Integrar el build del juego (frontend + backend en bytecode + plantilla) en la app de
   Tauri.
-- [ ] **4.2** Asistente real de punta a punta: descargas y comprobaciones de verdad; calentar el
+- [ ] **INS-42** Asistente real de punta a punta: descargas y comprobaciones de verdad; calentar el
   narrador al arrancar.
-- [ ] **4.3** Ajustes → Rendimiento de la IA (con uso de la gráfica vía `/api/ps`) y pantalla de
+- [ ] **INS-43** Ajustes → Rendimiento de la IA (con uso de la gráfica vía `/api/ps`) y pantalla de
   motor detenido.
-- [ ] **4.4** NSIS: castellano, instalación por usuario, desinstalador con las dos casillas.
-- [ ] **4.5** AppImage (+ `.deb` opcional) compilado en Ubuntu 22.04.
-- [ ] **4.6** Workflow de GitHub Actions en el repo privado que publica releases con `SHA256SUMS`
+- [ ] **INS-44** NSIS: castellano, instalación por usuario, desinstalador con las dos casillas.
+- [ ] **INS-45** AppImage (+ `.deb` opcional) compilado en Ubuntu 22.04.
+- [ ] **INS-46** Workflow de GitHub Actions en el repo privado que publica releases con `SHA256SUMS`
   en este repo.
-- [ ] **4.7** Pantalla "Licencias de terceros" generada en el build.
+- [ ] **INS-47** Pantalla "Licencias de terceros" generada en el build.
 
 ## Fase 5 — Prueba real
 
-- [ ] En la Steam Deck (modo escritorio y como juego ajeno a Steam).
-- [ ] En un Windows 10 y un Windows 11 limpios, sin Node ni Ollama.
-- [ ] En un equipo de 8 GB: el perfil Ligero debe ser jugable.
-- [ ] Actualizar de una versión a otra sin perder partidas.
-- [ ] Desinstalar conservando y sin conservar partidas.
+- [ ] **INS-51** En la Steam Deck (modo escritorio y como juego ajeno a Steam).
+- [ ] **INS-52** En un Windows 10 y un Windows 11 limpios, sin Node ni Ollama.
+- [ ] **INS-53** En un equipo de 8 GB: el perfil Ligero debe ser jugable.
+- [ ] **INS-54** Actualizar de una versión a otra sin perder partidas.
+- [ ] **INS-55** Desinstalar conservando y sin conservar partidas.
+
+## Flujo de trabajo
+
+Cómo trabaja Claude en este repo: [`CLAUDE.md`](../CLAUDE.md), la [bitácora](registros/traspaso.md), los
+ganchos, `tools/qa` y las skills ([runbook](runbooks/skills-y-modelos.md)).
+
+- [x] **FLU-1** (2026-10-21) Traer de Tarkor su flujo de trabajo y sus skills, adaptados al instalador: `CLAUDE.md`,
+  [`REVIEW.md`](../REVIEW.md), bitácora, ganchos de sesión y de antes de subir, `tools/qa` con sus
+  tests (job `qa` de la CI) y las skills de `.claude/skills/` con sus notas para el instalador.
+  Hecho, con `/code-review` (dos rondas), `/opt-tokens` y la
+  [retro](registros/retro-2026-10-21-flujo.md), cuyas cuatro propuestas se aplicaron.

@@ -38,8 +38,8 @@ La app de Tauri arranca y para su **propia instancia de Ollama**, igual que hace
 - **Se descarga en el primer arranque, no va dentro del instalador.** El paquete oficial pesa
   ~1,4 GB tanto en Windows (`ollama-windows-amd64.zip`) como en Linux
   (`ollama-linux-amd64.tar.zst`) e incluye ya soporte NVIDIA y Vulkan (Vulkan cubre también AMD e
-  Intel). El paquete extra de ROCm para AMD (0,25-1 GB) no se descarga por defecto; si en la fase
-  0.8 rinde claramente mejor que Vulkan en alguna gráfica, se añadiría solo para ella. Así el
+  Intel). El paquete extra de ROCm para AMD (0,25-1 GB) no se descarga por defecto; si en
+  `INS-8` rinde claramente mejor que Vulkan en alguna gráfica, se añadiría solo para ella. Así el
   instalador se queda en unos cientos de MB.
 - **Implementado y probado (2026-09-28):** `app/nucleo/src/motor.rs` descarga (reanudable),
   verifica la suma, extrae y arranca el motor. Probado aquí con el paquete real de Linux: 1.361 MB

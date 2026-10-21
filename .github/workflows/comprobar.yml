@@ -45,3 +45,16 @@ jobs:
         with:
           workspaces: app
       - run: cargo test -p tarkor-nucleo
+
+  qa:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tests de tools/qa
+        run: python3 -m unittest discover -s tools/qa/tests
+      - name: Tests de las skills
+        run: |
+          python3 -m unittest discover -s .claude/skills/opt-ai
+          python3 -m unittest discover -s .claude/skills/scout-updates
+      - name: Enlaces de los documentos
+        run: python3 tools/qa/enlaces-md.py

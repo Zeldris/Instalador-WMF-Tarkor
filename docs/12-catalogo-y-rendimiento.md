@@ -1,6 +1,6 @@
 # Catálogo de modelos y rendimiento
 
-**Estado: implementado en `app/nucleo` (2026-09-28); cifras a validar en la fase 0.8.** Petición
+**Estado: implementado en `app/nucleo` (2026-09-28); cifras a validar en `INS-8`.** Petición
 de Álvaro: sacar el máximo partido de Ollama en cada equipo, ofrecer modelos más pequeños para
 que **cualquiera pueda probar el juego** aunque no llegue a los requisitos actuales (avisando de que
 el resultado depende del modelo elegido), y que todo sea fácil de configurar y de ir ampliando.
@@ -57,7 +57,7 @@ Todos incluyen el cronista (`qwen2.5:1.5b-instruct`) y `nomic-embed-text`.
   grande, mejor narra**, y cada tarjeta lleva su texto de "qué esperar".
 - **Experimental** nunca se recomienda ni cuenta como "máximo seguro", aunque quepa.
 
-**A validar en la fase 0.8:** que los modelos pequeños respetan el JSON estructurado que exige el
+**A validar en `INS-8`:** que los modelos pequeños respetan el JSON estructurado que exige el
 narrador (Ollama lo fuerza con gramática, así que la forma debería salir bien; el contenido es lo
 que hay que juzgar) y que la narración en castellano es aceptable en Mínimo y Ligero.
 
@@ -85,12 +85,12 @@ según el equipo y el perfil. Variables comprobadas contra `envconfig/config.go`
 | `OLLAMA_NOPRUNE` | `1` | Conserva descargas a medias para poder reanudarlas |
 
 `OLLAMA_HOST` (puerto libre) y `OLLAMA_MODELS` (carpeta propia) los pone el gestor de sidecars
-(fase 0.4-0.5).
+(`INS-4`, `INS-5`).
 
 ### Para el backend del juego
 
 Además de `OLLAMA_MODEL_*` y `OLLAMA_KEEP_ALIVE`, variables nuevas que el backend empaquetado
-tiene que leer y pasar en cada petición a Ollama (fase 3.5 del plan):
+tiene que leer y pasar en cada petición a Ollama (`INS-35` del plan):
 
 | Variable | Opción de Ollama | Valor |
 |---|---|---|
@@ -102,17 +102,17 @@ tiene que leer y pasar en cada petición a Ollama (fase 3.5 del plan):
 ### Otras mejoras de rendimiento previstas
 
 - **Calentar el narrador:** al terminar de arrancar, una petición vacía carga el narrador en
-  memoria mientras el jugador está en el menú, para que el primer turno no tarde de más (fase 4.2).
+  memoria mientras el jugador está en el menú, para que el primer turno no tarde de más (`INS-42`).
 - **Ver dónde corre la IA:** `GET /api/ps` de Ollama dice qué parte de cada modelo está en la
   gráfica. Se muestra en Ajustes ("La IA usa la gráfica al 100 %") y sirve para diagnosticar
-  (fase 4.3).
+  (`INS-43`).
 - **Velocidad real:** la prueba rápida de `09` usa `eval_count / eval_duration` de la respuesta de
   Ollama (tokens por segundo exactos), no un cronómetro.
-- **Steam Deck:** probar en la fase 0.8 Vulkan (por defecto) frente a ROCm con
+- **Steam Deck:** probar en `INS-8` Vulkan (por defecto) frente a ROCm con
   `HSA_OVERRIDE_GFX_VERSION=10.3.0` y quedarse con el más rápido. Si ROCm gana, la regla se añade
   al cálculo para APUs AMD.
 - **Cuantización del modelo:** los tamaños del catálogo corresponden a la cuantización por defecto
-  de Ollama (Q4_K_M). Si en la fase 0.8 una variante `q8_0` del narrador narra claramente mejor en
+  de Ollama (Q4_K_M). Si en `INS-8` una variante `q8_0` del narrador narra claramente mejor en
   equipos con gráfica grande, entra como un perfil más del catálogo, sin cambiar código.
 
 ## 4. Ampliarlo en el futuro
