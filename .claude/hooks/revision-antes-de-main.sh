@@ -4,6 +4,8 @@
 # PR #43 y casi en el #44. La marca la deja `tools/qa/revisado.sh` tras la revisión.
 # QA-62 (retro del 2026-10-12): al fusionar, además, todas las comprobaciones (CI) del commit de cabeza
 # del PR tienen que haber terminado en verde. En Tarkor, el #47 se fusionó con el backend aún corriendo.
+# FLU-1 (revisión del flujo en el instalador): la cabeza de un PR nuevo es la de la rama en GitHub, no la
+# del checkout; la fusión automática cuenta como fusionar, y cambiar la base a main, como crear.
 entrada="$(cat)"
 raiz="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
 python3 - "$raiz" "$entrada" <<'PY'
@@ -11,32 +13,49 @@ import json, subprocess, sys
 raiz, entrada = sys.argv[1], json.loads(sys.argv[2])
 herramienta = entrada.get('tool_name', '')
 datos = entrada.get('tool_input', {}) or {}
+
+
+def gh(ruta):
+    r = subprocess.run(['gh', 'api', ruta], capture_output=True, text=True)
+    try:
+        return json.loads(r.stdout)
+    except ValueError:
+        return None
+
+
+repo = f"repos/{datos.get('owner')}/{datos.get('repo')}"
 if herramienta.endswith('create_pull_request'):
     if datos.get('base') != 'main':
         sys.exit(0)
-    cabeza = subprocess.run(['git', '-C', raiz, 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip()
-else:
-    # Fusionar: la base y la cabeza son las del PR, no las de este checkout. Si no se pueden
-    # consultar, se bloquea (mejor un falso bloqueo que un PR sin revisar en main).
-    pr = subprocess.run(
-        ['gh', 'api', f"repos/{datos.get('owner')}/{datos.get('repo')}/pulls/{datos.get('pullNumber')}"],
+    # Un commit revisado pero sin subir no cuenta: se mira lo que hay en GitHub.
+    remota = subprocess.run(
+        ['git', '-C', raiz, 'ls-remote', 'origin', f"refs/heads/{datos.get('head', '')}"],
         capture_output=True, text=True,
-    )
+    ).stdout.split()
+    cabeza = remota[0] if remota else f"(la rama {datos.get('head')} no está en GitHub)"
+elif herramienta.endswith('update_pull_request'):
+    if datos.get('base') != 'main':
+        sys.exit(0)
+    info = gh(f"{repo}/pulls/{datos.get('pullNumber')}")
     try:
-        info = json.loads(pr.stdout)
+        cabeza = info['head']['sha']
+    except (KeyError, TypeError):
+        cabeza = '(no se pudo consultar el PR)'
+else:
+    # Fusionar o activar la fusión automática: la base y la cabeza son las del PR, no las de este
+    # checkout. Si no se pueden consultar, se bloquea (mejor un falso bloqueo que un PR sin revisar en main).
+    info = gh(f"{repo}/pulls/{datos.get('pullNumber')}")
+    try:
         if info['base']['ref'] != 'main':
             sys.exit(0)
         cabeza = info['head']['sha']
-    except (ValueError, KeyError, TypeError):
+    except (KeyError, TypeError):
         cabeza = '(no se pudo consultar el PR)'
     else:
-        ci = subprocess.run(
-            ['gh', 'api', f"repos/{datos.get('owner')}/{datos.get('repo')}/commits/{cabeza}/check-runs?per_page=100"],
-            capture_output=True, text=True,
-        )
+        ci = gh(f"{repo}/commits/{cabeza}/check-runs?per_page=100")
         try:
-            corridas = json.loads(ci.stdout)['check_runs']
-        except (ValueError, KeyError, TypeError):
+            corridas = ci['check_runs']
+        except (KeyError, TypeError):
             corridas = None
         if not corridas:
             pendiente = ['no se pudieron leer las comprobaciones' if corridas is None else 'el CI aún no ha empezado']
@@ -49,7 +68,8 @@ else:
         if pendiente:
             print(
                 f'Bloqueado (QA-62): el CI del PR no está en verde ({"; ".join(pendiente)}). '
-                'Espera al aviso del PR (suscrito con subscribe_pr_activity) y fusiona con todo en verde.',
+                'Espera al aviso del PR (suscrito con subscribe_pr_activity) y fusiona con todo en verde; '
+                'la fusión automática tampoco se activa antes.',
                 file=sys.stderr,
             )
             sys.exit(2)
@@ -62,7 +82,7 @@ if marca and marca == cabeza:
 print(
     f'Bloqueado (QA-50): antes de un PR a main, `/code-review --max-findings all` del diff contra main, '
     f'arreglar lo que encuentre, subirlo y marcar con `bash tools/qa/revisado.sh` (marca: {marca or "ninguna"}, '
-    f'commit: {cabeza}). La descripción, con la skill `pr`.',
+    f'commit en GitHub: {cabeza}). La descripción, con la skill `pr`.',
     file=sys.stderr,
 )
 sys.exit(2)
