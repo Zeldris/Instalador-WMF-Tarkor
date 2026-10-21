@@ -1,0 +1,56 @@
+[
+  {
+    "nombre": "proyecto-generico-sin-arquitectura",
+    "skills": ["scout-updates"],
+    "query": "/scout-updates",
+    "files": ["evals/proyecto-ejemplo/"],
+    "expected_behavior": [
+      "Ejecuta inventario.py sobre el proyecto antes de leer archivos a mano",
+      "Crea arquitectura.md con secciones por tipo (modelos de IA, dependencias, runtimes, infraestructura y CI) y un sello de fecha, commit y archivos fuente por sección",
+      "Recoge los modelos de .env.example (gpt-3.5-turbo, text-embedding-ada-002) en la sección de modelos de IA",
+      "Pregunta a la usuaria las restricciones (hardware mínimo, local o nube, idioma) antes de buscar, en vez de inventarlas",
+      "Pregunta por componentes planificados sin implementar y busca servicios sin manifiesto (hosts de las URL de .env.example)",
+      "No menciona Tarkor, Ollama, la Steam Deck ni ningún archivo de World-Maker-Fantasy",
+      "Da una estimación de coste y espera confirmación antes de lanzar la búsqueda"
+    ]
+  },
+  {
+    "nombre": "runtime-fin-de-vida",
+    "skills": ["scout-updates"],
+    "query": "/scout-updates runtimes",
+    "files": ["evals/proyecto-ejemplo/", "evals/arquitectura-ejemplo.md"],
+    "expected_behavior": [
+      "Ejecuta contrastar.py y solo relee las secciones cuyo sello no coincide",
+      "Limita la búsqueda a la sección runtimes",
+      "Señala Node 16 como fuera de soporte citando endoflife.date (o la fuente oficial de Node) con fecha de consulta",
+      "Propone la migración con anillo de Tech Radar y fuerza de la evidencia, nombrando todos los sitios donde se fija la versión (.nvmrc, engines, Dockerfile, ci.yml)",
+      "Añade la propuesta a propuestas.md con estado 'propuesta' sin tocar ningún otro archivo del proyecto",
+      "El informe abre con una tabla ## Cobertura con una fila por componente del foco, cada tarjeta dice cómo se comprueba, y contrastar.py --informe sale con 0"
+    ]
+  },
+  {
+    "nombre": "rechazada-no-reaparece",
+    "skills": ["scout-updates"],
+    "query": "/scout-updates modelos",
+    "files": ["evals/proyecto-ejemplo/", "evals/arquitectura-ejemplo.md", "evals/propuestas-ejemplo.md"],
+    "expected_behavior": [
+      "Lee propuestas.md antes de buscar",
+      "No vuelve a proponer migrar el modelo de chat a un modelo de pago mayor, rechazado en P-002 por coste, salvo que diga expresamente que el motivo ya no se cumple y por qué",
+      "No repite P-001 (aceptada) como novedad",
+      "Las propuestas nuevas llevan ids siguientes a los existentes y no borran ni reescriben las anteriores"
+    ]
+  },
+  {
+    "nombre": "narrador-no-cabe-en-el-minimo",
+    "skills": ["scout-updates"],
+    "query": "/scout-updates modelos de IA: busca un modelo mejor para el narrador",
+    "files": ["docs/scout/arquitectura.md", "docs/scout/propuestas.md"],
+    "expected_behavior": [
+      "Toma las restricciones de arquitectura.md (hardware mínimo, memoria libre, idioma, solo local) como filtro",
+      "Descarta los candidatos que no caben en la memoria del hardware mínimo, nombrando la restricción que incumple cada uno",
+      "Separa en el informe la latencia (que remite a opt-ai) de la calidad",
+      "Propone el banco de calidad por pares en los dos órdenes con el propio agente como juez por defecto (sin depender de nada local), y deja que la usuaria elija los candidatos",
+      "Da una sola recomendación principal"
+    ]
+  }
+]

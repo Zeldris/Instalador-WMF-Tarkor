@@ -1,0 +1,7 @@
+# De `.claude/` solo se versionan las skills, los ganchos y `settings.json` (QA-112 de Tarkor).
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
+!.claude/skills/
+.claude/revision-main.sha
+__pycache__/

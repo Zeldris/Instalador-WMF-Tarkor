@@ -22,7 +22,7 @@ resto.
 | **Prompts del narrador** | Bajo — punto débil asumido | Lo que se envía a Ollama se puede ver (`localhost`). Se dificulta incrustando el texto del `SYSTEM` en el backend compilado y enviándolo en cada petición, en vez de dejar un `Modelfile` legible en disco (ver [`03-ollama-y-modelos-ia.md`](03-ollama-y-modelos-ia.md)). |
 | **Base de datos** (catálogo, lore) e **imágenes** | Bajo | Ficheros de datos legibles. Cifrar SQLite (SQLCipher) obligaría a meter la clave en el binario: solo disuade y complica el empaquetado. **No se hace en la v1.** |
 
-## Resultado de la prueba de concepto (fase 0.6, 2026-09-28)
+## Resultado de la prueba de concepto (`INS-6`, 2026-09-28)
 
 **El camino A funciona con el backend real del juego.** Herramienta:
 [`herramientas/empaquetar-backend.mjs`](../herramientas/empaquetar-backend.mjs) (vive en este repo
