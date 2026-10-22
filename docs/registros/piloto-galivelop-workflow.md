@@ -118,4 +118,4 @@ Roces, en orden de lo que costaron:
 
 ## Estado
 
-**Estado:** en curso. Hecho y comprobado en local; las tres fases hechas y el [PR #5](https://github.com/Zeldris/Instalador-WMF-Tarkor/pull/5) abierto; falta que la usuaria confirme la fusión.
+**Estado:** en curso. Hecho y comprobado en local; las tres fases hechas y el [PR #5](https://github.com/Zeldris/Instalador-WMF-Tarkor/pull/5) abierto; la usuaria confirmó la fusión manual (2026-10-22), con la CI de GitHub agotada y la local en verde.
