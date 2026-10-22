@@ -69,6 +69,9 @@ Roces, en orden de lo que costaron:
     (`--estado`, `--buscar`, `--sesion`): las referencias del proyecto se buscaron con `git grep`.
 13. **Leer el repo del flujo pidió `add_repo`** en la nube, y su respuesta sugiere registrarlo como raíz.
     `aplicar.md` dice que no se registre, pero en «Lo que el agente no hace», al final; convendría en el paso 0.
+14. **Sin CI, el flujo no tiene camino previsto.** `AGENTS.md` dice que una CI que no arranca cuenta como rojo, y el
+    gancho del PR la exige; no hay forma de declarar «CI agotada, comprobado en local» (por ejemplo, un registro con
+    el commit y las órdenes que el gancho acepte con confirmación de la persona).
 
 ## Comprobaciones
 
@@ -82,15 +85,10 @@ Roces, en orden de lo que costaron:
 - Relevo: la bitácora tiene la fila de la rama con su siguiente paso, y `recuperar.py --estado` la lee tras compactar.
 - **CI: no arrancó.** Los tres jobs fallaron sin empezar: «The job was not started because recent account payments
   have failed or your spending limit needs to be increased». Lo tiene que arreglar la usuaria en GitHub.
-
 - **CI en local** (decisión de la usuaria: con la CI agotada, se sube de forma manual): sobre `437ea1d`, en verde
   `npm test`, `npm run build`, `cargo test -p tarkor-nucleo`, clippy, `cargo check` del núcleo para Windows, los
   tests de `tools/qa`, `tools/banco` y los scripts de las skills, y los enlaces. Sin Windows real: sus tests del
   núcleo quedan para cuando vuelva la CI.
-
-14. **Sin CI, el flujo no tiene camino previsto.** `AGENTS.md` dice que una CI que no arranca cuenta como rojo, y el
-    gancho del PR la exige; no hay forma de declarar «CI agotada, comprobado en local» (por ejemplo, un registro con
-    el commit y las órdenes que el gancho acepte con confirmación de la persona).
 
 ## Estado
 
