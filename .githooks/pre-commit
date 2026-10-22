@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# galivelop-workflow v0.2.0
+# Git pre-commit hook (copied into projects as .githooks/pre-commit; enable with: git config core.hooksPath .githooks).
+#   - No secrets in a commit: by file (.env except .env.example/.sample/.template, *.pem, *.key, *.p12, *.pfx, *.jks,
+#     id_rsa and friends, .netrc) and by added content (well-known key formats, and secret/password/token/api_key
+#     assignments with a literal value instead of an environment reference). A line containing gw-allow-secret is
+#     ignored (for a checked false positive).
+#   - With CLAUDECODE=1 (an agent committing): no staged file under the config's protectedPaths (people's drafts).
+#     Outside Claude Code that check does not run. Closing a merge/cherry-pick/rebase lets through files that come
+#     unchanged from the other side.
+# CI mode: pre-commit --rango BASE..HEAD scans what the range adds instead of the staged changes (run the base
+# branch's copy of this hook, so a PR cannot weaken the check that reviews it).
+# Bash 3.2 compatible. Root from this hook's path, never from $CLAUDE_PROJECT_DIR or the current directory.
+set -uo pipefail
+hookdir="$(cd "$(dirname "$0")" && pwd)"
+root="$(git -C "$hookdir" rev-parse --show-toplevel 2>/dev/null)" || {
+  echo "pre-commit: $hookdir is not inside a git work tree; point git at the project's hooks: git config core.hooksPath .githooks" >&2; exit 1; }
+cd "$root" || exit 1
+
+if [ "${1:-}" = "--rango" ]; then
+  [ -n "${2:-}" ] || { echo "pre-commit: --rango needs a range; run: bash .githooks/pre-commit --rango <base>..HEAD" >&2; exit 1; }
+  range="$2"; ci=1
+  git rev-parse -q --verify "${range%%..*}^{commit}" >/dev/null 2>&1 \
+    || { echo "pre-commit: the base of $range is not in this clone; fetch it: git fetch --deepen=200 origin" >&2; exit 1; }
+  fix_file="drop the file from the branch (and rotate the credential): git rm --cached <file> && git commit"
+  fix_line="remove the value from the branch (and rotate the credential), then commit: git commit -a"
+else
+  range="--cached"; ci=0
+  fix_file="unstage it: git restore --staged <file>"
+  fix_line="move the value to an environment variable, then stage again: git add -p"
+fi
+diff_of() { git diff "$range" "$@"; }
+
+names="$(diff_of --name-only --no-renames --diff-filter=ACMR)" || { echo "pre-commit: git diff failed; check the range: git log $range" >&2; exit 1; }
+bad_files="$(printf '%s\n' "$names" \
+  | grep -E '(^|/)\.env(\.[^/]*)?$|\.(pem|key|p12|pfx|jks|keystore)$|(^|/)id_(rsa|dsa|ecdsa|ed25519)$|(^|/)\.netrc$' \
+  | grep -vE '(^|/)\.env\.(example|sample|template)$' || true)"
+if [ -n "$bad_files" ]; then
+  echo "pre-commit: these files hold credentials and are never committed:" >&2
+  printf '  %s\n' "$bad_files" >&2
+  echo "pre-commit: $fix_file" >&2
+  exit 1
+fi
+
+added="$(diff_of -U0 --no-renames --diff-filter=ACMR | grep -E '^\+' | grep -vE '^\+\+\+ ' | grep -v 'gw-allow-secret' || true)"
+KEY_FORMATS='-----BEGIN [A-Z ]*PRIVATE KEY-----|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,}|xox[abposr]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|sk-(ant-)?[A-Za-z0-9_-]{20,}|gsk_[A-Za-z0-9]{20,}|[rs]k_live_[0-9A-Za-z]{20,}|glpat-[0-9A-Za-z_-]{20,}'
+found="$(printf '%s\n' "$added" | grep -oE -e "$KEY_FORMATS" | head -n 5 || true)"
+if [ -n "$found" ]; then
+  echo "pre-commit: the commit adds something shaped like a key or token:" >&2
+  printf '%s\n' "$found" | sed -E 's/^(.{8}).*/  \1…/' >&2
+  echo "pre-commit: keys belong in environment variables or a secrets manager, never in the repo; $fix_line" >&2
+  exit 1
+fi
+
+# Assignments with a literal value: NAME = "value" anywhere; NAME=value unquoted in config files. Names end in
+# secret, password, passwd, token or api_key/apikey. ${VAR}, $VAR, <placeholder> and empty values pass; unquoted, so
+# do read/write/none/true/false and values under 8 characters (GitHub Actions' `id-token: write`, `token: false`).
+NAME='[A-Za-z0-9_.-]*([Ss][Ee][Cc][Rr][Ee][Tt]|[Pp][Aa][Ss][Ss][Ww]([Oo][Rr])?[Dd]|[Tt][Oo][Kk][Ee][Nn]|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy])'
+QUOTED="^\\+.*${NAME}[\"']?[[:space:]]*(:=|=|:)[[:space:]]*(\"[^\"\$<{][^\"]{3,}\"|'[^'\$<{][^']{3,}')"
+UNQUOTED="^\\+[[:space:]]*(export[[:space:]]+)?${NAME}[[:space:]]*[=:][[:space:]]*[^[:space:]\$<{\"'#]"
+HARMLESS="^\\+[[:space:]]*(export[[:space:]]+)?${NAME}[[:space:]]*[=:][[:space:]]*([Rr][Ee][Aa][Dd]|[Ww][Rr][Ii][Tt][Ee]|[Nn][Oo][Nn][Ee]|[Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee]|[^[:space:]#]{1,7})[[:space:]]*(#.*)?$"
+added_lines() { grep -E '^\+' | grep -vE '^\+\+\+ ' | grep -v 'gw-allow-secret' || true; }
+examples=(':!*.env.example' ':!*.env.sample' ':!*.env.template')
+literal="$(diff_of -U0 --no-renames --diff-filter=ACMR -- . "${examples[@]}" | added_lines | grep -E "$QUOTED" | head -n 5 || true)"
+config_added="$(diff_of -U0 --no-renames --diff-filter=ACMR -- '*.env' '.env*' '*.properties' '*.yml' '*.yaml' \
+  '*.toml' '*.ini' '*.cfg' '*.conf' "${examples[@]}" | added_lines)"
+literal="$literal$(printf '\n%s' "$(printf '%s\n' "$config_added" | grep -E "$UNQUOTED" | grep -vE "$HARMLESS" | head -n 5 || true)")"
+literal="$(printf '%s\n' "$literal" | grep . | sed -E 's/^\+[[:space:]]*//; s/^(.{40}).*/\1…/' | sort -u || true)"
+if [ -n "$literal" ]; then
+  echo "pre-commit: these lines assign a literal secret; use an environment reference such as \${VAR} instead:" >&2
+  printf '  %s\n' "$literal" >&2
+  echo "pre-commit: (a checked false positive can carry the comment gw-allow-secret) $fix_line" >&2
+  exit 1
+fi
+
+# Paths an agent may not commit (people's work in progress). Only under Claude Code, only for staged changes.
+if [ "${CLAUDECODE:-}" = "1" ] && [ "$ci" = "0" ]; then
+  if [ -d "$root/.claude/gw/scripts" ]; then scripts="$root/.claude/gw/scripts"; else scripts="$root/scripts"; fi
+  prefixes="$(python3 "$scripts/config.py" --root "$root" get protectedPaths)" || {
+    echo "pre-commit: cannot read protectedPaths from .claude/gw.json; fix it: python3 $scripts/config.py --root $root validate" >&2; exit 1; }
+  if [ -n "$prefixes" ]; then
+    others=""
+    for head in MERGE_HEAD CHERRY_PICK_HEAD REBASE_HEAD; do
+      [ -e "$(git rev-parse --git-path "$head")" ] && others="$others $head"
+    done
+    blob() { git rev-parse -q --verify "$1" 2>/dev/null || echo absent; }
+    refused=""
+    # --no-renames: a file moved out of a protected folder shows as deleted there and is refused too.
+    staged="$(git diff --cached --no-renames --name-only)"
+    while IFS= read -r path; do
+      [ -n "$path" ] || continue
+      hit=""
+      while IFS= read -r prefix; do
+        [ -n "$prefix" ] || continue
+        case "$path" in "$prefix"*) hit=1 ;; esac
+      done <<<"$prefixes"
+      [ -n "$hit" ] || continue
+      if [ -n "$others" ]; then
+        mine=$(blob ":$path"); [ "$mine" = "$(blob "HEAD:$path")" ] && continue
+        from_other=""
+        for head in $others; do [ "$mine" = "$(blob "$head:$path")" ] && from_other=1; done
+        [ -n "$from_other" ] && continue
+      fi
+      refused="$refused$path"$'\n'
+    done <<<"$staged"
+    if [ -n "$refused" ]; then
+      echo "pre-commit: these staged files are under protectedPaths (someone's work in progress; agents do not commit them):" >&2
+      printf '%s' "$refused" | sed 's/^/  /' >&2
+      first="$(printf '%s' "$refused" | head -n 1)"
+      echo "pre-commit: unstage them: git restore --staged -- '$first'" >&2
+      exit 1
+    fi
+  fi
+fi
+exit 0

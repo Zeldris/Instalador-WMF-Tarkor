@@ -138,11 +138,21 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
 
 ## Flujo de trabajo
 
-Cómo trabaja Claude en este repo: [`CLAUDE.md`](../CLAUDE.md), la [bitácora](registros/traspaso.md), los
-ganchos, `tools/qa` y las skills ([runbook](runbooks/skills-y-modelos.md)).
+Cómo trabaja Claude en este repo: [`AGENTS.md`](../AGENTS.md), la [bitácora](registros/traspaso.md), los
+ganchos, `.claude/gw/scripts`, `tools/qa` y las skills ([runbook](runbooks/skills-y-modelos.md)).
 
 - [x] **FLU-1** (2026-10-21) Traer de Tarkor su flujo de trabajo y sus skills, adaptados al instalador: `CLAUDE.md`,
   [`REVIEW.md`](../REVIEW.md), bitácora, ganchos de sesión y de antes de subir, `tools/qa` con sus
   tests (job `qa` de la CI) y las skills de `.claude/skills/` con sus notas para el instalador.
   Hecho, con `/code-review` (dos rondas), `/opt-tokens` y la
   [retro](registros/retro-2026-10-21-flujo.md), cuyas cuatro propuestas se aplicaron.
+- [ ] 🚧 **FLU-2** (2026-10-22) Piloto de [Galivelop-workflow](https://github.com/Zeldris/galivelop-workflow) v0.2.0:
+  sus scripts (`.claude/gw/scripts/`), skills, ganchos, `AGENTS.md` con `CLAUDE.md` que lo importa, y una sola CI
+  (Linux, Windows y `qa` con el pre-commit de la rama base). Lo propio del instalador queda en `.claude/gw.json`,
+  `.claude/gw/*.md`, `tools/qa/{en-app,tests-app}.sh`, `tools/dev/instalar-entorno.sh` y `tools/banco/`. Hecho:
+  aplicado con el check en verde, la prueba del paso 6 de `aplicar.md` y `doctor.py` sin FAIL; revisión de código
+  y [retro](registros/retro-2026-10-22-piloto-galivelop.md). Falta: la CI de GitHub en verde (agotada; mientras,
+  `FLU-3`) y el [registro del piloto](registros/piloto-galivelop-workflow.md) cerrado.
+- [x] **FLU-3** (2026-10-22) `tools/qa/ci-local.py` (retro del piloto): con la CI de GitHub agotada, corre en local
+  los pasos de los jobs de Ubuntu de `comprobar.yml` (los lee del workflow, no los copia) y, con `--apuntar`, deja
+  fecha, commit y resultado en [`ci-local.md`](registros/ci-local.md). El job de Windows sale como «sin cubrir».

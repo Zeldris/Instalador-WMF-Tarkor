@@ -1,20 +1,13 @@
 ---
 name: prototype
 description: Build a throwaway prototype to answer a design question. Use when the user wants to sanity-check whether a state model or logic feels right, or explore what a UI should look like.
+license: MIT (see LICENSE-mattpocock-skills)
+metadata:
+  version: "0.2.0"
+  source: "mattpocock/skills@5beb35b"
 ---
 
-> **En este repositorio:** en español. Se usa dentro de una ronda de diseño (`grilling`) cuando
-> la usuaria tiene que ver una pantalla o un flujo para decidir (pasos del asistente, Ajustes,
-> cómo se enseña el máximo seguro): sobre todo la rama de UI, en un solo HTML como
-> `diseno/prototipo-asistente.html`. La rama de lógica, para reglas que sobre el papel no se sienten
-> (qué perfil se recomienda con cada equipo, cuánto margen deja `rendimiento`).
-> Si la sesión tiene la herramienta `Artifact`, publícalo y pon el enlace en la ronda (la usuaria
-> lo abre desde el móvil); si no, envíaselo con `SendUserFile`.
->
-> **Guardarlo:** las sesiones solo suben a su rama de trabajo, así que no hay rama aparte. El HTML
-> se queda en `diseno/<tarea>-<tema>.html`; las variantes descartadas se borran al elegir. El
-> veredicto (qué pregunta resolvió y qué se eligió) va a la tarea del plan y a su documento
-> (`docs/11-diseno-del-frontal.md` para pantallas), con el enlace al prototipo.
+> Original skill by Matt Pocock ([mattpocock/skills](https://github.com/mattpocock/skills), MIT).
 
 # Prototype
 
@@ -37,3 +30,15 @@ The two branches produce very different artifacts, so getting this wrong wastes 
 4. **Skip the polish.** No tests, no error handling beyond what makes the prototype _runnable_, no abstractions. The point is to learn something fast.
 5. **Surface the state.** After every action (logic) or on every variant switch (UI), print or render the full relevant state so the user can see what changed.
 6. **Capture it when done.** Fold any validated decision into the real code, then capture the prototype itself as a **primary source**: commit it to a throwaway branch, out of main, and leave a context pointer to that branch on the implementation issue. Capture the answer too (the verdict and the question it settled) in the issue or a commit. The main branch keeps only the validated decision.
+
+## In a Galivelop-workflow project
+
+This section is the only change to the upstream skill.
+
+- **Deliver where the user can open it**, often from a phone: if the agent has a tool to publish a page (for example
+  Claude's Artifact tool), publish the prototype and put the link in the round; otherwise send the file (for example
+  with a send-file tool) or give the one command that starts it.
+- Keep a logic prototype in a throwaway folder or branch as the upstream text says; delete UI variants once one is
+  chosen.
+- Write the verdict (question, answer, what was decided) to the project's plan or to the log (`log` in
+  `.claude/gw.json`) in the same commit.

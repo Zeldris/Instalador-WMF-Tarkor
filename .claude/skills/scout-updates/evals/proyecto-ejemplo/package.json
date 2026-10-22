@@ -1,7 +1,0 @@
-{
-  "name": "recetario",
-  "version": "1.2.0",
-  "engines": { "node": ">=16" },
-  "dependencies": { "express": "4.17.1", "openai": "3.3.0" },
-  "devDependencies": { "jest": "27.5.1" }
-}

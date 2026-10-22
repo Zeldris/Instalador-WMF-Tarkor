@@ -1,8 +1,14 @@
+# Linux y Windows: compilación, tests y lint del instalador. qa: los tests de las herramientas y los enlaces, y en un
+# pull request el pre-commit de la rama base sobre sus commits (de la plantilla de galivelop-workflow v0.2.0, FLU-2),
+# para que un PR no pueda debilitar la comprobación que lo revisa.
 name: Comprobar
 
 on:
   push:
   pull_request:
+
+permissions:
+  contents: read
 
 jobs:
   linux:
@@ -50,11 +56,26 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - name: Tests de tools/qa
-        run: python3 -m unittest discover -s tools/qa/tests
-      - name: Tests de las skills
+        with:
+          fetch-depth: 0
+      - name: Tests de tools/qa y del banco
         run: |
-          python3 -m unittest discover -s .claude/skills/opt-ai
-          python3 -m unittest discover -s .claude/skills/scout-updates
+          python3 -m unittest discover -s tools/qa/tests
+          python3 -m unittest discover -s tools/banco
+      - name: Tests de los scripts de las skills
+        run: |
+          python3 -m unittest discover -s .claude/skills/opt-ai/scripts
+          python3 -m unittest discover -s .claude/skills/scout-updates/scripts
       - name: Enlaces de los documentos
-        run: python3 tools/qa/enlaces-md.py
+        run: python3 .claude/gw/scripts/enlaces-md.py
+      - name: Pre-commit de la rama base sobre el pull request
+        if: github.event_name == 'pull_request'
+        run: |
+          base="origin/$GITHUB_BASE_REF"
+          if ! git cat-file -e "$base:.githooks/pre-commit" 2>/dev/null; then
+            echo "la rama base aún no tiene .githooks/pre-commit; se salta"
+            exit 0
+          fi
+          mkdir -p .gw-ci
+          git show "$base:.githooks/pre-commit" > .gw-ci/pre-commit
+          bash .gw-ci/pre-commit --rango "$(git merge-base "$base" HEAD)..HEAD"

@@ -1,2 +1,0 @@
-httpx[http2,brotli]==0.27
-fastapi>=0.110 ; python_version >= "3.10"

@@ -2,11 +2,13 @@
 
 **Para qué:** qué skills usa Claude en el instalador, cuándo, y con qué modelo conviene trabajar cada
 tipo de tarea. Viene del repo del juego (2026-10-21, `FLU-1`), que lo armó a partir de
-[mattpocock/skills](https://github.com/mattpocock/skills); los `QA-xx` citados son de su historial.
+[mattpocock/skills](https://github.com/mattpocock/skills); los `QA-xx` citados son de su historial. Desde el
+piloto `FLU-2` (2026-10-22), las skills, los scripts (`.claude/gw/scripts/`) y los ganchos son los de
+Galivelop-workflow v0.2.0; lo propio del instalador está al final, en
+[Notas del proyecto por skill](#notas-del-proyecto-por-skill).
 
-**`.claude/skills/`, `.claude/hooks/` y `.claude/settings.json` están versionados**; el resto de
-`.claude/` es local y está en el `.gitignore`. Una skill nueva se añade con `git add` normal. Si una
-skill no está cargada, se sigue su descripción de aquí.
+**`.claude/skills/`, `.claude/gw.json`, `.claude/gw/` y `.claude/settings.json` están versionados**; el resto de
+`.claude/` es local y está en el `.gitignore`. Si una skill no está cargada, se sigue su descripción de aquí.
 
 ## Cómo se usa: el flujo de una tarea
 
@@ -25,7 +27,7 @@ lanza la usuaria.
    siguiente paso; entonces Claude dice «Punto de `/clear`: todo subido (`<commit>`). Escribe `/clear`
    y después «sigue».». Tras el `/clear` o una compactación, el gancho de `SessionStart`
    (`recuperar.py --estado`) pone la fila de la bitácora, `git status` y los últimos commits; un
-   detalle de antes se busca con `python3 tools/qa/recuperar.py "<regex>"`.
+   detalle de antes se busca con `python3 .claude/gw/scripts/recuperar.py --buscar "<texto>"`.
 2. **Si hay diseño o una decisión abierta:** `grilling` + `domain-modeling` (o `/grill-with-docs` si
    lo lanza la usuaria), contrastando con instaladores y lanzadores conocidos (Steam, itch.io,
    Heroic, LM Studio, el instalador de Ollama) y diciendo de cuál sale cada propuesta. Si una
@@ -34,12 +36,12 @@ lanza la usuaria.
    documento de `docs/` y al plan; los términos, a `GLOSSARY.md`; lo difícil de revertir, a
    `docs/adr/`.
 3. **Implementar** por pasos pequeños, cada uno con sus tests, y commit + push en cada punto estable
-   (`CLAUDE.md`). En cada paso, los tests de lo tocado: `cargo test -p tarkor-nucleo` (segundos) y
+   (`AGENTS.md`). En cada paso, los tests de lo tocado: `cargo test -p tarkor-nucleo` (segundos) y
    `npx vitest run <archivos>` en `app/`; el pre-push ya pasa `tsc`, clippy y los tests de lo que
    cambia. Al tocar pantallas o el arranque de procesos, las pruebas de punta a punta de `app/e2e`.
    Antes del commit de un arreglo, [`REVIEW.md`](../../REVIEW.md): Linux y Windows, procesos que se
    paran, compatibilidad de `config.json` y del catálogo.
-   **Los ganchos de Claude** (`.claude/hooks/`) y `.claude/settings.json`: en modo automático el
+   **Los ganchos** (`.claude/gw/scripts/`, `.githooks/`) y `.claude/settings.json`: en modo automático el
    clasificador bloquea editarlos; se pide permiso a la usuaria antes, no al fallar (retro del
    2026-10-21).
 4. **Si algo falla** (test rojo, intermitente, bug): `diagnosing-bugs` antes de tocar el código.
@@ -59,7 +61,7 @@ lanza la usuaria.
       aplica en la rama.
    3. **Cierre:** si la fase 2 añadió código (herramientas, scripts, skills con tests),
       `/code-review --max-findings all` solo de esos commits (`<commit de la retro>..HEAD`) y sus
-      arreglos. Luego `bash tools/qa/revisado.sh`, la descripción con `pr` y se crea el PR.
+      arreglos. Luego `bash .claude/gw/scripts/revisado.sh`, la descripción con `pr` y se crea el PR.
    Tras crear el PR, `subscribe_pr_activity` y se fusiona al llegar el CI en verde, nunca antes (el
    gancho `revision-antes-de-main.sh` lo bloquea). El último commit antes del PR deja la fila de la
    rama como «PR a `main`; al fusionarse, rama terminada», para que `main` la reciba ya cerrada.
@@ -69,14 +71,14 @@ lanza la usuaria.
    `**Estado:**` decidido, que `revisado.sh` exige. Cada pocas fases,
    `/improve-codebase-architecture`. Lo aceptado entra en el plan con su `INS-n` o `FLU-n`.
 
-Nada cambia de las reglas de `CLAUDE.md`: las skills se apoyan en ellas, no las sustituyen.
+Nada cambia de las reglas de `AGENTS.md`: las skills se apoyan en ellas, no las sustituyen.
 
 ## Skills que encajan
 
 | Skill | Se invoca | Qué hace | Cuándo, en este proyecto |
 |---|---|---|---|
-| `selector` (propia) | sola, al empezar tarea | Elige skill y modelo según el caso | Siempre, al arrancar una tarea, un bug o un diseño |
-| `orchestrate-dealer` (propia) | Claude, en toda tarea de más de un paso | La sesión principal parte y decide; cada trozo va a un subagente de contexto limpio que devuelve un resumen corto | Fases del plan con varias tareas (la 3 y la 4) |
+| `selector` | sola, al empezar tarea | Elige skill y modelo según el caso | Siempre, al arrancar una tarea, un bug o un diseño |
+| `orchestrate-dealer` | Claude, en toda tarea de más de un paso | La sesión principal parte y decide; cada trozo va a un subagente de contexto limpio que devuelve un resumen corto | Fases del plan con varias tareas (la 3 y la 4) |
 | `/grill-with-docs` | la usuaria o Claude al proponer diseño | Entrevista por rondas hasta no dejar nada supuesto; mantiene `GLOSSARY.md` y los ADR | Antes de diseñar algo grande: actualizaciones, firma, perfiles por encima del máximo |
 | `grilling` | por debajo de la anterior | La entrevista en sí | — |
 | `domain-modeling` | por debajo de la anterior, o al discutir términos | Glosario (`GLOSSARY.md`) y decisiones difíciles de revertir (`docs/adr/`) | Términos del instalador (perfil, máximo seguro, motor, catálogo, carpeta de datos) |
@@ -87,10 +89,11 @@ Nada cambia de las reglas de `CLAUDE.md`: las skills se apoyan en ellas, no las 
 | `opt-ai` | Claude o la usuaria con `/opt-ai`, tras medir con un Ollama real | Mide la IA local y propone ajustes por perfil de equipo | Al ajustar el catálogo y `rendimiento.rs` con lo medido en `INS-8` |
 | `scout-updates` | Solo la usuaria con `/scout-updates [sección]` (gasta muchos tokens) | Inventaria la arquitectura, busca actualizaciones con fuentes citadas y compara modelos | Nuevas versiones de Ollama, Tauri o de los modelos del catálogo |
 | `retro` | Claude, antes de crear cada PR a `main` y al cerrar fase (o la usuaria con `/retro`) | Propone mejoras del entorno: comprobaciones automáticas, instrucciones, herramientas | Las propuestas las confirma la usuaria |
-| `writing-for-agents` | sola al escribir para agentes | Cómo escribir CLAUDE.md, skills y documentos para agentes | Al tocar `CLAUDE.md`, la bitácora o una skill |
+| `writing-for-agents` | sola al escribir para agentes | Cómo escribir AGENTS.md, skills y documentos para agentes | Al tocar `AGENTS.md`, la bitácora o una skill |
 | `prototype` | Claude, dentro de una ronda de diseño | Prototipo para tirar: un HTML con botones para probar una pantalla o un flujo antes de decidir | Pantallas del asistente y de Ajustes; se guarda en `diseno/` |
 | `pr` | Claude, al abrir un PR a `main` | Descripción del PR: resumen visual, evidencia y peligro del merge | Cada PR a `main`. Evidencia: `cargo test`, clippy, `tsc`, `vitest` y las e2e si tocan pantallas |
 | `research`, `to-questionnaire` | Claude, cuando haga falta | Investigar con fuentes citadas; pasar preguntas abiertas a un cuestionario | Licencias, firma de código, requisitos de Windows |
+| `gw-doctor`, `gw-update`, `gw-init` | la usuaria, o Claude si el flujo falla | Diagnosticar el flujo (`doctor.py`), actualizarlo a una versión nueva de Galivelop-workflow, o montarlo | `gw-init` ya se usó (piloto `FLU-2`); `gw-doctor` ante un gancho que no salta |
 
 ## Descartadas, y por qué
 
@@ -128,3 +131,90 @@ Tres tamaños: **grande** (Opus), **medio** (Sonnet), **ligero** (Haiku).
   uno por fallo (`sonnet` low → `sonnet` medium → `opus` medium → `opus` high), con dos fallos como
   tope. Detalle en el `selector`.
 - En la duda, el de más riesgo.
+
+## Notas del proyecto por skill
+
+Lo propio del instalador para cada skill del flujo (las skills no se editan: vienen de Galivelop-workflow). Las de
+`opt-ai`, `opt-tokens` y `scout-updates` están en `.claude/gw/<skill>.md`, que la skill lee sola.
+
+### `improve-codebase-architecture`
+
+el informe y las propuestas, en español; cada candidata aceptada entra
+como tarea del plan (`docs/05-plan-de-trabajo.md`) con su `INS-n` o `FLU-n`.
+
+### `research`
+
+para lo que pide fuentes antes de decidir (licencias de Ollama y de los
+modelos, firma de código en Windows, requisitos de WebView2, versiones nuevas de Tauri): cada
+afirmación con su fuente primaria y la fecha de consulta, en español. Es también el molde de las
+citas de `scout-updates` y `opt-ai`. 
+
+### `domain-modeling`
+
+escribe el glosario y los ADR en español. `GLOSSARY.md` (raíz) es el vocabulario del instalador: perfil, máximo seguro, motor, catálogo,
+carpeta de datos, asistente. Un término que ya define un documento de `docs/` (el 09 los perfiles,
+el 12 el catálogo) se enlaza, no se redefine. ADR en `docs/adr/`. El juego tiene su propio
+glosario en su repositorio: un término del juego se nombra igual que allí.
+
+### `pr`
+
+cada PR a `main`, después de `/code-review` y sus arreglos. Todo en
+español; título con los identificadores de las tareas (`INS-31`, `FLU-1`…). **Evidencia:** los
+números de `cargo test -p tarkor-nucleo`, clippy, `tsc` y `vitest` (y las e2e de `app/e2e` si
+toca pantallas o el arranque de procesos), la CI de Linux y Windows, y el test que cubre cada
+cambio importante. **Peligro:** lo que ya está en el equipo de alguien es puerta de un solo
+sentido: el formato de `config.json` y del catálogo, la versión y el SHA256 del motor, las rutas de
+la carpeta de datos y cualquier cosa que pueda borrar partidas ([`REVIEW.md`](../../REVIEW.md)). Al final, las líneas de atribución que pida la sesión.
+
+### `grilling`
+
+las rondas, en español. Lo decidido se apunta en su documento de `docs/`
+y en el plan (`docs/05-plan-de-trabajo.md`), o en la bitácora (`docs/registros/traspaso.md`,
+«Decisiones de la usuaria»), como pide `AGENTS.md`.
+
+**Instaladores de referencia** (como en el repo del juego con sus juegos de referencia): antes de
+cada ronda, busca cómo resuelven esa decisión Steam, itch.io, Heroic, LM Studio y el instalador de
+Ollama (con `WebSearch`). Cada recomendación dice cuál la respalda o de cuál se aparta y por qué,
+y la ronda acaba con las fuentes enlazadas.
+
+**Prototipo:** si una pregunta pide ver una pantalla o un flujo para decidir, llama a la
+herramienta Skill con `prototype` y pon el enlace en esa pregunta.
+
+### `prototype`
+
+en español. Se usa dentro de una ronda de diseño (`grilling`) cuando
+la usuaria tiene que ver una pantalla o un flujo para decidir (pasos del asistente, Ajustes,
+cómo se enseña el máximo seguro): sobre todo la rama de UI, en un solo HTML como
+`diseno/prototipo-asistente.html`. La rama de lógica, para reglas que sobre el papel no se sienten
+(qué perfil se recomienda con cada equipo, cuánto margen deja `rendimiento`).
+Si la sesión tiene la herramienta `Artifact`, publícalo y pon el enlace en la ronda (la usuaria
+lo abre desde el móvil); si no, envíaselo con `SendUserFile`.
+
+**Guardarlo:** las sesiones solo suben a su rama de trabajo, así que no hay rama aparte. El HTML
+se queda en `diseno/<tarea>-<tema>.html`; las variantes descartadas se borran al elegir. El
+veredicto (qué pregunta resolvió y qué se eligió) va a la tarea del plan y a su documento
+(`docs/11-diseno-del-frontal.md` para pantallas), con el enlace al prototipo.
+
+### `retro`
+
+la lanza Claude antes de crear cada PR a `main`, tras el `/code-review` y sus
+arreglos y tras `/opt-tokens` (usuaria, en el repo del juego, 2026-10-13 y 2026-10-19; entre lo revisado, también la propia skill
+`opt-tokens`: si su medida o sus propuestas fallaron o se quedaron cortas), y al cerrar cada fase del plan (2026-10-06). Lo que se revisa es lo que va
+a entrar con el PR, o la fase entera,
+que suele cruzar varias sesiones:
+sus commits, la bitácora y sus tareas en el plan. Las propuestas, en español,
+se presentan a la usuaria: ella las revisa y decide, y lo aprobado se aplica en la rama antes de
+crear el PR. Solo las que confirme
+entran como tarea del plan con su `INS-n` o `FLU-n`, y quedan en `docs/registros/retro-<fecha>-<tema>.md`
+con su `**Estado:**` decidido, que `.claude/gw/scripts/revisado.sh` exige (`requireRetro`).
+
+**Las skills propias, también** (usuaria, 2026-10-19, `QA-130`): cada retro mira cómo rindieron en lo revisado
+las skills del proyecto (`.claude/skills/`: `opt-tokens`, `orchestrate-dealer`, `selector`, `pr`, esta misma…)
+y el `/code-review`, y propone mejorarlas donde fallaron o se quedaron cortas: un fallo que la revisión dejó
+pasar o encontró tarde, un ahorro de `opt-tokens` que costó calidad o no se midió, un paso que se saltó porque
+la skill no lo pedía con claridad.
+
+**Y proponen desde ellas** (usuaria, 2026-10-20): antes de proponer, lee la tabla de
+[`.claude/skills/README.md`](../../.claude/skills/README.md). Si lo que falló es de una skill propia (`opt-ai` para la IA
+local, `opt-tokens` para el gasto, `orchestrate-dealer` para el reparto…), la propuesta cambia esa skill o la usa,
+en vez de añadir una regla suelta a `AGENTS.md` o un runbook; y no propone lo que una skill ya hace.
