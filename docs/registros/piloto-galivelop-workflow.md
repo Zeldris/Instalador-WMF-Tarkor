@@ -67,9 +67,22 @@ Roces, en orden de lo que costaron:
     no se reinstala hasta entonces. Se apuntó en `tools/dev/instalar-entorno.sh` cómo correrlo a mano.
 12. **Los ganchos viejos de `settings.json` hubo que quitarlos a mano**, y la CLI de `recuperar.py` cambió
     (`--estado`, `--buscar`, `--sesion`): las referencias del proyecto se buscaron con `git grep`.
-13. **Leer el repo del flujo pidió `add_repo`** en la nube, y su respuesta sugiere registrarlo como raíz, lo que
-    cargaría su `CLAUDE.md`; aquí no se registró. `aplicar.md` podría avisarlo.
+13. **Leer el repo del flujo pidió `add_repo`** en la nube, y su respuesta sugiere registrarlo como raíz.
+    `aplicar.md` dice que no se registre, pero en «Lo que el agente no hace», al final; convendría en el paso 0.
+
+## Comprobaciones
+
+- Check completo en verde (`tsc`, clippy, enlaces, `tools/qa/tests`, `tools/banco`) y los tests de los scripts de
+  las skills; el pre-push del flujo lo corrió en el push de `8c0b422` («all green»), tras pararlo una vez por la
+  fecha de la bitácora (fila compartida: `BITACORA_COMPARTIDA=1`).
+- `doctor.py`: ningún FAIL.
+- Paso 6: con un commit de prueba en `app/src`, `git push --dry-run origin HEAD:main` se rechazó con «the pushed
+  commit has no review mark», y el gancho de Claude Code bloqueó `create_pull_request` (salida 2) por lo mismo. El
+  commit de prueba se quitó.
+- Relevo: la bitácora tiene la fila de la rama con su siguiente paso, y `recuperar.py --estado` la lee tras compactar.
+- **CI: no arrancó.** Los tres jobs fallaron sin empezar: «The job was not started because recent account payments
+  have failed or your spending limit needs to be increased». Lo tiene que arreglar la usuaria en GitHub.
 
 ## Estado
 
-**Estado:** en curso. Falta la CI de la rama, la prueba del paso 6 y el informe a la usuaria.
+**Estado:** en curso, bloqueado por la CI de GitHub (pagos o límite de gasto). Lo demás está hecho.

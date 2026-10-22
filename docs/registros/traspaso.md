@@ -15,7 +15,7 @@ cada commit.**
 | **Último commit en `main`** | Fusión del PR #2 (2026-09-28, `3418c2d`): fases `INS-1`…`INS-6` del plan con pruebas de punta a punta. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
 | **Tarea en curso · `claude/installer-docs-review-09e7vs`** | `FLU-1` hecha (flujo y skills de Tarkor, revisión, `/opt-tokens` y retro). PR a `main`; al fusionarse, rama terminada. |
-| **Tarea en curso · `claude/piloto-galivelop-workflow`** | 🚧 `FLU-2`: piloto de Galivelop-workflow v0.2.0 (scripts en `.claude/gw/scripts/`, `gw.json`, `AGENTS.md`, pre-push y CI nuevos). Hecho: todo aplicado y el check en verde. Falta: CI de la rama, prueba del paso 6 de `aplicar.md`, `doctor.py` sin FAIL y el informe a la usuaria. Registro en [piloto](piloto-galivelop-workflow.md). |
+| **Tarea en curso · `claude/piloto-galivelop-workflow`** | 🚧 `FLU-2`: piloto de Galivelop-workflow v0.2.0 aplicado; check, `doctor.py` y paso 6 (pre-push y gancho del PR rechazan sin marca) en verde. Bloqueado: la CI no arranca (pagos o límite de gasto de GitHub). Siguiente paso: cuando la usuaria lo arregle, re-lanzar la CI y, con su visto bueno, las tres fases y el PR. [Registro](piloto-galivelop-workflow.md). |
 | **Tests** | 2026-10-21: núcleo `cargo test -p tarkor-nucleo` 52, asistente `vitest` 5, `tsc -b` 0, clippy 0 avisos; `tools/qa/tests` 80 en verde. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -38,6 +38,8 @@ cada commit.**
 
 ## Decisiones de la usuaria que bloquean algo
 
+- La CI de GitHub no arranca (2026-10-22): «recent account payments have failed or your spending limit needs to be
+  increased». Bloquea `FLU-2` y cualquier PR a `main`.
 - Firma de código en Windows (`INS-11`) y licencias (`INS-12`, `INS-15`).
 - Perfiles por encima del máximo seguro: bloqueados o con aviso (`INS-14`; propuesta en el README).
 
