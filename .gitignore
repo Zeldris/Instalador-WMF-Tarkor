@@ -1,7 +1,7 @@
-# De `.claude/` solo se versionan las skills, los ganchos y `settings.json` (QA-112 de Tarkor).
+# De `.claude/` solo se versionan las skills, los ganchos, `settings.json` y el flujo (`gw.json`, `gw/`) (QA-112 de Tarkor).
 .claude/*
 !.claude/settings.json
-!.claude/hooks/
 !.claude/skills/
-.claude/revision-main.sha
+!.claude/gw.json
+!.claude/gw/
 __pycache__/

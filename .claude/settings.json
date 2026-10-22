@@ -9,36 +9,27 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/gw/scripts/session-start.sh"
           }
         ]
       },
       {
-        "matcher": "clear",
+        "matcher": "clear|compact",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/tools/qa/recuperar.py\" --estado"
-          }
-        ]
-      },
-      {
-        "matcher": "compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/tools/qa/recuperar.py\" --estado"
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/gw/scripts/recuperar.py --estado"
           }
         ]
       }
     ],
     "PreToolUse": [
       {
-        "matcher": "^mcp__github__(create_pull_request|merge_pull_request|enable_pr_auto_merge|update_pull_request)$",
+        "matcher": "^mcp__github__(create_pull_request|merge_pull_request|enable_pr_auto_merge|update_pull_request)$|^Bash$",
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/revision-antes-de-main.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/gw/scripts/revision-antes-de-main.sh"
           }
         ]
       }

@@ -10,11 +10,12 @@ cada commit.**
 
 | | |
 |---|---|
-| **Actualizado** | 2026-10-21 |
-| **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs`. Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
+| **Actualizado** | 2026-10-22 |
+| **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` y `claude/piloto-galivelop-workflow`. Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #2 (2026-09-28, `3418c2d`): fases `INS-1`…`INS-6` del plan con pruebas de punta a punta. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
 | **Tarea en curso · `claude/installer-docs-review-09e7vs`** | `FLU-1` hecha (flujo y skills de Tarkor, revisión, `/opt-tokens` y retro). PR a `main`; al fusionarse, rama terminada. |
+| **Tarea en curso · `claude/piloto-galivelop-workflow`** | 🚧 `FLU-2`: piloto de Galivelop-workflow v0.2.0 (scripts en `.claude/gw/scripts/`, `gw.json`, `AGENTS.md`, pre-push y CI nuevos). Hecho: todo aplicado y el check en verde. Falta: CI de la rama, prueba del paso 6 de `aplicar.md`, `doctor.py` sin FAIL y el informe a la usuaria. Registro en [piloto](piloto-galivelop-workflow.md). |
 | **Tests** | 2026-10-21: núcleo `cargo test -p tarkor-nucleo` 52, asistente `vitest` 5, `tsc -b` 0, clippy 0 avisos; `tools/qa/tests` 80 en verde. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -27,7 +28,7 @@ cada commit.**
 5. **El flujo de trabajo**: [skills y modelos](../runbooks/skills-y-modelos.md) y la guía de
    revisión [`REVIEW.md`](../../REVIEW.md).
 
-## Siguientes pasos (en orden)
+## Siguiente paso y los que vienen (en orden)
 
 1. Fusionar el PR #1 del repo del juego (fase 2): dos tests intermitentes de
    `routes/turn.integration.test.ts` y endurecer `lib/prisma.test.ts` (detalle en el
@@ -46,10 +47,11 @@ cada commit.**
 cd app && npm test && npx tsc -b                       # asistente (vitest + tipos)
 cd app && cargo test -p tarkor-nucleo                  # núcleo (detección, perfiles, catálogo, motor)
 cd app && cargo clippy --workspace --all-targets -- -D warnings
-python3 -m unittest discover -s tools/qa/tests         # herramientas del flujo
-python3 tools/qa/enlaces-md.py                         # enlaces de los .md
-# Entorno (dependencias de WebKit, mingw, npm, cargo, core.hooksPath): lo deja listo el gancho de inicio de
-#   sesión; a mano, tras un reinicio del contenedor: CLAUDE_CODE_REMOTE=true .claude/hooks/session-start.sh
+python3 -m unittest discover -s tools/qa/tests         # herramientas del proyecto
+python3 .claude/gw/scripts/enlaces-md.py               # enlaces de los .md
+python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-workflow) bien montado
+# Entorno (dependencias de WebKit, mingw, npm, cargo): lo deja listo el gancho de inicio de sesión
+#   (`install` de .claude/gw.json); a mano, tras un reinicio del contenedor: bash tools/dev/instalar-entorno.sh
 # Pruebas de punta a punta del asistente (tauri-driver + xvfb): ver app/README.md.
 ```
 

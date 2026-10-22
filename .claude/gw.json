@@ -1,0 +1,60 @@
+{
+  "$schema": "gw/schema/gw.schema.json",
+  "version": "0.2.0",
+  "language": "es",
+  "visibleLanguages": [],
+  "log": "docs/registros/traspaso.md",
+  "logRows": true,
+  "protectedBranch": "main",
+  "pushToProtected": "pr",
+  "install": [
+    "bash tools/dev/instalar-entorno.sh"
+  ],
+  "check": [
+    "bash tools/qa/en-app.sh npx tsc -b",
+    "bash tools/qa/en-app.sh cargo clippy -q --workspace --all-targets -- -D warnings",
+    "python3 .claude/gw/scripts/enlaces-md.py",
+    "python3 -m unittest discover -s tools/qa/tests",
+    "python3 -m unittest discover -s tools/banco"
+  ],
+  "reviewMark": "docs/registros/revisado.txt",
+  "requireRetro": true,
+  "content": [
+    "^docs/",
+    "^README\\.md$"
+  ],
+  "roadmap": false,
+  "selector": {
+    "cases": [
+      {
+        "case": "Procesos, descargas, formato de config.json o del catálogo, Linux y Windows a la vez",
+        "skill": "diagnosing-bugs si falla; si no, orchestrate-dealer",
+        "sessionModel": "grande",
+        "subagentModel": "medio con el plan cerrado"
+      }
+    ]
+  },
+  "logSections": [],
+  "designReferences": [
+    "Steam",
+    "itch.io",
+    "Heroic Games Launcher",
+    "asistente de LM Studio",
+    "instalador de Ollama"
+  ],
+  "protectedPaths": [],
+  "staleRefs": [
+    "tools/qa/(recuperar|revisado|bitacora|enlaces-md|fusionar|prepush-ramas|rojo-sin-arreglo|tests-relacionados)\\.",
+    "revision-main\\.sha"
+  ],
+  "relatedTests": {
+    "fast": [
+      "bash tools/qa/tests-app.sh {files}"
+    ],
+    "slow": []
+  },
+  "plan": [
+    "docs/05-plan-de-trabajo.md"
+  ],
+  "taskId": "(INS|FLU)-\\d+"
+}

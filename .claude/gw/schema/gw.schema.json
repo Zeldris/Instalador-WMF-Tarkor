@@ -1,0 +1,209 @@
+{
+  "$comment": "galivelop-workflow v0.2.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/zeldris/Galivelop-workflow/main/schema/gw.schema.json",
+  "title": "Galivelop-workflow project config (.claude/gw.json)",
+  "description": "Everything that varies between projects using Galivelop-workflow. Read only by scripts/config.py.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "language",
+    "log",
+    "protectedBranch",
+    "pushToProtected",
+    "check",
+    "reviewMark",
+    "content"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$",
+      "description": "Workflow version the project was applied with."
+    },
+    "language": {
+      "enum": [
+        "es",
+        "en"
+      ],
+      "description": "Templates and reply language."
+    },
+    "visibleLanguages": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 2
+      },
+      "description": "Languages every user-visible text must exist in (REVIEW.md)."
+    },
+    "log": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Hand-off log path, relative to the repo root."
+    },
+    "logRows": {
+      "type": "boolean",
+      "default": false,
+      "description": "One row per branch with a size limit (bitacora.py)."
+    },
+    "protectedBranch": {
+      "type": "string",
+      "minLength": 1
+    },
+    "pushToProtected": {
+      "enum": [
+        "direct",
+        "pr"
+      ],
+      "description": "How code reaches the protected branch. Both modes: pre-push requires the review mark on any direct push that brings code. pr: the PreToolUse hook also guards PR create/merge."
+    },
+    "install": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": [],
+      "description": "Commands that install dependencies (run in cloud sessions and CI)."
+    },
+    "check": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
+      "description": "Commands run in order on the commit being pushed; all must pass."
+    },
+    "reviewMark": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Committed file holding the reviewed commit sha."
+    },
+    "requireRetro": {
+      "type": "boolean",
+      "default": false,
+      "description": "revisado.sh requires a retro with a decided status on the branch."
+    },
+    "content": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Regexes (on repo-relative paths) of files that are content, not code: they need no code review."
+    },
+    "roadmap": {
+      "type": "boolean",
+      "default": false,
+      "description": "Optional milestones module."
+    },
+    "selector": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "case",
+              "skill"
+            ],
+            "properties": {
+              "case": {
+                "type": "string",
+                "minLength": 1
+              },
+              "skill": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sessionModel": {
+                "type": "string"
+              },
+              "subagentModel": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "logSections": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": [],
+      "description": "Headings of the log sections recuperar.py --estado shows after a compaction or /clear (without logRows). Empty: the first section and the one named Pendiente/Pending."
+    },
+    "designReferences": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": []
+    },
+    "protectedPaths": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": [],
+      "description": "Path prefixes an agent (CLAUDECODE=1) may not commit; pre-commit refuses them."
+    },
+    "staleRefs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": [],
+      "description": "Case-insensitive regexes that must not appear in docs (enlaces-md.py)."
+    },
+    "relatedTests": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fast": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "slow": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "description": "Commands for tests of what changed; {files} is replaced by the changed files."
+    },
+    "plan": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": [],
+      "description": "Plan or roadmap files/folders where tasks are ticked or struck through (bitacora.py)."
+    },
+    "taskId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Regex of the project's task ids (bitacora.py); default [A-Z]{2,5}-\\d+."
+    }
+  }
+}
