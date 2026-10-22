@@ -118,4 +118,4 @@ Roces, en orden de lo que costaron:
 
 ## Estado
 
-**Estado:** en curso. Hecho y comprobado en local; fases 1 y 2 hechas, y la revisión de `FLU-3`; faltan la marca y el PR.
+**Estado:** en curso. Hecho y comprobado en local; las tres fases hechas y el [PR #5](https://github.com/Zeldris/Instalador-WMF-Tarkor/pull/5) abierto; falta que la usuaria confirme la fusión.
