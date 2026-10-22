@@ -83,6 +83,10 @@ Roces, en orden de lo que costaron:
 18. **Detalles del pre-push:** los registros del check van a una ruta fija de `/tmp` (dos subidas a la vez se pisan);
     `prepush-ramas.sh` pasa a los tests relacionados todo lo cambiado desde la base, no solo lo que se sube; el
     gancho de inicio solo avisa (no fija `core.hooksPath`) si hay otros ganchos.
+19. **`bitacora.py closed` se rompe si `taskId` tiene un grupo con captura** (`(INS|FLU)-\d+`): `struck_ids` hace
+    `findall` y espera pares (`ValueError: too many values to unpack`), y el pre-push para sin decir por qué. Se
+    vio al cerrar la primera tarea de la rama (`FLU-3`); aquí se cambió a `(?:INS|FLU)-\d+`. Propuesta: que
+    `config.py` valide `taskId` sin grupos con captura, o envolverlo en `(?:…)` al compilar.
 
 ## Comprobaciones
 

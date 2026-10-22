@@ -15,7 +15,7 @@ cada commit.**
 | **Último commit en `main`** | Fusión del PR #2 (2026-09-28, `3418c2d`): fases `INS-1`…`INS-6` del plan con pruebas de punta a punta. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
 | **Tarea en curso · `claude/installer-docs-review-09e7vs`** | `FLU-1` hecha (flujo y skills de Tarkor, revisión, `/opt-tokens` y retro). PR a `main`; al fusionarse, rama terminada. |
-| **Tarea en curso · `claude/piloto-galivelop-workflow`** | 🚧 `FLU-2`: piloto de Galivelop-workflow v0.2.0 aplicado; check, `doctor.py`, paso 6 y la CI corrida en local en verde (2026-10-22). Fase 1 (revisión) hecha: arreglado lo del proyecto; lo del flujo, roces 15-18. Leves pendientes: `opt-tokens/scripts/medir.py` sin test; `tools/qa/en-app.sh` enlaza el `node_modules` del checkout principal aunque el commit subido cambie `package-lock.json`. Siguiente paso: `opt-tokens` y la retro, presentadas a la usuaria; luego la marca y el PR. [Registro](piloto-galivelop-workflow.md). |
+| **Tarea en curso · `claude/piloto-galivelop-workflow`** | 🚧 `FLU-2`: piloto de Galivelop-workflow v0.2.0 aplicado y comprobado en local (2026-10-22). Fases 1 y 2 hechas ([retro](retro-2026-10-22-piloto-galivelop.md); `FLU-3` aplicado, `/clear` tras el PR). Leves pendientes: `medir.py` sin test; `tools/qa/en-app.sh` enlaza el `node_modules` del checkout principal aunque cambie `package-lock.json`. Siguiente paso: revisión de los commits de `FLU-3`, `ci-local.py --apuntar`, la marca y el PR. [Registro](piloto-galivelop-workflow.md). |
 | **Tests** | 2026-10-21: núcleo `cargo test -p tarkor-nucleo` 52, asistente `vitest` 5, `tsc -b` 0, clippy 0 avisos; `tools/qa/tests` 80 en verde. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -39,11 +39,10 @@ cada commit.**
 ## Decisiones de la usuaria que bloquean algo
 
 - **CI de GitHub agotada** (2026-10-22: «recent account payments have failed or your spending limit needs to be
-  increased»). La usuaria decide que, hasta que vuelva, se sube de forma manual: antes de ir a `main`, lo que corre
-  `comprobar.yml` se corre en local y se apunta aquí con fecha y commit (Linux: `npm test`, `npm run build`,
-  `cargo test -p tarkor-nucleo`, clippy, `cargo check` del núcleo para Windows; `qa`: tests de `tools/qa`,
-  `tools/banco` y los scripts de las skills, y `enlaces-md.py`). Los tests del núcleo **en Windows** no se pueden
-  correr así: quedan pendientes hasta que vuelva la CI. Cuando vuelva, se re-lanza sobre `main`.
+  increased»). La usuaria decide que, hasta que vuelva, se sube de forma manual: antes de ir a `main`,
+  `python3 tools/qa/ci-local.py --apuntar` corre en local los jobs de Ubuntu de `comprobar.yml` y lo deja en
+  [`ci-local.md`](ci-local.md) con fecha y commit (`FLU-3`). Los tests del núcleo **en Windows** no se pueden correr
+  así: quedan pendientes hasta que vuelva la CI. Cuando vuelva, se re-lanza sobre `main`.
 - Firma de código en Windows (`INS-11`) y licencias (`INS-12`, `INS-15`).
 - Perfiles por encima del máximo seguro: bloqueados o con aviso (`INS-14`; propuesta en el README).
 
@@ -63,6 +62,8 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 
 ## Hecho recientemente
 
+- ~~`FLU-3` · CI en local~~ (2026-10-22): `tools/qa/ci-local.py` corre los jobs de Ubuntu de `comprobar.yml` y
+  apunta el resultado en [`ci-local.md`](ci-local.md) mientras la CI de GitHub está agotada.
 - ~~`FLU-1` · flujo de trabajo y skills de Tarkor~~ (2026-10-21): `CLAUDE.md`, `REVIEW.md`, bitácora,
   ganchos de sesión, pre-push y de antes de `main`, `tools/qa` con sus tests (job `qa` de la CI) y las
   skills con notas para el instalador; [retro](retro-2026-10-21-flujo.md) aplicada.

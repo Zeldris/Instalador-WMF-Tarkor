@@ -56,5 +56,5 @@
   "plan": [
     "docs/05-plan-de-trabajo.md"
   ],
-  "taskId": "(INS|FLU)-\\d+"
+  "taskId": "(?:INS|FLU)-\\d+"
 }

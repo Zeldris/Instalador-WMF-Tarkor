@@ -150,5 +150,9 @@ ganchos, `.claude/gw/scripts`, `tools/qa` y las skills ([runbook](runbooks/skill
   sus scripts (`.claude/gw/scripts/`), skills, ganchos, `AGENTS.md` con `CLAUDE.md` que lo importa, y una sola CI
   (Linux, Windows y `qa` con el pre-commit de la rama base). Lo propio del instalador queda en `.claude/gw.json`,
   `.claude/gw/*.md`, `tools/qa/{en-app,tests-app}.sh`, `tools/dev/instalar-entorno.sh` y `tools/banco/`. Hecho:
-  aplicado con el check en verde. Falta: CI en verde, la prueba del paso 6 de `aplicar.md`, `doctor.py` sin FAIL y
-  el [registro del piloto](registros/piloto-galivelop-workflow.md) cerrado.
+  aplicado con el check en verde, la prueba del paso 6 de `aplicar.md` y `doctor.py` sin FAIL; revisión de código
+  y [retro](registros/retro-2026-10-22-piloto-galivelop.md). Falta: la CI de GitHub en verde (agotada; mientras,
+  `FLU-3`) y el [registro del piloto](registros/piloto-galivelop-workflow.md) cerrado.
+- [x] **FLU-3** (2026-10-22) `tools/qa/ci-local.py` (retro del piloto): con la CI de GitHub agotada, corre en local
+  los pasos de los jobs de Ubuntu de `comprobar.yml` (los lee del workflow, no los copia) y, con `--apuntar`, deja
+  fecha, commit y resultado en [`ci-local.md`](registros/ci-local.md). El job de Windows sale como «sin cubrir».
