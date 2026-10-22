@@ -48,6 +48,7 @@ class CiLocal(unittest.TestCase):
         os.makedirs(os.path.join(self.raiz, 'app'))
         git(self.raiz, 'init', '-q')
         escribir(os.path.join(self.raiz, 'x.txt'), 'x')
+        escribir(os.path.join(self.raiz, '.gitignore'), 'comprobar.yml\nhecho.txt\ndocs/\n')
         git(self.raiz, 'add', '-A')
         git(self.raiz, 'commit', '-qm', 'x')
         self.wf = os.path.join(self.raiz, 'comprobar.yml')
@@ -104,6 +105,12 @@ class CiLocal(unittest.TestCase):
         registro = leer(os.path.join(self.raiz, ci_local.REGISTRO))
         self.assertEqual(registro.count('# CI en local'), 1)
         self.assertIn(f'`{sha}` (con cambios sin commit)', registro)
+
+    def test_apuntar_cuenta_los_archivos_sin_seguimiento(self):
+        sha = git(self.raiz, 'rev-parse', '--short', 'HEAD')
+        escribir(os.path.join(self.raiz, 'test_nuevo.py'), 'sin git add')
+        self.correr('true', 'true', '--apuntar')
+        self.assertIn(f'`{sha}` (con cambios sin commit)', leer(os.path.join(self.raiz, ci_local.REGISTRO)))
 
 
 if __name__ == '__main__':

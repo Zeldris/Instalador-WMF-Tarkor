@@ -110,7 +110,9 @@ Roces, en orden de lo que costaron:
   `check`), `tests-app.sh` tomaba la raíz del directorio actual y el banco citaba `arquitectura.md` y
   `propuestas.md` del contrato viejo de `scout-updates`. Los del flujo, como roces 15-18; los leves del proyecto, en
   la bitácora.
+- **Revisión de los commits de `FLU-3` (fase 3):** un hallazgo medio, arreglado: `ci-local.py --apuntar` no contaba
+  los archivos sin seguimiento al marcar «con cambios sin commit».
 
 ## Estado
 
-**Estado:** en curso. Hecho y comprobado en local; fase 1 hecha; faltan `opt-tokens`, la retro, la marca y el PR.
+**Estado:** en curso. Hecho y comprobado en local; fases 1 y 2 hechas, y la revisión de `FLU-3`; faltan la marca y el PR.

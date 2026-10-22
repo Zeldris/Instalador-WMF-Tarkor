@@ -132,7 +132,8 @@ def main(argv=None):
     if args.apuntar:
         sha = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], cwd=RAIZ, capture_output=True,
                              text=True).stdout.strip()
-        sucio = subprocess.run(['git', 'status', '--porcelain', '--untracked-files=no'], cwd=RAIZ,
+        # Un archivo sin seguimiento (un test nuevo sin `git add`) también cambia lo que se corrió.
+        sucio = subprocess.run(['git', 'status', '--porcelain'], cwd=RAIZ,
                                capture_output=True, text=True).stdout.strip()
         ruta = os.path.join(RAIZ, REGISTRO)
         os.makedirs(os.path.dirname(ruta), exist_ok=True)
