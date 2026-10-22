@@ -87,6 +87,9 @@ Roces, en orden de lo que costaron:
     `findall` y espera pares (`ValueError: too many values to unpack`), y el pre-push para sin decir por qué. Se
     vio al cerrar la primera tarea de la rama (`FLU-3`); aquí se cambió a `(?:INS|FLU)-\d+`. Propuesta: que
     `config.py` valide `taskId` sin grupos con captura, o envolverlo en `(?:…)` al compilar.
+20. **`revisado.sh` solo lee la primera línea del `**Estado:**` de la retro** y no acepta «aprobadas»: un estado
+    partido en dos líneas («aprobadas … / … rechazadas las demás») no cuenta como decidido. Propuesta: leer el
+    párrafo entero y aceptar «aprobad[ao]s», o que la skill `retro` dé la forma exacta de la línea.
 
 ## Comprobaciones
 

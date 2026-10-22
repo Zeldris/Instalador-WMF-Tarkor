@@ -1,7 +1,7 @@
 # Retro del 2026-10-22: piloto de Galivelop-workflow (`FLU-2`)
 
-**Estado:** presentadas a la usuaria (2026-10-22); aprobadas el `/clear` tras el PR y `tools/qa/ci-local.py`
-(`FLU-3`, aplicado en la rama); rechazadas las demás.
+**Estado:** presentadas a la usuaria (2026-10-22): aplicadas las aprobadas, rechazadas las demás.
+Aprobadas: el `/clear` tras el PR y `tools/qa/ci-local.py` (`FLU-3`, aplicado en la rama).
 
 Lo revisado: los commits de `FLU-2` en `claude/piloto-galivelop-workflow` (`8c0b422`…), la revisión de código del
 diff contra `main` (13 hallazgos, [registro del piloto](piloto-galivelop-workflow.md#comprobaciones)) y
