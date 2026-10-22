@@ -72,6 +72,17 @@ Roces, en orden de lo que costaron:
 14. **Sin CI, el flujo no tiene camino previsto.** `AGENTS.md` dice que una CI que no arranca cuenta como rojo, y el
     gancho del PR la exige; no hay forma de declarar «CI agotada, comprobado en local» (por ejemplo, un registro con
     el commit y las órdenes que el gancho acepte con confirmación de la persona).
+15. **Los tests de los scripts del flujo se quedan en su repo.** Al aplicar se borran los del proyecto
+    (`tools/qa/tests/test_{bitacora,fusionar,recuperar,…}.py`) y no llega ninguno: la regla de `REVIEW.md` «cada
+    cambio en un gancho o un script lleva su caso en los tests» no se puede cumplir en el proyecto, y la revisión
+    lo marca. Propuesta: traer los tests con los scripts, o que la CI del proyecto corra los del flujo sobre la copia.
+16. **`revision-antes-de-main.sh` usa `gh auth status`**, que el `gh` de Claude Code no tiene: sin `GITHUB_TOKEN`
+    el gancho bloquea aunque `gh api` funcione. Propuesta: probar con `gh api user`.
+17. **El gancho del PR corre en cada `Bash`** (matcher `^Bash$`) con un prefiltro `*gh*pr*` que casa con «github»
+    y «projects»; sin `python3`, cierra en fallo órdenes que nada tienen que ver.
+18. **Detalles del pre-push:** los registros del check van a una ruta fija de `/tmp` (dos subidas a la vez se pisan);
+    `prepush-ramas.sh` pasa a los tests relacionados todo lo cambiado desde la base, no solo lo que se sube; el
+    gancho de inicio solo avisa (no fija `core.hooksPath`) si hay otros ganchos.
 
 ## Comprobaciones
 
@@ -90,6 +101,12 @@ Roces, en orden de lo que costaron:
   tests de `tools/qa`, `tools/banco` y los scripts de las skills, y los enlaces. Sin Windows real: sus tests del
   núcleo quedan para cuando vuelva la CI.
 
+- **Revisión de código (fase 1)**, `/code-review --max-findings all` contra `origin/main`: 13 hallazgos. Arreglados
+  los del proyecto: el check de `AGENTS.md` repetía `.claude/gw.json` y le faltaba `tools/banco` (ahora apunta a
+  `check`), `tests-app.sh` tomaba la raíz del directorio actual y el banco citaba `arquitectura.md` y
+  `propuestas.md` del contrato viejo de `scout-updates`. Los del flujo, como roces 15-18; los leves del proyecto, en
+  la bitácora.
+
 ## Estado
 
-**Estado:** en curso. Hecho y comprobado en local; faltan las tres fases antes de `main` y el PR.
+**Estado:** en curso. Hecho y comprobado en local; fase 1 hecha; faltan `opt-tokens`, la retro, la marca y el PR.

@@ -15,7 +15,7 @@ cada commit.**
 | **Último commit en `main`** | Fusión del PR #2 (2026-09-28, `3418c2d`): fases `INS-1`…`INS-6` del plan con pruebas de punta a punta. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
 | **Tarea en curso · `claude/installer-docs-review-09e7vs`** | `FLU-1` hecha (flujo y skills de Tarkor, revisión, `/opt-tokens` y retro). PR a `main`; al fusionarse, rama terminada. |
-| **Tarea en curso · `claude/piloto-galivelop-workflow`** | 🚧 `FLU-2`: piloto de Galivelop-workflow v0.2.0 aplicado; check, `doctor.py`, paso 6 y la CI corrida en local en verde (2026-10-22). Siguiente paso: las tres fases antes de `main` (revisión, `opt-tokens` y retro, marca) y el PR, con el visto bueno de la usuaria. [Registro](piloto-galivelop-workflow.md). |
+| **Tarea en curso · `claude/piloto-galivelop-workflow`** | 🚧 `FLU-2`: piloto de Galivelop-workflow v0.2.0 aplicado; check, `doctor.py`, paso 6 y la CI corrida en local en verde (2026-10-22). Fase 1 (revisión) hecha: arreglado lo del proyecto; lo del flujo, roces 15-18. Leves pendientes: `opt-tokens/scripts/medir.py` sin test; `tools/qa/en-app.sh` enlaza el `node_modules` del checkout principal aunque el commit subido cambie `package-lock.json`. Siguiente paso: `opt-tokens` y la retro, presentadas a la usuaria; luego la marca y el PR. [Registro](piloto-galivelop-workflow.md). |
 | **Tests** | 2026-10-21: núcleo `cargo test -p tarkor-nucleo` 52, asistente `vitest` 5, `tsc -b` 0, clippy 0 avisos; `tools/qa/tests` 80 en verde. |
 
 ## Dónde está todo (para saber qué sigue)

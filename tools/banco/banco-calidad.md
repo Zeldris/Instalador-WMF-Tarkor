@@ -12,7 +12,7 @@ herramienta (en este repositorio, `opt-ai`) y no se mezcla.
   cosa. `contexto` es lo que ve el juez (la petición o la acción y lo anterior, en pocas líneas): la captura no lo
   sabe, así que se escribe a mano al elegir los casos; sin él, el juez solo ve la cola del prompt.
 - Quita antes datos personales (nombres reales, identificadores, texto libre de usuarios).
-- La ruta va en `arquitectura.md` (`banco · <componente>`), con la **rúbrica**: 4-6 criterios del proyecto (p. ej.
+- La ruta va en `.claude/gw/scout/architecture.md` (`banco · <componente>`), con la **rúbrica**: 4-6 criterios del proyecto (p. ej.
   coherencia con lo anterior, naturalidad en el idioma, fidelidad al mundo, ajuste de longitud, sin repeticiones).
 
 ## Pasada
@@ -61,5 +61,5 @@ Por la diferencia de tasa del candidato con el actual en el cara a cara:
 - **dentro del ruido** (menos de ~0,15 en cualquier sentido): deciden la memoria y la latencia, medidas en el hardware
   mínimo.
 - **pierde por más de ~0,15**: se recomienda rechazarlo. Si una causa ajena al modelo pesa en el resultado (p. ej. el
-  prompt), el motivo de `propuestas.md` dice qué cambio la quita, y la condición para reabrir es quedar **dentro del
+  prompt), el motivo de `.claude/gw/scout/proposals.md` dice qué cambio la quita, y la condición para reabrir es quedar **dentro del
   ruido** tras ese cambio.

@@ -5,7 +5,7 @@
 # El resto de archivos no corre nada. Va por `en-app.sh`, que vale también en el worktree del pre-push.
 # Uso: bash tools/qa/tests-app.sh <archivo>...   (rutas relativas a la raíz, como las pasa el pre-push)
 set -uo pipefail
-cd "$(git rev-parse --show-toplevel)"
+cd "$(dirname "$0")/../.."
 app=()
 nucleo=0
 for f in "$@"; do
