@@ -11,6 +11,12 @@ from contextlib import redirect_stdout
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import compare
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+# Installed in a project (.claude/skills/scout-updates/scripts), config.py and the schema live in .claude/gw; in the
+# workflow's own repo, at its root. The source-copy checks only make sense in the workflow's repo.
+INSTALLED = os.path.join('.claude', 'skills', 'scout-updates') in HERE
+GW_SOURCE = os.path.join(HERE, '..', '..', '..', *(['gw'] if INSTALLED else []))
+
 
 def git(root, *args):
     return subprocess.run(['git', '-c', 'user.name=t', '-c', 'user.email=t@t', *args], cwd=root,
@@ -102,7 +108,7 @@ class CompareTest(unittest.TestCase):
         self.assertIn('scoutDir: ', str(e.exception.code))
         self.assertIn('config.py not found', str(e.exception.code))
         self.assertIn('aplicar.py --update', str(e.exception.code))
-        repo = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..')
+        repo = GW_SOURCE
         gw = os.path.join(self.d, '.claude', 'gw')
         os.makedirs(os.path.join(gw, 'scripts'))
         os.makedirs(os.path.join(gw, 'schema'))
@@ -144,6 +150,8 @@ class CompareTest(unittest.TestCase):
         r = subprocess.run([sys.executable, os.path.join(installed, 'compare.py'), self.arch, '--json'], cwd=sub,
                            capture_output=True, text=True)
         self.assertIn('Dockerfile', json.loads(r.stdout)['uncounted'], r.stderr)
+        if INSTALLED:  # this copy's root is the project holding it, not self.d: the rest is for the source copy
+            return
         cwd = os.getcwd()
         self.addCleanup(os.chdir, cwd)
         os.chdir(sub)
