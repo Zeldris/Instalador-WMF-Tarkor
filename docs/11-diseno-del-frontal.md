@@ -175,7 +175,7 @@ En Ajustes y en "El motor se ha detenido" (el "Copy diagnostics" de Heroic). **C
 portapapeles con el plugin de portapapeles de Tauri (el del navegador no es fiable en WebKitGTK); "Ver detalles"
 despliega el mismo texto antes. Lleva: versión de la app, sistema, equipo analizado, perfil y uso del procesador,
 ajustes de Ollama del perfil, origen del catálogo, estado del motor (versión, en marcha, último motivo de parada),
-lo que dice `/api/ps` y las últimas 200 líneas de `motor-ia.log`. La carpeta personal se cambia por `~`. Nunca sale
+lo que dice `/api/ps` y las últimas 200 líneas de `motor-ia.log`. La carpeta personal se cambia por `~` y la carpeta de la IA sale como `<carpeta de la IA>`. Nunca sale
 del equipo si el jugador no lo pega él mismo (`08`).
 
 ### Error: el motor se ha detenido

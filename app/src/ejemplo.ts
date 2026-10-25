@@ -5,7 +5,7 @@
 
 import type { Api } from './api'
 import { catalogo, descargaGb as descargaDe } from './catalogo'
-import type { Config, Equipo, Evaluacion, PerfilEvaluado } from './tipos'
+import type { Config, Equipo, Evaluacion, PerfilEvaluado, Sobrante, UsoIa } from './tipos'
 
 export const configInicial = (): Config => ({
   version: 1,
@@ -73,6 +73,19 @@ export function evaluarEjemplo(equipo: Equipo | null): Evaluacion {
 }
 
 let guardada = configInicial()
+let sobrantes: Sobrante[] = []
+let usoSimulado: UsoIa | Error = { porcentajeGpu: 100, memoriaMb: 5400 }
+/** Para los tests: lo que dirá `usoIa` (un `Error` hace que falle, como con el motor parado). */
+export const fijarUsoIa = (uso: UsoIa | Error) => { usoSimulado = uso }
+/** Para los tests: vuelve al estado de ejemplo de los modelos sobrantes y del uso. */
+let errorCambioPerfil: string | null = null
+/** Para los tests: el siguiente cambio de perfil falla con este mensaje, sin tocar el perfil guardado. */
+export const fijarErrorCambioPerfil = (mensaje: string) => { errorCambioPerfil = mensaje }
+export const reiniciarModelos = () => { errorCambioPerfil = null; sobrantes = []; usoSimulado = { porcentajeGpu: 100, memoriaMb: 5400 } }
+const modelosDe = (id: string | null) => {
+  const perfil = catalogo.perfiles.find((p) => p.id === id) ?? catalogo.perfiles[0]
+  return [...new Set([perfil.narrador, perfil.cronista, perfil.sugerencias, perfil.embeddings])]
+}
 let cancelado = false
 const pausa = (ms: number) => new Promise((ok) => setTimeout(ok, ms))
 
@@ -144,6 +157,27 @@ export const ejemplo: Api = {
     rutasEjemplo = { ...rutasEjemplo, ia: `${destino}/Tarkor IA` }
     return { ...rutasEjemplo }
   },
+  usoIa: async () => {
+    if (usoSimulado instanceof Error) throw usoSimulado.message
+    return { ...usoSimulado }
+  },
+  cambiarPerfil: async (perfil, progreso) => {
+    cancelado = false
+    if (errorCambioPerfil) throw errorCambioPerfil
+    const antes = modelosDe(guardada.perfil)
+    const nuevos = modelosDe(perfil)
+    const faltan = nuevos.filter((m) => !guardada.modelosDescargados.includes(m))
+    for (const modelo of faltan) {
+      const total = (catalogo.modelos[modelo]?.descargaGb ?? 1) * 1024 ** 3
+      await simular(total, 8, (hecho) => progreso({ modelo, estado: 'pulling', hecho, total }))
+      progreso({ modelo, estado: 'success', hecho: total, total })
+    }
+    guardada = { ...guardada, perfil, modelosDescargados: nuevos }
+    sobrantes = antes.filter((m) => !nuevos.includes(m)).map((modelo) => ({ modelo, gb: catalogo.modelos[modelo]?.descargaGb ?? 1 }))
+    return structuredClone(guardada)
+  },
+  modelosSobrantes: async () => sobrantes.map((s) => ({ ...s })),
+  borrarModelos: async (modelos) => { sobrantes = sobrantes.filter((s) => !modelos.includes(s.modelo)) },
   comprobar: async (id) => {
     await pausa(150)
     if (['basedatos', 'juego', 'mundo'].includes(id)) return { resultado: 'omitida', motivo: 'Llega con el juego empaquetado (fase 4).' }

@@ -37,6 +37,12 @@ export default function App() {
     api.guardarConfig(siguiente).then(() => setError(null), () => setError(errores.guardar))
   }, [])
 
+  // El núcleo ya guardó este `Config` (p. ej. al cambiar de perfil): se adopta tal cual, sin volver a guardarlo.
+  const reemplazarConfig = useCallback((c: Config) => {
+    ultima.current = c
+    setConfig(c)
+  }, [])
+
   const ir = useCallback((paso: number) => actualizar({ pasoAsistente: Math.min(7, Math.max(1, paso)) }), [actualizar])
 
   // Elegir carpeta, mover la IA, y volver a evaluar los perfiles con el disco de la carpeta nueva.
@@ -78,7 +84,7 @@ export default function App() {
     return <>{aviso}<Juego abrirAjustes={() => setVista('ajustes')} repetir={() => { setVista('asistente'); actualizar({ ...configInicial(), carpetaIa: config.carpetaIa, pasoAsistente: 1 }); setEvaluacion(null) }} /></>
   }
   if (vista === 'ajustes' && evaluacion) {
-    return <>{aviso}<Ajustes config={config} evaluacion={evaluacion} rutas={rutas} cambiarCarpeta={cambiarCarpeta} actualizar={actualizar} reanalizar={analizar} volver={() => setVista('juego')} /></>
+    return <>{aviso}<Ajustes config={config} evaluacion={evaluacion} rutas={rutas} cambiarCarpeta={cambiarCarpeta} actualizar={actualizar} reemplazarConfig={reemplazarConfig} reanalizar={analizar} volver={() => setVista('juego')} /></>
   }
 
   // Sin evaluación no se puede pasar del paso 3.

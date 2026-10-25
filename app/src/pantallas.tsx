@@ -1,9 +1,10 @@
 // Pantallas del asistente de primer arranque (docs/11-diseno-del-frontal.md).
 
-import { useState } from 'react'
-import { CarpetaIa, ControlUsoCpu, DetallesTecnicos, Marco, Medidor, Pagina, Reparar, Tarjetas, useMoverCarpeta } from './componentes'
+import { useEffect, useRef, useState } from 'react'
+import { api } from './api'
+import { CarpetaIa, ControlUsoCpu, DetallesTecnicos, Marco, Medidor, Pagina, Reparar, Tarjetas, textoModelo, useMoverCarpeta } from './componentes'
 import * as tx from './textos'
-import type { Config, Equipo, Evaluacion, PerfilId, Rutas } from './tipos'
+import type { Config, Equipo, Evaluacion, PerfilId, Rutas, Sobrante, UsoIa } from './tipos'
 import { bloqueado } from './tipos'
 import { fmt, gbDeMb } from './formato'
 
@@ -175,12 +176,72 @@ export function Juego({ abrirAjustes, repetir }: { abrirAjustes: () => void; rep
   )
 }
 
-export function Ajustes({ config, evaluacion, rutas, cambiarCarpeta, actualizar, reanalizar, volver }: {
+const REFRESCO_USO_MS = 5000
+
+/** Dónde corre la IA y la memoria que ocupa, refrescado cada 5 s mientras Ajustes está abierto. Si falla, no se muestra nada. */
+function DondeCorre() {
+  const [uso, setUso] = useState<UsoIa | null>(null)
+  useEffect(() => {
+    let vivo = true
+    const leer = () => { api.usoIa().then((u) => { if (vivo) setUso(u) }, () => { if (vivo) setUso(null) }) }
+    leer()
+    const id = setInterval(leer, REFRESCO_USO_MS)
+    return () => { vivo = false; clearInterval(id) }
+  }, [])
+  if (!uso) return null
+  const d = tx.ajustes.dondeCorre
+  return (
+    <p className="peq" aria-live="polite">
+      {tx.fraseUso(uso.porcentajeGpu)}{uso.porcentajeGpu !== null && uso.memoriaMb > 0 && <span className="tenue"> · {d.memoria(fmt(uso.memoriaMb / 1024))}</span>}
+    </p>
+  )
+}
+
+/** «Cambiar y descargar» (`INS-43`): llama a `cambiar_perfil`, que da el progreso y devuelve el `Config` guardado. */
+function useCambiarPerfil(reemplazarConfig: (c: Config) => void) {
+  const [cambiando, setCambiando] = useState(false)
+  const [estado, setEstado] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [sobrantes, setSobrantes] = useState<Sobrante[]>([])
+  const pausando = useRef(false)
+  const cambiar = async (perfil: PerfilId) => {
+    pausando.current = false
+    setCambiando(true)
+    setError(null)
+    setEstado(tx.ajustes.cambiando)
+    try {
+      reemplazarConfig(await api.cambiarPerfil(perfil, (p) => setEstado(textoModelo(p))))
+      setEstado('')
+      // Con un Ollama externo el núcleo devuelve una lista vacía: sus modelos no se tocan.
+      setSobrantes(await api.modelosSobrantes().catch(() => []))
+    } catch (e) {
+      if (pausando.current) setEstado(tx.ajustes.pausado)
+      else { setEstado(''); setError(String(e)) }
+    } finally {
+      setCambiando(false)
+    }
+  }
+  const pausar = () => { pausando.current = true; void api.cancelarDescargas() }
+  const borrar = async () => {
+    setError(null)
+    try {
+      await api.borrarModelos(sobrantes.map((s) => s.modelo))
+      setSobrantes([])
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+  return { cambiando, estado, error, sobrantes, cambiar, pausar, borrar }
+}
+
+export function Ajustes({ config, evaluacion, rutas, cambiarCarpeta, actualizar, reemplazarConfig, reanalizar, volver }: {
   config: Config
   evaluacion: Evaluacion
   rutas: Rutas | null
   cambiarCarpeta: () => Promise<void>
   actualizar: (c: Partial<Config>) => void
+  /** Sustituye el estado entero por el `Config` que ya guardó el núcleo (si no, un guardado posterior volvería al perfil viejo). */
+  reemplazarConfig: (c: Config) => void
   reanalizar: () => Promise<void>
   volver: () => void
 }) {
@@ -188,6 +249,7 @@ export function Ajustes({ config, evaluacion, rutas, cambiarCarpeta, actualizar,
   const [elegido, setElegido] = useState<PerfilId>(config.perfil ?? evaluacion.recomendado)
   const [confirmado, setConfirmado] = useState(false)
   const carpeta = useMoverCarpeta(cambiarCarpeta)
+  const cambio = useCambiarPerfil(reemplazarConfig)
   const actual = evaluacion.perfiles.find((x) => x.id === (config.perfil ?? evaluacion.recomendado))!
   const nuevo = evaluacion.perfiles.find((x) => x.id === elegido)!
   const extra = Math.max(0, nuevo.descargaGb - actual.descargaGb)
@@ -195,11 +257,20 @@ export function Ajustes({ config, evaluacion, rutas, cambiarCarpeta, actualizar,
     <div className="ventana">
       <Pagina sola titulo={t.titulo} lead={t.actual(actual.nombre, fmt(actual.memoriaGb), fmt(actual.descargaGb))}
         barra={<><button type="button" className="btn" onClick={volver}>{t.volver}</button>
-          <button type="button" className="btn" onClick={reanalizar}>{t.reanalizar}</button><span className="hueco" />
-          <button type="button" className="btn pri" disabled={nuevo.id === actual.id || bloqueado(evaluacion, nuevo, confirmado)} onClick={() => actualizar({ perfil: nuevo.id })}>
+          <button type="button" className="btn" disabled={cambio.cambiando} onClick={reanalizar}>{t.reanalizar}</button><span className="hueco" />
+          {cambio.cambiando && <button type="button" className="btn" onClick={cambio.pausar}>{t.pausar}</button>}
+          <button type="button" className="btn pri" disabled={cambio.cambiando || nuevo.id === actual.id || bloqueado(evaluacion, nuevo, confirmado)} onClick={() => void cambio.cambiar(nuevo.id)}>
             {nuevo.id === actual.id ? t.actualBoton : extra > 0 ? t.cambiarDescargar(fmt(extra)) : t.cambiar}
           </button></>}>
+        <DondeCorre />
         <Medidor evaluacion={evaluacion} />
+        {cambio.estado && <p className="peq tenue" aria-live="polite">{cambio.estado}</p>}
+        {cambio.error && <div className="error" role="alert">{cambio.error}</div>}
+        {cambio.sobrantes.length > 0 && (
+          <div className="fila">
+            <button type="button" className="btn" onClick={() => void cambio.borrar()}>{t.borrar(fmt(cambio.sobrantes.reduce((a, s) => a + s.gb, 0)))}</button>
+          </div>
+        )}
         <Tarjetas evaluacion={evaluacion} seleccionado={elegido} confirmado={confirmado} onConfirmar={setConfirmado}
           onCambiarCarpeta={carpeta.mover} moviendo={carpeta.moviendo}
           onSeleccionar={(id) => { setConfirmado(false); setElegido(id) }} />

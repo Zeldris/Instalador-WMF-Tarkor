@@ -176,7 +176,7 @@ function textoMotor(p: ProgresoMotor) {
   return p.fase === 'descargando' ? tr.motor.descargando(pc(p.hecho, p.total)) : tr.motor[p.fase]
 }
 
-function textoModelo(p: ProgresoModelo) {
+export function textoModelo(p: ProgresoModelo) {
   if (p.estado === 'verificando') return tr.comprobandoModelos(pc(p.hecho, p.total))
   return p.total > 0 && p.hecho < p.total ? tr.descargandoModelo(p.modelo, pc(p.hecho, p.total)) : tr.pidiendoModelo(p.modelo)
 }

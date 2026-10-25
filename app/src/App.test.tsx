@@ -1,13 +1,14 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import App from './App'
-import { ejemplo, configInicial, fijarDiscoLibreIa, fijarErrorCarpetaIa, fijarModelosDanados, reiniciarCarpetaIa } from './ejemplo'
+import { ejemplo, configInicial, fijarDiscoLibreIa, fijarErrorCambioPerfil, fijarErrorCarpetaIa, fijarModelosDanados, fijarUsoIa, reiniciarCarpetaIa, reiniciarModelos } from './ejemplo'
 
 afterEach(async () => {
   cleanup()
   await ejemplo.guardarConfig(configInicial())
   reiniciarCarpetaIa()
   fijarModelosDanados(false)
+  reiniciarModelos()
 })
 
 const boton = (nombre: string | RegExp, timeout = 1000) => screen.findByRole('button', { name: nombre }, { timeout })
@@ -209,6 +210,47 @@ describe('asistente de primer arranque', () => {
     fireEvent.click(await boton('Reparar'))
     expect(await screen.findByText(/^Todo estaba en orden/, {}, { timeout: 3000 })).toBeTruthy()
   }, 20000)
+
+  async function hastaAjustes() {
+    await hastaElPerfil()
+    fireEvent.click(await boton(/^Descargar/))
+    fireEvent.click(await boton('Comprobar la instalación', 10000))
+    await screen.findByText(/palabras por segundo/, {}, { timeout: 5000 })
+    fireEvent.click(await boton('Continuar'))
+    fireEvent.click(await boton('Jugar'))
+    fireEvent.click(await boton(/Ajustes/))
+  }
+
+  it('en Ajustes dice dónde corre la IA, y si no responde la pantalla sigue', async () => {
+    await hastaAjustes()
+    expect(await screen.findByText(/La IA usa la gráfica al 100 %/)).toBeTruthy()
+    cleanup()
+    fijarUsoIa(new Error('El motor no está en marcha'))
+    render(<App />)
+    fireEvent.click(await boton(/Ajustes/))
+    expect(await boton('Reparar')).toBeTruthy()
+    expect(screen.queryByText(/La IA/)).toBeNull()
+  }, 30000)
+
+  it('cambiar de perfil adopta el Config devuelto, ofrece borrar lo que sobra y lo borra', async () => {
+    await hastaAjustes()
+    fireEvent.click(await boton(/^Ligero/))
+    fireEvent.click(await boton(/^Cambiar/))
+    fireEvent.click(await boton(/^Borrar modelos que ya no uso/, 5000))
+    await waitFor(() => expect(screen.queryByRole('button', { name: /^Borrar modelos que ya no uso/ })).toBeNull())
+    expect((await ejemplo.cargarConfig()).perfil).toBe('ligero')
+    expect(await ejemplo.modelosSobrantes()).toEqual([])
+  }, 30000)
+
+  it('si cambiar de perfil falla, muestra el error y sigue el perfil de antes', async () => {
+    await hastaAjustes()
+    const antes = (await ejemplo.cargarConfig()).perfil
+    fijarErrorCambioPerfil('El motor de IA no arranca con el perfil nuevo (x); sigue el perfil de antes.')
+    fireEvent.click(await boton(/^Ligero/))
+    fireEvent.click(await boton(/^Cambiar/))
+    expect((await screen.findByRole('alert')).textContent).toContain('sigue el perfil de antes')
+    expect((await ejemplo.cargarConfig()).perfil).toBe(antes)
+  }, 30000)
 
   it('guarda el progreso para continuar donde se quedó', async () => {
     await hastaElPermiso()
