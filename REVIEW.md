@@ -50,6 +50,12 @@ aquí con su `FLU-n` o `INS-n`.
 - **Linux y Windows a la vez.** Lo que toca procesos, rutas o permisos se escribe para los dos (en
   Windows no hay señales ni `chmod`; en Linux no hay `.exe`) y la CI de Windows lo compila. Un
   `#[cfg]` nuevo tiene su rama para la otra plataforma o dice por qué no la necesita.
+- **Rutas comparadas con lo que da el sistema.** En Windows `canonicalize` devuelve `\\?\C:\…` y `sysinfo` da
+  los puntos de montaje sin ese prefijo: una ruta que se compara, se busca en una lista o se guarda pasa antes por
+  la misma forma (`carpetas::sin_verbatim`).
+- **Disco que falla a medias.** Copiar, mover o guardar puede fallar en mitad: lo que queda es el estado de antes o
+  el nuevo entero (la copia parcial se borra, la carpeta vuelve si no se pudo guardar la config), y los enlaces
+  simbólicos se copian como enlaces, no siguiéndolos.
 - **Puertos.** Se pide un puerto libre (`puerto_libre`) y solo se escucha en `127.0.0.1`, nunca en
   `0.0.0.0`: el motor y el backend no se exponen a la red.
 - **Esperas con tope.** Una espera (health-check, descarga, `/api/pull`) tiene límite y se puede

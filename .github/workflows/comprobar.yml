@@ -36,8 +36,8 @@ jobs:
       - run: npm run build
       - run: cargo test -p tarkor-nucleo
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: El núcleo compila para Windows
-        run: cargo check -p tarkor-nucleo --target x86_64-pc-windows-gnu --all-targets
+      - name: El núcleo y la app compilan para Windows
+        run: cargo check -p tarkor-nucleo -p tarkor --target x86_64-pc-windows-gnu --all-targets
 
   windows:
     runs-on: windows-latest
