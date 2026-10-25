@@ -202,6 +202,7 @@ function useCambiarPerfil(reemplazarConfig: (c: Config) => void) {
   const [cambiando, setCambiando] = useState(false)
   const [estado, setEstado] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [borrando, setBorrando] = useState(false)
   const [sobrantes, setSobrantes] = useState<Sobrante[]>([])
   const pausando = useRef(false)
   const cambiar = async (perfil: PerfilId) => {
@@ -215,7 +216,7 @@ function useCambiarPerfil(reemplazarConfig: (c: Config) => void) {
       // Con un Ollama externo el núcleo devuelve una lista vacía: sus modelos no se tocan.
       setSobrantes(await api.modelosSobrantes().catch(() => []))
     } catch (e) {
-      if (pausando.current) setEstado(tx.ajustes.pausado)
+      if (pausando.current && String(e).startsWith(tx.ajustes.prefijoCancelacion)) setEstado(tx.ajustes.pausado)
       else { setEstado(''); setError(String(e)) }
     } finally {
       setCambiando(false)
@@ -224,14 +225,17 @@ function useCambiarPerfil(reemplazarConfig: (c: Config) => void) {
   const pausar = () => { pausando.current = true; void api.cancelarDescargas() }
   const borrar = async () => {
     setError(null)
+    setBorrando(true)
     try {
       await api.borrarModelos(sobrantes.map((s) => s.modelo))
       setSobrantes([])
     } catch (e) {
       setError(String(e))
+    } finally {
+      setBorrando(false)
     }
   }
-  return { cambiando, estado, error, sobrantes, cambiar, pausar, borrar }
+  return { cambiando, borrando, estado, error, sobrantes, cambiar, pausar, borrar }
 }
 
 export function Ajustes({ config, evaluacion, rutas, cambiarCarpeta, actualizar, reemplazarConfig, reanalizar, volver }: {
@@ -256,7 +260,7 @@ export function Ajustes({ config, evaluacion, rutas, cambiarCarpeta, actualizar,
   return (
     <div className="ventana">
       <Pagina sola titulo={t.titulo} lead={t.actual(actual.nombre, fmt(actual.memoriaGb), fmt(actual.descargaGb))}
-        barra={<><button type="button" className="btn" onClick={volver}>{t.volver}</button>
+        barra={<><button type="button" className="btn" disabled={cambio.cambiando} onClick={volver}>{t.volver}</button>
           <button type="button" className="btn" disabled={cambio.cambiando} onClick={reanalizar}>{t.reanalizar}</button><span className="hueco" />
           {cambio.cambiando && <button type="button" className="btn" onClick={cambio.pausar}>{t.pausar}</button>}
           <button type="button" className="btn pri" disabled={cambio.cambiando || nuevo.id === actual.id || bloqueado(evaluacion, nuevo, confirmado)} onClick={() => void cambio.cambiar(nuevo.id)}>
@@ -268,7 +272,7 @@ export function Ajustes({ config, evaluacion, rutas, cambiarCarpeta, actualizar,
         {cambio.error && <div className="error" role="alert">{cambio.error}</div>}
         {cambio.sobrantes.length > 0 && (
           <div className="fila">
-            <button type="button" className="btn" onClick={() => void cambio.borrar()}>{t.borrar(fmt(cambio.sobrantes.reduce((a, s) => a + s.gb, 0)))}</button>
+            <button type="button" className="btn" disabled={cambio.borrando || cambio.cambiando} onClick={() => void cambio.borrar()}>{cambio.borrando ? t.borrando : t.borrar(fmt(cambio.sobrantes.reduce((a, s) => a + s.gb, 0)))}</button>
           </div>
         )}
         <Tarjetas evaluacion={evaluacion} seleccionado={elegido} confirmado={confirmado} onConfirmar={setConfirmado}

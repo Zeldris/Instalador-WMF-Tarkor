@@ -197,6 +197,8 @@ export const ajustes = {
   moverCarpeta: 'Mover a otra carpeta',
   pausar: 'Pausar',
   cambiando: 'Cambiando de perfil…',
+  /** Principio del mensaje con que el núcleo informa de una pausa (`Error::Cancelado`, app/nucleo). */
+  prefijoCancelacion: 'Descarga cancelada',
   pausado: 'Cambio pausado. Lo descargado se conserva y sigue el perfil de antes.',
   borrar: (gb: string) => `Borrar modelos que ya no uso (${gb} GB)`,
   borrando: 'Borrando…',

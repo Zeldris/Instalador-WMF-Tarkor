@@ -240,6 +240,11 @@ describe('asistente de primer arranque', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: /^Borrar modelos que ya no uso/ })).toBeNull())
     expect((await ejemplo.cargarConfig()).perfil).toBe('ligero')
     expect(await ejemplo.modelosSobrantes()).toEqual([])
+    // Un guardado posterior no puede devolver el perfil viejo: sin `reemplazarConfig`, `actualizar` lo pisaba.
+    fireEvent.click(screen.getByRole('button', { name: 'Alto' }))
+    await waitFor(async () => expect((await ejemplo.cargarConfig()).usoCpu).toBe('alto'))
+    expect((await ejemplo.cargarConfig()).perfil).toBe('ligero')
+    expect(screen.getByText(/^Perfil actual: Ligero/)).toBeTruthy()
   }, 30000)
 
   it('si cambiar de perfil falla, muestra el error y sigue el perfil de antes', async () => {
