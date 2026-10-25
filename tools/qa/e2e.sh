@@ -30,12 +30,13 @@ else
 fi
 [ "${#pruebas[@]}" -gt 0 ] || fallo "no hay pruebas en app/e2e"
 
-for h in node npx xvfb-run tauri-driver WebKitWebDriver; do
-  command -v "$h" >/dev/null 2>&1 || fallo "falta '$h' (sudo apt install webkit2gtk-driver xvfb; cargo install tauri-driver --locked)"
+for h in node npx nc xvfb-run tauri-driver WebKitWebDriver; do
+  command -v "$h" >/dev/null 2>&1 || fallo "falta '$h' (sudo apt install webkit2gtk-driver xvfb netcat-openbsd; cargo install tauri-driver --locked)"
 done
 
 # Igual que en-app.sh: en un worktree, Cargo reutiliza el app/target del checkout principal.
-principal="$(cd "$(git -C "$raiz" rev-parse --git-common-dir)/.." && pwd)"
+# Ruta absoluta: la relativa (`.git`) se resolvería contra la carpeta desde la que se llama.
+principal="$(cd "$(git -C "$raiz" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 if [ "$raiz" != "$principal" ]; then export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$principal/app/target}"; fi
 binario="${CARGO_TARGET_DIR:-$raiz/app/target}/release/tarkor"
 
@@ -49,8 +50,16 @@ fi
 [ -x "$binario" ] || fallo "tras compilar no existe $binario"
 echo "e2e: binario: $binario"
 
+libre() { ! nc -z 127.0.0.1 "$1" 2>/dev/null; }
+# Un tauri-driver o un Ollama falso que siguen vivos (de un Ctrl-C) atenderían la prueba con otro HOME y otros datos.
+ocupado() { fallo "el puerto $1 está ocupado (¿un tauri-driver u ollama-falso.mjs de otra ejecución? pkill -f 'tauri-driver|ollama-falso')"; }
+limpiar() { pkill -f "tauri-driver --port $puerto" 2>/dev/null; pkill -f "ollama-falso.mjs $puerto_falso" 2>/dev/null; pkill -x WebKitWebDriver 2>/dev/null; }
+trap 'limpiar; exit 130' INT TERM
+
 fallidas=0
 for prueba in "${pruebas[@]}"; do
+  libre "$puerto" || ocupado "$puerto"
+  libre "$puerto_falso" || ocupado "$puerto_falso"
   nombre="$(basename "$prueba" .e2e.mjs)"
   log="$carpeta/$nombre.log"
   casa="$carpeta/$nombre/lucianita"
@@ -58,13 +67,22 @@ for prueba in "${pruebas[@]}"; do
   (
     export HOME="$casa" TARKOR_DATOS="$carpeta/$nombre/datos" WEBDRIVER_URL="http://127.0.0.1:$puerto"
     unset TARKOR_OLLAMA_URL
-    falso=""
+    export E2E_RAIZ="$raiz" E2E_PRUEBA="$prueba" E2E_BINARIO="$binario" E2E_CAPTURAS="$carpeta/$nombre/capturas"
+    export E2E_PUERTO="$puerto" E2E_PUERTO_FALSO="$puerto_falso" E2E_FALSO=""
     if [ "$nombre" = "asistente" ]; then
-      export TARKOR_OLLAMA_URL="http://127.0.0.1:$puerto_falso"
-      falso="node $raiz/app/e2e/ollama-falso.mjs $puerto_falso & F=\$!;"
+      export TARKOR_OLLAMA_URL="http://127.0.0.1:$puerto_falso" E2E_FALSO=1
     fi
     cd "$raiz/app"
-    exec xvfb-run -a sh -c "$falso tauri-driver --port $puerto & D=\$!; trap 'kill \$D \$F 2>/dev/null' EXIT; sleep 2; node '$prueba' '$binario' '$carpeta/$nombre/capturas'"
+    # Las rutas van por el entorno (no dentro de la orden) para que un espacio o una comilla no la rompan, y se espera
+    # a que cada servicio escuche en vez de un tiempo fijo.
+    exec xvfb-run -a bash -c '
+      escucha() { for _ in $(seq 100); do nc -z 127.0.0.1 "$1" 2>/dev/null && return 0; sleep 0.1; done; echo "e2e: nadie escucha en $1" >&2; return 1; }
+      F=; if [ -n "$E2E_FALSO" ]; then node "$E2E_RAIZ/app/e2e/ollama-falso.mjs" "$E2E_PUERTO_FALSO" & F=$!; fi
+      tauri-driver --port "$E2E_PUERTO" & D=$!
+      trap '"'"'kill $D $F 2>/dev/null'"'"' EXIT
+      escucha "$E2E_PUERTO" || exit 1
+      if [ -n "$F" ]; then escucha "$E2E_PUERTO_FALSO" || exit 1; fi
+      node "$E2E_PRUEBA" "$E2E_BINARIO" "$E2E_CAPTURAS"'
   ) >"$log" 2>&1
   if [ $? -eq 0 ]; then
     echo "PASA   $nombre"
