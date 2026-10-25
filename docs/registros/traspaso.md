@@ -12,10 +12,10 @@ cada commit.**
 |---|---|
 | **Actualizado** | 2026-10-25 |
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-25). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
-| **Último commit en `main`** | Fusión del PR #5 (2026-10-22, `89bb2ee`): `FLU-2`, piloto de Galivelop-workflow v0.2.0, y `FLU-3`, CI en local. |
+| **Último commit en `main`** | Fusión del PR #6 (2026-10-25, `14f55ce`): `INS-14`, `INS-48` y `FLU-4`. La CI de GitHub no arrancó (pago); `ci-local` en verde sobre `7276a43`, Windows sin cubrir. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 🚧 2026-10-25: la usuaria confirma subir a `main` lo actual (`INS-14`, `INS-48`, `FLU-4`). Fase 1 hecha: `/code-review` con 17 hallazgos, graves y medios arreglados; los leves, en «Siguiente paso». Fase 2 hecha: `opt-tokens` y `retro` aprobadas y aplicadas ([retro](retro-2026-10-25-ins48.md)). Fase 3: PR #6; con la CI de GitHub sin arrancar, el gancho de fusión acepta `ci-local` (aprobado). Siguiente: `ci-local`, `revisado.sh`, fusionar el #6 y `/clear`; después `INS-49` o la fase 3 del plan. |
-| **Tests** | 2026-10-25: núcleo `cargo test -p tarkor-nucleo` 70, asistente `vitest` 10, `tsc -b` 0, clippy 0 avisos, `cargo check` del núcleo para Windows (mingw) en verde. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-10-25: `INS-49` en el [PR #7](https://github.com/Zeldris/Instalador-WMF-Tarkor/pull/7) a `main`, con las tres fases hechas (revisión `94afde7`, retro `04a37c6`, marca de revisión sobre `b848bf4`); `ci-local` en verde, Windows sin cubrir. Siguiente: fusionar el PR #7 cuando la usuaria lo confirme y apuntarlo aquí. |
+| **Tests** | 2026-10-25: núcleo `cargo test -p tarkor-nucleo` 87, asistente `vitest` 14, `tsc -b` 0, clippy 0 avisos, `cargo check` del núcleo para Windows (mingw) en verde; E2E del asistente con el Ollama falso en verde. |
 
 ## Dónde está todo (para saber qué sigue)
 
@@ -37,7 +37,13 @@ cada commit.**
    ya descargado en Ajustes; no se impide mover la carpeta con una descarga en marcha (el asistente hoy no lo
    permite); `Estado::ia()` lee `config.json` en cada llamada; el aviso de restos del origen solo va a stderr;
    con poco disco el paso 3 dice «equipo insuficiente».
-4. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
+4. Pendientes leves de la revisión de `INS-49` (no vuelven a revisarse en su PR): con un `.completo` vacío (lo
+   instalado antes de `INS-49`) el primer Reparar vuelve a bajar el motor aunque esté sano; `alTerminar` de
+   Ajustes guarda los modelos del perfil leído al empezar aunque se cambie durante la reparación; el porcentaje
+   al reponer un modelo es el de cada capa y vuelve a 0 %; `escribir_sumas` relee todo el motor tras extraerlo
+   en vez de sumar al extraer; la lista única de modelos de un perfil está copiada en cuatro sitios (conviene un
+   `modelosDe(perfil)` en `catalogo.ts`).
+5. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
 
 ## Decisiones de la usuaria que bloquean algo
 
@@ -66,6 +72,8 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 
 Dos líneas cada una como mucho; el detalle está en el commit y la más antigua sale cuando hay más de 5.
 
+- ~~`INS-49` · Reparar~~ (2026-10-25): suma de cada archivo del motor y de cada capa de los modelos; reinstala o
+  vuelve a pedir solo lo dañado, desde Ajustes y desde la comprobación.
 - ~~`INS-48` · Carpeta de la IA elegible y movible~~ (2026-10-25): espacio necesario frente a libre en cada
   tarjeta, «Cambiar carpeta» en el paso 4 y «Mover a otra carpeta» en Ajustes.
 - ~~`INS-14` · Perfiles por encima del máximo seguro~~ (2026-10-25): se pueden elegir con aviso y confirmación
@@ -74,9 +82,3 @@ Dos líneas cada una como mucho; el detalle está en el commit y la más antigua
   se queda el local; dos reglas nuevas en `REVIEW.md`.
 - ~~`FLU-3` · CI en local~~ (2026-10-22): `tools/qa/ci-local.py` corre los jobs de Ubuntu de `comprobar.yml` y
   apunta el resultado en [`ci-local.md`](ci-local.md) mientras la CI de GitHub está agotada.
-- ~~`FLU-1` · flujo de trabajo y skills de Tarkor~~ (2026-10-21): `CLAUDE.md`, `REVIEW.md`, bitácora,
-  ganchos de sesión, pre-push y de antes de `main`, `tools/qa` con sus tests (job `qa` de la CI) y las
-  skills con notas para el instalador; [retro](retro-2026-10-21-flujo.md) aplicada.
-- ~~`INS-1`…`INS-6`, `INS-3b`, `INS-13`, `INS-21`…`INS-27` · renumeradas~~ (2026-10-21): las tareas
-  ya hechas del plan llevan ahora su identificador `INS-n` (antes 0.1, 2.1…), para que la bitácora y
-  el pre-push las sigan.

@@ -2,7 +2,7 @@
 // navegador normal, y los tests) usa un equipo de ejemplo y descargas simuladas.
 
 import { Channel, invoke } from '@tauri-apps/api/core'
-import type { Comprobacion, Config, Equipo, Evaluacion, InfoMotor, ProgresoModelo, ProgresoMotor, Rutas } from './tipos'
+import type { Comprobacion, Config, Equipo, Evaluacion, InfoMotor, ProgresoModelo, ProgresoMotor, Reparacion, Rutas } from './tipos'
 import { open } from '@tauri-apps/plugin-dialog'
 import { ejemplo } from './ejemplo'
 
@@ -19,6 +19,8 @@ export interface Api {
   iniciarMotor(): Promise<void>
   descargarModelos(progreso: (p: ProgresoModelo) => void): Promise<string[]>
   cancelarDescargas(): Promise<void>
+  /** Comprueba el motor y los modelos del perfil y repone lo que falte o esté dañado. */
+  reparar(motor: (p: ProgresoMotor) => void, modelos: (p: ProgresoModelo) => void): Promise<Reparacion>
   comprobar(id: string): Promise<Comprobacion>
   /** Diálogo de carpeta del sistema; null si se cancela. */
   elegirCarpeta(): Promise<string | null>
@@ -43,6 +45,7 @@ const tauri: Api = {
   iniciarMotor: () => invoke('iniciar_motor'),
   descargarModelos: (progreso) => invoke('descargar_modelos', { canal: canal(progreso) }),
   cancelarDescargas: () => invoke('cancelar_descargas'),
+  reparar: (motor, modelos) => invoke('reparar', { canalMotor: canal(motor), canal: canal(modelos) }),
   comprobar: (id) => invoke('comprobar', { id }),
   elegirCarpeta: async () => {
     const r = await open({ directory: true })

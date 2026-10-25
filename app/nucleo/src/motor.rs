@@ -5,7 +5,8 @@
 //!    donde se quedó (`.part` + cabecera Range).
 //! 2. Comprueba su SHA256 contra la suma del catálogo. Si no coincide, lo borra y avisa.
 //! 3. Lo extrae en una carpeta temporal y la renombra al final: nunca queda un motor a medias.
-//! 4. Borra el paquete descargado para no ocupar el doble.
+//! 4. Borra el paquete descargado para no ocupar el doble. Antes apunta en `.completo` la suma de
+//!    cada archivo extraído, para que «Reparar» ([`reparar`]) pueda comprobarlo sin el paquete.
 
 use crate::catalogo::{Motor, PaqueteMotor};
 use sha2::{Digest, Sha256};
@@ -79,11 +80,17 @@ pub fn instalar(
     cancelar: &AtomicBool,
     progreso: &mut dyn FnMut(Progreso),
 ) -> Result<PathBuf, Error> {
-    let destino = carpeta(ia, motor);
     if instalado(ia, motor) {
         progreso(Progreso::Listo);
-        return Ok(ejecutable(&destino));
+        return Ok(ejecutable(&carpeta(ia, motor)));
     }
+    reinstalar(ia, motor, cancelar, progreso)
+}
+
+/// Descarga, verifica y extrae el motor aunque ya esté instalado. El motor que hubiera sigue
+/// entero hasta el último paso, y vuelve a su sitio si ese paso falla.
+fn reinstalar(ia: &Path, motor: &Motor, cancelar: &AtomicBool, progreso: &mut dyn FnMut(Progreso)) -> Result<PathBuf, Error> {
+    let destino = carpeta(ia, motor);
     let paquete = motor.paquete().ok_or(Error::SinPaquete)?;
     let descargas = ia.join("descargas");
     fs::create_dir_all(&descargas)?;
@@ -102,15 +109,95 @@ pub fn instalar(
     let tmp = destino.with_extension("extrayendo");
     let _ = fs::remove_dir_all(&tmp);
     fs::create_dir_all(&tmp)?;
-    extraer(&archivo, paquete, &tmp)?;
-    File::create(tmp.join(MARCA_COMPLETO))?;
-    let _ = fs::remove_dir_all(&destino);
-    fs::rename(&tmp, &destino)?;
+    if let Err(e) = extraer(&archivo, paquete, &tmp).and_then(|()| Ok(escribir_sumas(&tmp)?)).and_then(|()| sustituir(&tmp, &destino)) {
+        let _ = fs::remove_dir_all(&tmp);
+        return Err(e);
+    }
     fs::remove_file(&archivo)?;
     borrar_versiones_antiguas(ia, motor);
 
     progreso(Progreso::Listo);
     Ok(ejecutable(&destino))
+}
+
+/// «Reparar» (`INS-49`, docs/11): comprueba la suma de cada archivo del motor y, si alguno falta o
+/// está dañado, lo vuelve a instalar entero (el «Verificar archivos» de Steam). Devuelve si hubo
+/// que reinstalarlo. Un motor sin sumas en `.completo` (instalado antes de que las llevara) no se
+/// puede comprobar y también se reinstala.
+pub fn reparar(ia: &Path, motor: &Motor, cancelar: &AtomicBool, progreso: &mut dyn FnMut(Progreso)) -> Result<bool, Error> {
+    progreso(Progreso::Verificando);
+    if integro(ia, motor, cancelar)? {
+        progreso(Progreso::Listo);
+        return Ok(false);
+    }
+    reinstalar(ia, motor, cancelar, progreso)?;
+    Ok(true)
+}
+
+/// El motor está instalado y cada archivo apuntado en `.completo` conserva su suma.
+pub fn integro(ia: &Path, motor: &Motor, cancelar: &AtomicBool) -> Result<bool, Error> {
+    let c = carpeta(ia, motor);
+    let Ok(sumas) = fs::read_to_string(c.join(MARCA_COMPLETO)) else { return Ok(false) };
+    let mut hay = false;
+    for linea in sumas.lines() {
+        if cancelar.load(Ordering::Relaxed) {
+            return Err(Error::Cancelado);
+        }
+        let Some((suma, ruta)) = linea.split_once("  ") else { return Ok(false) };
+        if sha256(&c.join(ruta)).ok().as_deref() != Some(suma) {
+            return Ok(false);
+        }
+        hay = true;
+    }
+    Ok(hay && ejecutable(&c).exists())
+}
+
+/// Pone `nuevo` en lugar de `destino`. El motor anterior se aparta entero antes (en Windows falla
+/// si algún archivo sigue abierto, y entonces no se ha tocado nada) y vuelve si el cambio falla.
+fn sustituir(nuevo: &Path, destino: &Path) -> Result<(), Error> {
+    let apartado = destino.with_extension("anterior");
+    let _ = fs::remove_dir_all(&apartado);
+    let habia = destino.exists();
+    if habia {
+        fs::rename(destino, &apartado)?;
+    }
+    if let Err(e) = fs::rename(nuevo, destino) {
+        if habia {
+            let _ = fs::rename(&apartado, destino);
+        }
+        return Err(e.into());
+    }
+    let _ = fs::remove_dir_all(&apartado);
+    Ok(())
+}
+
+/// Escribe `.completo` con una línea `<sha256>  <ruta relativa>` por archivo, como `sha256sum`.
+/// Un enlace simbólico a un archivo (las `.so` del paquete de Linux) se apunta con la suma de su
+/// destino: si el enlace falta o se rompe, la comprobación falla.
+fn escribir_sumas(carpeta_motor: &Path) -> io::Result<()> {
+    let mut archivos = Vec::new();
+    listar(carpeta_motor, Path::new(""), &mut archivos)?;
+    archivos.sort();
+    let mut sumas = String::new();
+    for ruta in archivos {
+        let relativa = ruta.iter().map(|c| c.to_string_lossy()).collect::<Vec<_>>().join("/");
+        sumas.push_str(&format!("{}  {relativa}\n", sha256(&carpeta_motor.join(&ruta))?));
+    }
+    fs::write(carpeta_motor.join(MARCA_COMPLETO), sumas)
+}
+
+fn listar(base: &Path, relativa: &Path, archivos: &mut Vec<PathBuf>) -> io::Result<()> {
+    for e in fs::read_dir(base.join(relativa))? {
+        let e = e?;
+        let ruta = relativa.join(e.file_name());
+        let tipo = e.file_type()?;
+        if tipo.is_dir() {
+            listar(base, &ruta, archivos)?;
+        } else if (tipo.is_file() || tipo.is_symlink() && e.path().is_file()) && ruta != Path::new(MARCA_COMPLETO) {
+            archivos.push(ruta);
+        }
+    }
+    Ok(())
 }
 
 /// Tras actualizar el motor, las versiones anteriores sobran.
@@ -306,5 +393,107 @@ mod tests {
         assert!(matches!(r, Err(Error::Danado)), "{r:?}");
         assert!(!dir.path().join("descargas/paquete").exists());
         assert!(!instalado(dir.path(), &motor));
+    }
+
+    /// Un motor instalado a mano: `bin/ollama` y una biblioteca, con sus sumas.
+    fn motor_instalado(ia: &Path) -> Motor {
+        let motor = crate::catalogo::Catalogo::incrustado().motor;
+        let c = carpeta(ia, &motor);
+        fs::create_dir_all(ejecutable(&c).parent().unwrap()).unwrap();
+        fs::create_dir_all(c.join("lib/ollama")).unwrap();
+        fs::write(ejecutable(&c), b"ollama").unwrap();
+        fs::write(c.join("lib/ollama/libggml.so"), b"ggml").unwrap();
+        escribir_sumas(&c).unwrap();
+        motor
+    }
+
+    #[test]
+    fn las_sumas_de_cada_archivo_detectan_un_motor_danado() {
+        let dir = tempfile::tempdir().unwrap();
+        let motor = motor_instalado(dir.path());
+        let c = carpeta(dir.path(), &motor);
+        let sumas = fs::read_to_string(c.join(MARCA_COMPLETO)).unwrap();
+        assert!(sumas.contains("  lib/ollama/libggml.so\n"), "{sumas}");
+        assert!(integro(dir.path(), &motor, &AtomicBool::new(false)).unwrap());
+        fs::write(c.join("lib/ollama/libggml.so"), b"gml").unwrap();
+        assert!(!integro(dir.path(), &motor, &AtomicBool::new(false)).unwrap());
+        fs::remove_file(c.join("lib/ollama/libggml.so")).unwrap();
+        assert!(!integro(dir.path(), &motor, &AtomicBool::new(false)).unwrap());
+    }
+
+    #[test]
+    fn un_motor_sin_sumas_no_cuenta_como_integro() {
+        let dir = tempfile::tempdir().unwrap();
+        let motor = motor_instalado(dir.path());
+        fs::write(carpeta(dir.path(), &motor).join(MARCA_COMPLETO), b"").unwrap();
+        assert!(instalado(dir.path(), &motor));
+        assert!(!integro(dir.path(), &motor, &AtomicBool::new(false)).unwrap());
+    }
+
+    #[test]
+    fn reparar_un_motor_sano_no_descarga_nada() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut motor = motor_instalado(dir.path());
+        motor.url_base = "http://127.0.0.1:9/".into();
+        let mut avisos = Vec::new();
+        assert!(!reparar(dir.path(), &motor, &AtomicBool::new(false), &mut |p| avisos.push(p)).unwrap());
+        assert_eq!(avisos, [Progreso::Verificando, Progreso::Listo]);
+    }
+
+    #[test]
+    fn reparar_un_motor_danado_lo_vuelve_a_instalar() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut motor = motor_instalado(dir.path());
+        fs::write(ejecutable(&carpeta(dir.path(), &motor)), b"roto").unwrap();
+        // El servidor sirve otro paquete: llega a descargarlo, que es lo que se comprueba aquí.
+        let url = servidor(b"no es ollama".to_vec());
+        motor.url_base = url.trim_end_matches("paquete").to_string();
+        motor.paquetes.insert(std::env::consts::OS.into(), PaqueteMotor { archivo: "paquete".into(), sha256: "0".repeat(64), descarga_gb: 0.0 });
+        let r = reparar(dir.path(), &motor, &AtomicBool::new(false), &mut |_| {});
+        assert!(matches!(r, Err(Error::Danado)), "{r:?}");
+        // Una reparación que falla no deja sin motor: el de antes sigue instalado como estaba.
+        assert!(instalado(dir.path(), &motor));
+        assert_eq!(fs::read(ejecutable(&carpeta(dir.path(), &motor))).unwrap(), b"roto");
+    }
+
+    #[test]
+    fn la_comprobacion_del_motor_se_puede_cancelar() {
+        let dir = tempfile::tempdir().unwrap();
+        let motor = motor_instalado(dir.path());
+        let r = integro(dir.path(), &motor, &AtomicBool::new(true));
+        assert!(matches!(r, Err(Error::Cancelado)), "{r:?}");
+    }
+
+    #[test]
+    fn sustituir_cambia_el_motor_y_lo_devuelve_si_falla() {
+        let dir = tempfile::tempdir().unwrap();
+        let (nuevo, destino) = (dir.path().join("nuevo"), dir.path().join("0.1"));
+        fs::create_dir_all(&destino).unwrap();
+        fs::write(destino.join("viejo"), b"v").unwrap();
+        // Sin `nuevo`, el cambio falla y el motor de antes vuelve a su sitio.
+        assert!(sustituir(&nuevo, &destino).is_err());
+        assert!(destino.join("viejo").exists());
+        fs::create_dir_all(&nuevo).unwrap();
+        fs::write(nuevo.join("nuevo"), b"n").unwrap();
+        sustituir(&nuevo, &destino).unwrap();
+        assert!(destino.join("nuevo").exists() && !destino.join("viejo").exists());
+        assert!(!destino.with_extension("anterior").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn un_enlace_roto_del_motor_se_detecta() {
+        let dir = tempfile::tempdir().unwrap();
+        let motor = crate::catalogo::Catalogo::incrustado().motor;
+        let c = carpeta(dir.path(), &motor);
+        fs::create_dir_all(ejecutable(&c).parent().unwrap()).unwrap();
+        fs::create_dir_all(c.join("lib")).unwrap();
+        fs::write(ejecutable(&c), b"ollama").unwrap();
+        fs::write(c.join("lib/libcudart.so.12.8"), b"cuda").unwrap();
+        std::os::unix::fs::symlink("libcudart.so.12.8", c.join("lib/libcudart.so.12")).unwrap();
+        escribir_sumas(&c).unwrap();
+        assert!(fs::read_to_string(c.join(MARCA_COMPLETO)).unwrap().contains("  lib/libcudart.so.12\n"));
+        fs::remove_file(c.join("lib/libcudart.so.12")).unwrap();
+        assert!(!integro(dir.path(), &motor, &AtomicBool::new(false)).unwrap());
     }
 }

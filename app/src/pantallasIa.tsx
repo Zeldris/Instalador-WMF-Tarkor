@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from './api'
-import { Marco } from './componentes'
+import { Marco, Reparar } from './componentes'
 import * as tx from './textos'
 import type { Config, Evaluacion, ProgresoMotor } from './tipos'
 import { fmt } from './formato'
@@ -154,13 +154,14 @@ export function Comprobacion({ ir }: { ir: (paso: number) => void }) {
   const t = tx.comprobacion
   const [estados, setEstados] = useState<EstadoComp[]>(() => t.pasos.map(() => 'pendiente'))
   const [detalles, setDetalles] = useState<string[]>(() => t.pasos.map(() => ''))
-  const [desde, setDesde] = useState(0)
+  // Cada reintento es una ronda nueva, aunque empiece en el mismo paso que la anterior.
+  const [ronda, setRonda] = useState({ desde: 0, n: 0 })
   const [copiado, setCopiado] = useState('')
 
   useEffect(() => {
     let vivo = true
     void (async () => {
-      for (let i = desde; i < t.pasos.length; i++) {
+      for (let i = ronda.desde; i < t.pasos.length; i++) {
         if (!vivo) return
         setEstados((e) => e.map((s, j) => (j === i ? 'curso' : s)))
         try {
@@ -177,13 +178,13 @@ export function Comprobacion({ ir }: { ir: (paso: number) => void }) {
       }
     })()
     return () => { vivo = false }
-  }, [desde, t.pasos])
+  }, [ronda, t.pasos])
 
   const fallo = estados.indexOf('fallo')
   const todo = estados.every((s) => s === 'ok' || s === 'omitida')
   const reintentar = () => {
     setEstados((e) => e.map((s, j) => (j >= fallo ? 'pendiente' : s)))
-    setDesde(fallo)
+    setRonda((r) => ({ desde: fallo, n: r.n + 1 }))
   }
   const copiar = () => {
     const informe = t.pasos.map((p, i) => `${p.nombre}: ${estados[i]} ${detalles[i]}`).join('\n')
@@ -210,6 +211,7 @@ export function Comprobacion({ ir }: { ir: (paso: number) => void }) {
                 <span className="peq tenue" aria-live="polite">{copiado}</span>
               </div>
             )}
+            {estados[i] === 'fallo' && (paso.id === 'motor' || paso.id === 'modelos') && <Reparar alTerminar={reintentar} />}
           </li>
         ))}
       </ol>

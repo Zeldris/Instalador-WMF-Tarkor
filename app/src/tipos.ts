@@ -108,6 +108,14 @@ export interface ProgresoModelo {
   total: number
 }
 
+/** Resultado de «Reparar» (`INS-49`). */
+export interface Reparacion {
+  motorReinstalado: boolean
+  /** Capas de modelos dañadas o que faltaban, vueltas a descargar. */
+  capasRepuestas: number
+  modelos: string[]
+}
+
 export type Comprobacion = { resultado: 'ok'; detalle: string } | { resultado: 'omitida'; motivo: string }
 
 /** Una tarjeta pide confirmar si el perfil no cabe en memoria (solo con análisis). */

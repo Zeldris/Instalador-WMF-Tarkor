@@ -43,6 +43,9 @@ export const reiniciarCarpetaIa = () => { discoLibreIaGb = equipoEjemplo.discoLi
 let errorCarpetaIa: string | null = null
 /** Para los tests: el siguiente cambio de carpeta falla con este mensaje, como lo daría el núcleo. */
 export const fijarErrorCarpetaIa = (mensaje: string) => { errorCarpetaIa = mensaje }
+/** Simula una capa dañada: la comprobación «Modelos» falla hasta que se repara. */
+let modelosDanados = false
+export const fijarModelosDanados = (danados: boolean) => { modelosDanados = danados }
 
 export function evaluarEjemplo(equipo: Equipo | null): Evaluacion {
   const r = catalogo.reglas
@@ -116,6 +119,23 @@ export const ejemplo: Api = {
     return modelos
   },
   cancelarDescargas: async () => { cancelado = true },
+  reparar: async (motor, progreso) => {
+    cancelado = false
+    motor({ fase: 'verificando' })
+    await pausa(60)
+    if (cancelado) throw new Error('Reparación cancelada. Lo ya comprobado sigue en su sitio.')
+    motor({ fase: 'listo' })
+    const perfil = catalogo.perfiles.find((p) => p.id === guardada.perfil) ?? catalogo.perfiles[0]
+    const modelos = [...new Set([perfil.narrador, perfil.cronista, perfil.sugerencias, perfil.embeddings])]
+    modelos.forEach((_, i) => progreso({ modelo: '', estado: 'verificando', hecho: i, total: modelos.length }))
+    const capasRepuestas = modelosDanados ? 1 : 0
+    if (modelosDanados) {
+      const total = 1024 ** 3
+      await simular(total, 4, (hecho) => progreso({ modelo: modelos[0], estado: 'pulling', hecho, total }))
+      modelosDanados = false
+    }
+    return { motorReinstalado: false, capasRepuestas, modelos }
+  },
   elegirCarpeta: async () => '/mnt/tarjeta-sd',
   cambiarCarpetaIa: async (destino) => {
     await pausa(60)
@@ -127,6 +147,7 @@ export const ejemplo: Api = {
   comprobar: async (id) => {
     await pausa(150)
     if (['basedatos', 'juego', 'mundo'].includes(id)) return { resultado: 'omitida', motivo: 'Llega con el juego empaquetado (fase 4).' }
+    if (id === 'modelos' && modelosDanados) throw 'Faltan modelos: qwen2.5:7b. Vuelve al paso de descarga.'
     if (id === 'narracion') {
       return { resultado: 'ok', detalle: JSON.stringify({ texto: 'La niebla del estrecho se abre un instante y deja ver, al otro lado, las hogueras de Berig.', tokensPorSegundo: 12 }) }
     }

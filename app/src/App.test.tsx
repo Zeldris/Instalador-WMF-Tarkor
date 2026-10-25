@@ -1,12 +1,13 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import App from './App'
-import { ejemplo, configInicial, fijarDiscoLibreIa, fijarErrorCarpetaIa, reiniciarCarpetaIa } from './ejemplo'
+import { ejemplo, configInicial, fijarDiscoLibreIa, fijarErrorCarpetaIa, fijarModelosDanados, reiniciarCarpetaIa } from './ejemplo'
 
 afterEach(async () => {
   cleanup()
   await ejemplo.guardarConfig(configInicial())
   reiniciarCarpetaIa()
+  fijarModelosDanados(false)
 })
 
 const boton = (nombre: string | RegExp, timeout = 1000) => screen.findByRole('button', { name: nombre }, { timeout })
@@ -158,6 +159,55 @@ describe('asistente de primer arranque', () => {
     fireEvent.click(await boton('Continuar'))
     await screen.findByText('Todo preparado')
     expect((await ejemplo.cargarConfig()).modelosDescargados).toEqual(['qwen2.5:7b', 'qwen2.5:1.5b-instruct', 'nomic-embed-text'])
+  }, 20000)
+
+  it('si falla un modelo en la comprobación, Reparar lo repone y la comprobación sigue', async () => {
+    await hastaElPerfil()
+    fireEvent.click(await boton(/^Descargar/))
+    fijarModelosDanados(true)
+    fireEvent.click(await boton('Comprobar la instalación', 10000))
+    expect((await screen.findByRole('alert', {}, { timeout: 3000 })).textContent).toMatch(/^Faltan modelos/)
+    // Sin reparar, la capa seguiría dañada y «Modelos» volvería a fallar al relanzar.
+    fireEvent.click(await boton('Reparar'))
+    expect(await screen.findByText(/palabras por segundo/, {}, { timeout: 5000 })).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+  }, 20000)
+
+  it('Reintentar vuelve a comprobar aunque falle otra vez el mismo paso', async () => {
+    await hastaElPerfil()
+    fireEvent.click(await boton(/^Descargar/))
+    fijarModelosDanados(true)
+    fireEvent.click(await boton('Comprobar la instalación', 10000))
+    const fallo = async () => expect((await screen.findByRole('alert', {}, { timeout: 3000 })).textContent).toMatch(/^Faltan modelos/)
+    await fallo()
+    fireEvent.click(await boton('Reintentar'))
+    await fallo()
+    fireEvent.click(await boton('Reintentar'))
+    await fallo()
+  }, 20000)
+
+  it('una reparación se puede cancelar', async () => {
+    await hastaElPerfil()
+    fireEvent.click(await boton(/^Descargar/))
+    fijarModelosDanados(true)
+    fireEvent.click(await boton('Comprobar la instalación', 10000))
+    await screen.findByRole('alert', {}, { timeout: 3000 })
+    fireEvent.click(await boton('Reparar'))
+    fireEvent.click(await boton('Cancelar'))
+    expect(await screen.findByText(/^Reparación cancelada/, {}, { timeout: 3000 })).toBeTruthy()
+    expect(await boton('Reparar')).toHaveProperty('disabled', false)
+  }, 20000)
+
+  it('en Ajustes, Reparar dice si todo estaba en orden', async () => {
+    await hastaElPerfil()
+    fireEvent.click(await boton(/^Descargar/))
+    fireEvent.click(await boton('Comprobar la instalación', 10000))
+    await screen.findByText(/palabras por segundo/, {}, { timeout: 5000 })
+    fireEvent.click(await boton('Continuar'))
+    fireEvent.click(await boton('Jugar'))
+    fireEvent.click(await boton(/Ajustes/))
+    fireEvent.click(await boton('Reparar'))
+    expect(await screen.findByText(/^Todo estaba en orden/, {}, { timeout: 3000 })).toBeTruthy()
   }, 20000)
 
   it('guarda el progreso para continuar donde se quedó', async () => {

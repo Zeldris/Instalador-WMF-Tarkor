@@ -150,6 +150,22 @@ export const comprobacion = {
   copiado: 'Informe copiado',
 }
 
+export const reparar = {
+  boton: 'Reparar',
+  reparando: 'Reparando…',
+  cancelar: 'Cancelar',
+  cancelado: 'Reparación cancelada. Lo ya comprobado sigue en su sitio; puedes volver a empezarla cuando quieras.',
+  explicacion: 'Comprueba el motor de IA y los modelos archivo por archivo y vuelve a descargar solo lo que falte o esté dañado.',
+  motor: { verificando: 'Comprobando el motor de IA…', descargando: (pc: number) => `Volviendo a descargar el motor de IA (${pc} %)…`, extrayendo: 'Preparando el motor de IA…', listo: 'Motor de IA comprobado.' },
+  comprobandoModelos: (pc: number) => `Comprobando los archivos de los modelos (${pc} %)…`,
+  descargandoModelo: (m: string, pc: number) => `Descargando lo que falta de ${m} (${pc} %)…`,
+  pidiendoModelo: (m: string) => `Revisando ${m} con el servidor de modelos…`,
+  enOrden: 'Todo estaba en orden: el motor de IA y los modelos están completos.',
+  motorReinstalado: 'se ha vuelto a instalar el motor de IA',
+  capas: (n: number) => (n === 1 ? 'se ha vuelto a descargar 1 archivo de los modelos' : `se han vuelto a descargar ${n} archivos de los modelos`),
+  hecho: (partes: string[]) => `Reparado: ${partes.join(' y ')}.`,
+}
+
 export const listo = {
   titulo: 'Todo preparado',
   lead: 'Tarkor está listo para jugar.',
