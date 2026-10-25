@@ -260,7 +260,8 @@ export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpe
   const cambio = useCambiarPerfil(reemplazarConfig)
   useEffect(() => { alCambiar?.(cambio.cambiando) }, [alCambiar, cambio.cambiando])
   useEffect(() => () => alCambiar?.(false), [alCambiar])
-  const actual = evaluacion.perfiles.find((x) => x.id === (config.perfil ?? evaluacion.recomendado))!
+  // Un perfil guardado que ya no está en la evaluación cuenta como el recomendado.
+  const actual = evaluacion.perfiles.find((x) => x.id === config.perfil) ?? evaluacion.perfiles.find((x) => x.id === evaluacion.recomendado)!
   // Un id que no está en la evaluación (un perfil que ya no existe) no deja nada preseleccionado.
   const nuevo = evaluacion.perfiles.find((x) => x.id === elegido)
   const extra = nuevo ? Math.max(0, nuevo.descargaGb - actual.descargaGb) : 0

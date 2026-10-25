@@ -260,6 +260,15 @@ describe('asistente de primer arranque', () => {
     expect(screen.getByRole('button', { name: /^Cambiar/ })).toHaveProperty('disabled', true)
   })
 
+  it('en Ajustes, un perfil guardado que ya no está en la evaluación cuenta como el recomendado', async () => {
+    const evaluacion = evaluarEjemplo(equipoEjemplo)
+    const recomendado = evaluacion.perfiles.find((x) => x.id === evaluacion.recomendado)!
+    render(<Ajustes config={{ ...configInicial(), perfil: 'no-existe' as never }} evaluacion={evaluacion} rutas={null} cambiarCarpeta={async () => {}}
+      actualizar={() => {}} reemplazarConfig={() => {}} reanalizar={async () => {}} volver={() => {}} />)
+    expect(await boton('Reparar')).toBeTruthy()
+    expect(screen.getByText(new RegExp(`^Perfil actual: ${recomendado.nombre}`))).toBeTruthy()
+  })
+
   it('durante un cambio de perfil, el control de CPU, Reparar y la carpeta están desactivados', async () => {
     await hastaAjustes()
     fijarRetardoCambioPerfil(300)
