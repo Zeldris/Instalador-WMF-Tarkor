@@ -17,6 +17,7 @@ RAIZ = os.path.abspath(os.path.join(QA, '..', '..'))
 EXCEPCIONES = {
     'tools/qa/en-app.sh': 'corre una orden en app/ del worktree del pre-push (lo prueba cada push)',
     'tools/qa/tests-app.sh': 'corre `vitest related` del asistente y `cargo test` del núcleo',
+    'tools/qa/e2e.sh': 'compila la app y corre tauri-driver bajo xvfb (se prueba corriendo los E2E, no con un test)',
     '.claude/skills/opt-tokens/scripts/medir.py': 'viene sin test de galivelop-workflow v0.2.0 (apuntado en el piloto, FLU-2)',
     'tools/dev/instalar-entorno.sh': 'instala paquetes de sistema, npm y crates (lo prueba el arranque en la nube)',
 }

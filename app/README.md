@@ -42,6 +42,12 @@ viendo fallar el test con su motivo y devolviéndola.
 
 ## Prueba de punta a punta (Linux)
 
+**Para correrlas:** `bash tools/qa/e2e.sh [app/e2e/<prueba>.e2e.mjs]...` desde la raíz (sin argumentos, todas). Compila
+el binario (`npx tauri build --no-bundle`), usa ese y no el instalado, pone un `HOME` con nombre de usuario de 4+ letras,
+un `TARKOR_DATOS` nuevo y el puerto 4444 de `tauri-driver`, lo corre todo bajo `xvfb-run` y solo imprime una línea por
+prueba (y el final del log si falla; el log completo y las capturas, en la carpeta que dice). El script es la fuente de
+verdad; los pasos a mano de abajo explican qué hace por dentro.
+
 Recorre el asistente en la app instalada pulsando los botones por su texto, guarda una captura de
 cada pantalla, comprueba `config.json` y vuelve a abrir la app para ver que no repite el asistente.
 
