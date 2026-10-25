@@ -124,7 +124,9 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
   narrador al arrancar. Incluye la autopausa al perder la red con reanudación sola y la velocidad
   de la narración de prueba (ronda de diseño del 2026-10-25).
 - [ ] **INS-43** Ajustes → Rendimiento de la IA (con uso de la gráfica vía `/api/ps`) y pantalla de
-  motor detenido.
+  motor detenido. Decidido el 2026-10-25 (ver `11`): frase de dónde corre la IA y memoria real; cambiar de perfil
+  descarga, reinicia el motor y ofrece borrar lo que sobra; "Copiar informe" con "Ver detalles"; un hilo de Rust
+  vigila el motor y avisa con un evento.
 - [ ] **INS-44** NSIS: castellano, instalación por usuario, desinstalador con las dos casillas.
 - [ ] **INS-45** AppImage (+ `.deb` opcional) compilado en Ubuntu 22.04.
 - [ ] **INS-46** Workflow de GitHub Actions en el repo privado que publica releases con `SHA256SUMS`

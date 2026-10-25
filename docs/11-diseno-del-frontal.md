@@ -146,10 +146,18 @@ al paso 4. Si falla el motor de IA o un modelo, también **Reparar** (ver Ajuste
 Accesible desde el menú del juego. Mismo estilo.
 
 - Perfil actual, memoria que usa, espacio que ocupan los modelos.
+- **Dónde corre la IA** (`/api/ps` de Ollama, refrescado cada 5 s mientras Ajustes está abierto): una frase y la
+  memoria que ocupa de verdad: "La IA usa la gráfica al 100 %", "Repartida: 60 % en la gráfica y 40 % en el
+  procesador (va más lenta)" o "La IA va en el procesador"; sin nada cargado, "Se carga al narrar el primer turno".
+  El porcentaje es el de todos los modelos cargados juntos, pesados por su tamaño. Sale de `ollama ps` ("100% GPU",
+  "48%/52% CPU/GPU"), dicho en palabras de jugador (decisión de la usuaria, 2026-10-25).
 - "Volver a analizar mi equipo".
 - Las tres tarjetas del paso 4 para cambiar de perfil; si el cambio implica descargar, muestra el
-  tamaño en el botón ("Cambiar y descargar 2,7 GB"); si sobran modelos, "Borrar modelos que ya no
-  uso (X GB)".
+  tamaño en el botón ("Cambiar y descargar 2,7 GB"). Al cambiar, descarga lo que falte con su progreso y se puede
+  pausar; el perfil de antes sigue activo hasta que termina, y entonces se guarda el nuevo y se reinicia el motor
+  (Steam descarga al elegir y no toca lo instalado hasta tener lo nuevo). Después, si sobran modelos, "Borrar
+  modelos que ya no uso (X GB)", solo con el motor propio: los de un Ollama externo no se tocan (la "Desinstalar"
+  de la ficha de Steam).
 - Uso del procesador.
 - **Carpeta de los modelos**: la ruta, su espacio y "Mover…", que copia el motor y los modelos a la
   nueva carpeta, comprueba y borra la vieja (LM Studio, "My Models"; Ollama, `OLLAMA_MODELS`).
@@ -161,14 +169,26 @@ Accesible desde el menú del juego. Mismo estilo.
   coincide con «Mover a otra carpeta»; si falla, el motor vuelve a arrancar con lo que hubiera.
 - "Copiar informe del sistema" para pedir ayuda.
 
+### Copiar informe
+
+En Ajustes y en "El motor se ha detenido" (el "Copy diagnostics" de Heroic). **Copiar informe** lo deja en el
+portapapeles con el plugin de portapapeles de Tauri (el del navegador no es fiable en WebKitGTK); "Ver detalles"
+despliega el mismo texto antes. Lleva: versión de la app, sistema, equipo analizado, perfil y uso del procesador,
+ajustes de Ollama del perfil, origen del catálogo, estado del motor (versión, en marcha, último motivo de parada),
+lo que dice `/api/ps` y las últimas 200 líneas de `motor-ia.log`. La carpeta personal se cambia por `~`. Nunca sale
+del equipo si el jugador no lo pega él mismo (`08`).
+
 ### Error: el motor se ha detenido
 
-Pantalla superpuesta (sobre el juego) cuando un sidecar se cae dos veces seguidas:
+Un hilo de Rust vigila los procesos cada 2 s, cargue lo que cargue la ventana, y avisa al frontal con un evento; la
+pantalla es una ruta del asistente, como Ajustes, para que con el juego cargado (`INS-41`) se pueda navegar a ella
+(decisión de la usuaria, 2026-10-25). Pantalla superpuesta (sobre el juego) cuando un sidecar se cae dos veces seguidas:
 
 - "El motor del juego se ha detenido" / "El motor de IA se ha detenido".
 - Qué significa para la partida: "Tu partida está guardada hasta el último turno completado".
 - Acciones: **Reintentar**, "Copiar informe", "Cambiar a un perfil más ligero" (solo si el motor de
-  IA se detuvo por falta de memoria).
+  IA se detuvo por falta de memoria: lo dicen las últimas líneas de su registro, y lleva a Ajustes con el perfil de
+  menos memoria siguiente ya elegido).
 
 ## Implementación
 
