@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.2.0
+# galivelop-workflow v0.3.0
 """The transcript (.jsonl) of the Claude Code session working on this repo. Shared by recuperar.py and doctor.py.
 
 Claude Code stores each session in ~/.claude/projects/<working folder with every non-alphanumeric as "-">/. A session

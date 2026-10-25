@@ -5,7 +5,7 @@ disable-model-invocation: true
 license: MIT
 compatibility: Claude Code or any Agent Skills agent; git; python3 for scripts/ (standard library only); web search for step 3
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
   source: "Galivelop workshop; generalised from the Tarkor and installer scout-updates"
 ---
 
@@ -21,9 +21,14 @@ Everything specific to a project lives in its files, never in this skill:
 - `.claude/gw/scout-updates.md` (optional, written by the project): what to watch and what to skip. Shape: components
   worth tracking with why, ones to ignore (pinned on purpose, with the reason), preferred sources, budget limits.
   Read it first if present.
-- `.claude/gw/scout/architecture.md`: components by section, constraints and a **seal** per section (date, commit,
+- `<scoutDir>/architecture.md`: components by section, constraints and a **seal** per section (date, commit,
   source files).
-- `.claude/gw/scout/proposals.md`: everything proposed so far and its state.
+- `<scoutDir>/proposals.md`: everything proposed so far and its state.
+
+`<scoutDir>` is the `scoutDir` key of `.claude/gw.json` (default `.claude/gw/scout`; read it with
+`python3 .claude/gw/scripts/config.py get scoutDir`). The memory is written in the project's `language`; the scripts
+understand the section words in English and Spanish (`seal`/`sello`, `Constraints`/`Restricciones`,
+`Coverage`/`Cobertura`, `Component`/`Componente`).
 
 Formats: [`references/formats.md`](references/formats.md). Sources by component type:
 [`references/sources.md`](references/sources.md).
@@ -38,7 +43,7 @@ Formats: [`references/formats.md`](references/formats.md). Sources by component 
    Ask for the **constraints** (minimum hardware and free memory, local or cloud, language, budget, licences); never
    assume them. *Done when* each component has what it is, version, use and where it is configured, each section its
    seal, and the user confirmed the constraints.
-1. **Compare.** `python3 <skill folder>/scripts/compare.py <architecture.md>`. `same`: only the seal date changes.
+1. **Compare.** `python3 <skill folder>/scripts/compare.py` (the `architecture.md` of `<scoutDir>`; or pass its path). `same`: only the seal date changes.
    `changed` or `unsealed`: reread that section's files, rewrite it and seal it with the current commit.
    `uncounted`: a new manifest; add its components to its section. `--section <title>` prints one section alone;
    print the whole file only when rewriting it. *Done when* the script exits 0.
@@ -58,7 +63,10 @@ Formats: [`references/formats.md`](references/formats.md). Sources by component 
    figure (disk size and memory of the candidate against what is free).
 5. **Project evaluation** (only for components the project can measure: models with test cases, anything with a
    benchmark script). Run the user-chosen survivors through the project's own cases or script, on an engine the project
-   has; the agent running this skill judges unless the user names another judge. Latency and memory are measured
+   has; the agent running this skill judges unless the user names another judge. For models compared on text
+   quality, `scripts/quality_bench.py` (`--help`) runs a blind pairwise bench: each case twice with the order flipped,
+   names kept in a key file the judge never sees, and a summary with consistency and position bias. It needs cases
+   and a rubric written with the user; few cases give an indication, not a proof. Latency and memory are measured
    apart, on the minimum hardware. If the project has nothing to measure with, the report says what is missing and how
    to prepare it. *Done when* there is a result per candidate, or the reason it could not be run.
 6. **Report.** First a `## Coverage` table: one row per component of `architecture.md` with its result (proposal ids,
@@ -73,13 +81,13 @@ Formats: [`references/formats.md`](references/formats.md). Sources by component 
    - **how to check**: the command or URL and what to look for.
 
    Before presenting, recheck every **strong** claim yourself with its "how to check" (subagents err) and run
-   `compare.py <architecture.md> --report <report>` until it exits 0. Give **one** main recommendation and why; if
+   `compare.py --report <report>` until it exits 0. Give **one** main recommendation and why; if
    paid, why the best free one is not enough. Then add each card to `proposals.md` as `proposed` with a new id.
    *Done when* coverage exits 0, each card has its fields, is in `proposals.md` and the report was presented.
    **The skill ends there:** the user decides and, on deciding, the state changes (`accepted`, `rejected` with reason).
 
 ## Reference
 
-- Scripts (standard library, `--help`): `scripts/inventory.py`, `scripts/compare.py`; tests `scripts/test_*.py`
+- Scripts (standard library, `--help`): `scripts/inventory.py`, `scripts/compare.py`, `scripts/quality_bench.py`; tests `scripts/test_*.py`
   (`python3 -m unittest discover -s scripts`). A manifest format that is new or broken is tested by adding a case to
   `scripts/test_inventory.py`.

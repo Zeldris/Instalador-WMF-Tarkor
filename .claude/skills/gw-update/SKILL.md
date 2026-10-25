@@ -5,11 +5,13 @@ disable-model-invocation: true
 license: MIT
 compatibility: Claude Code or any Agent Skills agent; git and python3 3.8+; the Galivelop-workflow repo cloned or added to the session
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
   source: "Galivelop workshop"
 ---
 
 # gw-update
+
+If `.claude/gw/gw-update.md` exists in the project, read it first: it holds what is specific to the project.
 
 Updates what the workflow owns (scripts, skills, git hooks, settings entries, CI) and reports changes in what the
 project fills in (log, `REVIEW.md`, `GLOSSARY.md`, notes). The mechanical part is `aplicar.py`; this skill adds the

@@ -3,13 +3,15 @@ name: codebase-design
 description: Shared vocabulary for designing deep modules. Use when the user wants to design or improve a module's interface, find deepening opportunities, decide where a seam goes, make code more testable or AI-navigable, or when another skill needs the deep-module vocabulary.
 license: MIT (see LICENSE-mattpocock-skills)
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
   source: "mattpocock/skills@5beb35b"
 ---
 
 > Original skill by Matt Pocock ([mattpocock/skills](https://github.com/mattpocock/skills), MIT).
 
 # Codebase Design
+
+If `.claude/gw/codebase-design.md` exists in the project, read it first: it holds what is specific to the project.
 
 Design **deep modules**: a lot of behaviour behind a small interface, placed at a clean seam, testable through that interface. Use this language and these principles wherever code is being designed or restructured. The aim is leverage for callers, locality for maintainers, and testability for everyone.
 

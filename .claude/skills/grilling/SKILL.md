@@ -3,9 +3,11 @@ name: grilling
 description: Grill the user relentlessly about a plan, decision, or idea. Use when the user wants to stress-test their thinking, or uses any 'grill' trigger phrases.
 license: MIT (see LICENSE-mattpocock-skills)
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
   source: "mattpocock/skills@5beb35b"
 ---
+
+If `.claude/gw/grilling.md` exists in the project, read it first: it holds what is specific to the project.
 
 > Original skill by Matt Pocock ([mattpocock/skills](https://github.com/mattpocock/skills), MIT).
 

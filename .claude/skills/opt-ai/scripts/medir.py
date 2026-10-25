@@ -18,10 +18,16 @@ and % errors (over all rows). Failed calls (`app.error`) count in neither percen
 result. With --previous, every row shows its difference from the earlier log. Corrupt lines are skipped with a
 warning; tasks with no profile are warned about.
 
-Not included: per-flow timings (several calls forming one user-facing step) depend on the project's own
-identifiers; derive them from the log with a project script.
+Per turn: calls (retrieval included) that carry the same `app.turn` (any id the project picks for one user-facing
+step) form a turn. One row per profile (`profile/turn/-`): n turns, p50, p95 and max of the turn (start of its first
+call to end of its last, from `ts` and `app.duration_ms`), mean calls per turn and % of turns with a failed call.
+Calls without `app.turn`, or without a readable `ts` and `app.duration_ms`, are left out of this table; there is no
+table without `app.turn`.
+Anything finer (which calls of a turn are the user-visible wait) depends on the project's own task names: derive it
+from the log with a project script.
 """
 import argparse
+import datetime as dt
 import json
 import math
 import re
@@ -116,8 +122,38 @@ def rag_row(rs):
             'search_p50_ms': percentile(nums(rs, 'app.rag.search_ms'), 50), 'score_1': mean(firsts)}
 
 
+def instant(ts):
+    """Seconds since the epoch of an ISO 8601 `ts` ('Z' accepted, no zone = UTC); None if unreadable."""
+    try:
+        stamp = dt.datetime.fromisoformat(ts.replace('Z', '+00:00'))
+    except (AttributeError, ValueError):
+        return None
+    return (stamp if stamp.tzinfo else stamp.replace(tzinfo=dt.timezone.utc)).timestamp()
+
+
+def turn_row(turns):
+    """turns: list of lists of call records (same profile, same `app.turn`). A turn with no readable timing is left
+    out unless it failed: it still counts in `n` and `error_pct`, with no duration. Duration: earliest start (`ts` - `app.duration_ms`) to latest end (`ts`)."""
+    durations, sizes, failed, n = [], [], 0, 0
+    for rs in turns:
+        timed = [r for r in rs if is_num(r.get('app.duration_ms')) and instant(r.get('ts')) is not None]
+        has_error = any(r.get('app.error') for r in rs)
+        if not timed and not has_error:
+            continue
+        n += 1
+        failed += has_error
+        sizes.append(len(rs))
+        if timed:
+            start = min(instant(r['ts']) * 1000 - r['app.duration_ms'] for r in timed)
+            durations.append(max(instant(r['ts']) * 1000 for r in timed) - start)
+    return {'n': n, 'p50_ms': percentile(durations, 50), 'p95_ms': percentile(durations, 95),
+            'max_ms': max(durations) if durations else None, 'calls_per_turn': mean(sizes),
+            'error_pct': pct(failed, n)}
+
+
 def group(records, profile=None, excluded=DEFAULT_EXCLUDED, cold_ms=COLD_MS):
-    calls, rag = {}, {}
+    """(call rows, retrieval rows, turn rows), each keyed by (profile, task, model)."""
+    calls, rag, turns = {}, {}, {}
     for r in records:
         p = r.get('app.machine_profile') or NO_PROFILE
         if profile and p != profile:
@@ -128,10 +164,13 @@ def group(records, profile=None, excluded=DEFAULT_EXCLUDED, cold_ms=COLD_MS):
         if t in excluded:
             continue
         m = r.get('gen_ai.request.model') or NO_MODEL
+        if r.get('app.turn'):  # retrieval calls too: the turn is everything the user waited for
+            turns.setdefault(p, {}).setdefault(r['app.turn'], []).append(r)
         target = rag if r.get('gen_ai.operation.name') == 'retrieval' else calls
         target.setdefault((p, t, m), []).append(r)
     return ({k: call_row(v, cold_ms) for k, v in sorted(calls.items())},
-            {k: rag_row(v) for k, v in sorted(rag.items())})
+            {k: rag_row(v) for k, v in sorted(rag.items())},
+            {(p, 'turn', NO_MODEL): turn_row(list(ts.values())) for p, ts in sorted(turns.items())})
 
 
 def analyse(path, profile=None, warnings=None, excluded=DEFAULT_EXCLUDED, cold_ms=COLD_MS):
@@ -139,11 +178,11 @@ def analyse(path, profile=None, warnings=None, excluded=DEFAULT_EXCLUDED, cold_m
     regs = read_log(path, warnings)
     if not regs:
         warnings.append(f'{path}: no valid records')
-    calls, rag = group(regs, profile, excluded, cold_ms)
+    calls, rag, turns = group(regs, profile, excluded, cold_ms)
     missing = sorted({t for (p, t, _m) in list(calls) + list(rag) if p == NO_PROFILE})
     if missing:
         warnings.append('tasks with no profile (is the profile variable unset?): ' + ', '.join(missing))
-    return {'calls': calls, 'rag': rag, 'warnings': warnings}
+    return {'calls': calls, 'rag': rag, 'turns': turns, 'warnings': warnings}
 
 
 def difference(current, previous):
@@ -170,6 +209,7 @@ def fmt_diff(v, dec=0):
 COLS_CALLS = [('n', 0), ('p50_ms', 0), ('p95_ms', 0), ('ttft_p50_ms', 0), ('tok_in', 0), ('tok_out', 0),
               ('tok_s', 1), ('cold_pct', 0), ('truncated_pct', 0), ('error_pct', 0)]
 COLS_RAG = [('n', 0), ('embed_p50_ms', 0), ('search_p50_ms', 0), ('score_1', 3)]
+COLS_TURN = [('n', 0), ('p50_ms', 0), ('p95_ms', 0), ('max_ms', 0), ('calls_per_turn', 1), ('error_pct', 0)]
 
 
 def table(title, rows, cols, diffs):
@@ -253,14 +293,19 @@ def main(argv=None):
     prev = analyse(previous, a.profile, warnings, excluded, cold) if previous else None
     d_calls = difference(cur['calls'], prev['calls']) if prev else {}
     d_rag = difference(cur['rag'], prev['rag']) if prev else {}
+    d_turns = difference(cur['turns'], prev['turns']) if prev else {}
     if a.json:
         keys = lambda d: {f'{p}/{t}/{m}': v for (p, t, m), v in d.items()}
         print(json.dumps({'calls': keys(cur['calls']), 'rag': keys(cur['rag']),
+                          'turns': keys(cur['turns']),
                           'difference_calls': keys(d_calls), 'difference_rag': keys(d_rag),
+                          'difference_turns': keys(d_turns),
                           'warnings': warnings}, ensure_ascii=False, indent=2))
     else:
         out = table('CALLS (ms; generation tok/s; % cold/truncated/error)', cur['calls'], COLS_CALLS, d_calls)
         out += table('RAG', cur['rag'], COLS_RAG, d_rag)
+        out += table('TURNS (ms from the start of the first call to the end of the last; calls with the same '
+                     '`app.turn`)', cur['turns'], COLS_TURN, d_turns)
         out += ['WARNING: ' + x for x in warnings]
         print('\n'.join(out) if out else 'No data.')
     return 0

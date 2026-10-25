@@ -156,3 +156,5 @@ ganchos, `.claude/gw/scripts`, `tools/qa` y las skills ([runbook](runbooks/skill
 - [x] **FLU-3** (2026-10-22) `tools/qa/ci-local.py` (retro del piloto): con la CI de GitHub agotada, corre en local
   los pasos de los jobs de Ubuntu de `comprobar.yml` (los lee del workflow, no los copia) y, con `--apuntar`, deja
   fecha, commit y resultado en [`ci-local.md`](registros/ci-local.md). El job de Windows sale como «sin cubrir».
+- [x] **FLU-4** (2026-10-25) `/gw-update` a Galivelop-workflow v0.3.0: scripts, esquema, skills y ganchos al día;
+  `comprobar.yml` conserva sus jobs (el cambio de `ciInstall` no le toca) y `REVIEW.md` gana dos reglas de la plantilla.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.2.0
+# galivelop-workflow v0.3.0
 # What pre-push checks about the hand-off log of each branch it pushes (for projects with "logRows": true; a no-op
 # otherwise). Called by .githooks/pre-push as:   prepush-ramas.sh <changed-files-file> <pushed-commits-file>
 # with git's ref lines ("local-ref local-sha remote-ref remote-sha" per ref) on stdin. For each pushed ref:

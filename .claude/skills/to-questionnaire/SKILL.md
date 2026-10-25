@@ -4,7 +4,7 @@ description: Turn a decision you can't fully answer into a questionnaire for som
 disable-model-invocation: true
 license: MIT (see LICENSE-mattpocock-skills)
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
   source: "mattpocock/skills@5beb35b"
 ---
 
@@ -28,6 +28,8 @@ Frame the document as a **discovery questionnaire**: the user lacks context, the
 <questionnaire-template>
 
 # <Questionnaire title>
+
+If `.claude/gw/to-questionnaire.md` exists in the project, read it first: it holds what is specific to the project.
 
 **Purpose:** why this questionnaire exists and the decision riding on it.
 

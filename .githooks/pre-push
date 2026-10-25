@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.2.0
+# galivelop-workflow v0.3.0
 # Git pre-push hook (copied into projects as .githooks/pre-push; enable with: git config core.hooksPath .githooks).
 #   - Says which commits each ref pushes, or that it pushes nothing new.
 #   - Refuses conflict markers and added *.rej / *.orig files in what is pushed (to the protected branch, in all it
@@ -8,6 +8,11 @@
 #     one is refused.
 #   - Runs every `check` command of that config on the commit being pushed (a temporary worktree when it is not
 #     the clean working copy), with GW_PUSH_PROTECTED=true when it goes to the protected branch (false otherwise).
+#     `checkWrapper` prefixes each command (`<wrapper> bash -c '<command>'`). The worktree lives in a per-repo folder
+#     under ${TMPDIR:-/tmp} (or under `worktreeDir`), never inside .git/ (jest and others ignore any /.git/ path),
+#     gets the `worktreeLinks` paths symlinked from the main checkout, and is removed on every exit (also on
+#     Ctrl-C or kill; one left by a hard kill is removed by a later push once it is over 24 h old and its pid is
+#     gone). Each command logs to its own mktemp file, kept only when it fails.
 #   - To the protected branch, in both pushToProtected modes (with `pr` the PR hook also guards PRs): code needs the
 #     review mark (scripts/revisado.sh) to name an ancestor with no code after it. The branch is protected when the
 #     pushed commit, the remote tip or the working tree names it so; what is content and where the mark lives come
@@ -27,19 +32,22 @@ remote="${1:-origin}"
 work="$(mktemp -d "${TMPDIR:-/tmp}/gw-pre-push.XXXXXX")" || { echo "pre-push: cannot create a temp dir; free space in ${TMPDIR:-/tmp} and retry: git push" >&2; exit 1; }
 worktree=""
 cleanup() {
-  if [ -n "$worktree" ]; then git -C "$root" worktree remove --force "$worktree" >/dev/null 2>&1; rm -rf "$worktree"; fi
+  if [ -n "$worktree" ]; then git -C "$root" worktree remove --force "$worktree" >/dev/null 2>&1; rm -rf "$worktree" "${worktree%.d}"; fi
   rm -rf "$work"
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 cat > "$work/input"
 : > "$work/changed"
 : > "$work/pushed"
 
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE  # git sets GIT_DIR in linked worktrees: toplevel would be the cwd
 hookdir="$(cd "$(dirname "$0")" && pwd)"
 root="$(git -C "$hookdir" rev-parse --show-toplevel 2>/dev/null)" || {
   echo "pre-push: $hookdir is not inside a git work tree; point git at the project's hooks: git config core.hooksPath .githooks" >&2; exit 1; }
 cd "$root" || exit 1
-unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
 if [ -d "$root/.claude/gw/scripts" ]; then scripts="$root/.claude/gw/scripts"; else scripts="$root/scripts"; fi
 config="$scripts/config.py"
 fail() {  # fail <message lines...>: the last line is the command that fixes it
@@ -58,22 +66,82 @@ fetch_hint() {
   if [ "$shallow" = "true" ]; then echo "git fetch --deepen=200 $remote $protected"; else echo "git fetch $remote $protected"; fi
 }
 
+gwdir=""  # <worktreeDir or ${TMPDIR:-/tmp}>/gw-pre-push-wt-<uid>-<repo id>: where the temporary worktrees live
+stale_worktrees() {  # remove worktrees an interrupted push (kill -9, power cut) left behind; a live push's stay
+  local m pid err  # each push owns a marker file wt.XXXXXX holding its pid; its worktree is wt.XXXXXX.d
+  for m in "$gwdir"/wt.*.d; do  # a worktree whose marker is gone is an orphan too
+    [ -d "$m" ] && [ ! -e "${m%.d}" ] && { git worktree remove --force "$m" >/dev/null 2>&1; rm -rf "$m"; }
+  done
+  for m in "$gwdir"/wt.*; do
+    [ -f "$m" ] || continue
+    pid="$(cat "$m" 2>/dev/null)"
+    [ -n "$pid" ] || continue  # empty: that push has made its marker but not written its pid yet
+    case "$pid" in *[!0-9]*) pid="" ;; esac
+    if [ -n "$pid" ]; then
+      err="$(LC_ALL=C kill -0 "$pid" 2>&1)" && continue
+      case "$err" in *"No such process"*) ;; *) continue ;; esac  # EPERM (another user's process) is alive too
+    fi
+    # A push from another pid namespace (a container or sandbox sharing the folder) looks dead from here: only a
+    # marker over 24 h old is an orphan (find -mmin works on GNU and BSD).
+    [ -n "$(find "$m" -prune -mmin +1440 2>/dev/null)" ] || continue
+    git worktree remove --force "$m.d" >/dev/null 2>&1; rm -rf "$m.d" "$m"
+  done
+}
+link_shared() {  # link_shared <sha> <worktree>: worktreeLinks from the main checkout into the worktree
+  local sha="$1" wt="$2" links shared parent top wtreal
+  wtreal="$(cd "$wt" && pwd -P)" || fail "cannot resolve the temporary worktree $wt; check the repository: git worktree list"
+  links="$(cfg_at "$sha" worktreeLinks)" || exit 1
+  while IFS= read -r shared; do
+    [ -n "$shared" ] || continue
+    case "$shared" in /* | .. | ../* | */../* | */..) fail "worktreeLinks entry '$shared' must be a path inside the repo (no leading / and no '..'); fix it in .claude/gw.json: python3 $config --root $root validate" ;; esac
+    shared="${shared%/}"
+    [ -n "$shared" ] || continue
+    if { [ -e "$root/$shared" ] || [ -L "$root/$shared" ]; } && [ ! -e "$wt/$shared" ] && [ ! -L "$wt/$shared" ]; then
+      # A symlink committed in the pushed tree (cache -> /outside) must not make mkdir/ln write outside the worktree:
+      # check the deepest existing folder before creating anything, and the parent again once it exists.
+      parent="$(dirname "$wt/$shared")"
+      top="$parent"
+      while [ ! -d "$top" ] && [ "$top" != "$wt" ]; do top="$(dirname "$top")"; done
+      if ! { [ -d "$top" ] && case "$(cd "$top" && pwd -P)/" in "$wtreal"/*) true ;; *) false ;; esac; }; then
+        fail "worktreeLinks entry '$shared' resolves outside the temporary worktree (a symlink in the pushed tree?); remove it from worktreeLinks in .claude/gw.json: python3 $config --root $root validate"
+      fi
+      if ! mkdir -p "$parent" || ! case "$(cd "$parent" && pwd -P)/" in "$wtreal"/*) true ;; *) false ;; esac; then
+        fail "worktreeLinks entry '$shared' resolves outside the temporary worktree or cannot be created; remove it from worktreeLinks in .claude/gw.json: python3 $config --root $root validate"
+      fi
+      if ! ln -s "$root/$shared" "$wt/$shared"; then
+        fail "cannot link '$shared' into the temporary worktree; check the path or drop it from worktreeLinks in .claude/gw.json: python3 $config --root $root validate"
+      fi
+    fi
+  done <<<"$links"
+}
 checkdir=""
 run_checks() {  # run_checks <sha>: every check command on that commit, in $checkdir (kept for tests-relacionados.sh)
-  local sha="$1" dir
+  local sha="$1" dir wrapper marker
   if [ -n "$worktree" ]; then
-    git worktree remove --force "$worktree" >/dev/null 2>&1; rm -rf "$worktree"; worktree=""
+    git worktree remove --force "$worktree" >/dev/null 2>&1; rm -rf "$worktree" "${worktree%.d}"; worktree=""
   fi
+  wrapper="$(cfg_at "$sha" checkWrapper)" || exit 1
   if [ "$sha" = "$(git rev-parse HEAD)" ] && [ -z "$(git status --porcelain)" ]; then
     dir="$root"
   else
-    worktree="$(mktemp -d "${TMPDIR:-/tmp}/gw-pre-push-wt.XXXXXX")" || fail "cannot create a temp dir; free space and retry: git push"
-    rmdir "$worktree"
+    local base common id
+    base="$(cfg_at "$sha" worktreeDir)" || exit 1
+    [ -n "$base" ] || base="${TMPDIR:-/tmp}"
+    case "$base" in /*) ;; *) base="$root/$base" ;; esac
+    common="$(cd "$(git rev-parse --git-common-dir)" && pwd)" \
+      || fail "cannot find the repository's git dir; check the repository: git rev-parse --git-common-dir"
+    id="$(printf '%s' "$common" | cksum | cut -d' ' -f1)"  # one folder per repo (its linked worktrees share it)
+    gwdir="${base%/}/gw-pre-push-wt-$(id -u)-$id"  # per user: $TMPDIR is often /tmp, writable by everyone
+    [ ! -L "$gwdir" ] || fail "$gwdir is a symlink, not the hook's own folder; remove it and retry: rm $gwdir && git push"
+    { [ -d "$gwdir" ] || { mkdir -p "${base%/}" && mkdir -m 700 "$gwdir"; } || [ -d "$gwdir" ]; } || fail "cannot create $gwdir; make it writable or set worktreeDir in .claude/gw.json: python3 $config --root $root validate"
+    [ -O "$gwdir" ] || fail "$gwdir belongs to another user; remove it or set worktreeDir in .claude/gw.json: python3 $config --root $root validate"
+    stale_worktrees
+    marker="$(mktemp "$gwdir/wt.XXXXXX")" || fail "cannot create a temporary worktree in $gwdir; free space or permissions and retry: git push"
+    echo "$$" > "$marker"
+    worktree="$marker.d"
     git worktree add -q --detach "$worktree" "$sha" >/dev/null 2>&1 \
-      || { worktree=""; fail "cannot check out ${sha:0:7} in a temporary worktree; clean stale ones and retry: git worktree prune && git push"; }
-    for shared in node_modules .venv; do
-      if [ -e "$root/$shared" ] && [ ! -e "$worktree/$shared" ]; then ln -s "$root/$shared" "$worktree/$shared"; fi
-    done
+      || { rm -rf "$worktree" "$marker"; worktree=""; fail "cannot check out ${sha:0:7} in a temporary worktree; clean stale ones and retry: git worktree prune && git push"; }
+    link_shared "$sha" "$worktree"
     dir="$worktree"
   fi
   checkdir="$dir"
@@ -81,12 +149,14 @@ run_checks() {  # run_checks <sha>: every check command on that commit, in $chec
   while IFS= read -r cmd; do
     [ -n "$cmd" ] || continue
     n=$((n + 1))
-    log="${TMPDIR:-/tmp}/gw-pre-push-check-$n.log"
+    [ -z "$wrapper" ] || cmd="$wrapper bash -c '$(printf '%s' "$cmd" | sed "s/'/'\\\\''/g")'"
+    log="$(mktemp "${TMPDIR:-/tmp}/gw-pre-push-check.XXXXXX")" || fail "cannot create a log file in ${TMPDIR:-/tmp}; free space and retry: git push"
     echo "pre-push: check '$cmd' on ${sha:0:7}…"
     if ! (cd "$dir" && GW_PUSH_PROTECTED="$is_protected" bash -c "$cmd") > "$log" 2>&1 < /dev/null; then
       tail -n 30 "$log" >&2
       fail "check failed on ${sha:0:7}: '$cmd' (full log: $log)" "fix it, commit and push again; reproduce with: $cmd"
     fi
+    rm -f "$log"
   done <<<"$checks"
 }
 

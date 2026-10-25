@@ -14,7 +14,7 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-25). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #5 (2026-10-22, `89bb2ee`): `FLU-2`, piloto de Galivelop-workflow v0.2.0, y `FLU-3`, CI en local. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 🚧 2026-10-25: `/gw-update` y, después, nueva ronda de contraste del diseño antes de implementar. Presupuesto de compactaciones: 3. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 🚧 2026-10-25: `FLU-4` (`/gw-update` a v0.3.0) hecho; ahora, nueva ronda de contraste del diseño antes de implementar. Presupuesto de compactaciones: 3. |
 | **Tests** | 2026-10-21: núcleo `cargo test -p tarkor-nucleo` 52, asistente `vitest` 5, `tsc -b` 0, clippy 0 avisos; `tools/qa/tests` 80 en verde. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -59,8 +59,12 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 # Pruebas de punta a punta del asistente (tauri-driver + xvfb): ver app/README.md.
 ```
 
-## Hecho recientemente
+## Hecho (5 últimas)
 
+Dos líneas cada una como mucho; el detalle está en el commit y la más antigua sale cuando hay más de 5.
+
+- ~~`FLU-4` · Galivelop-workflow v0.3.0~~ (2026-10-25): `/gw-update` de scripts, skills y ganchos; `comprobar.yml`
+  se queda el local; dos reglas nuevas en `REVIEW.md`.
 - ~~`FLU-3` · CI en local~~ (2026-10-22): `tools/qa/ci-local.py` corre los jobs de Ubuntu de `comprobar.yml` y
   apunta el resultado en [`ci-local.md`](ci-local.md) mientras la CI de GitHub está agotada.
 - ~~`FLU-1` · flujo de trabajo y skills de Tarkor~~ (2026-10-21): `CLAUDE.md`, `REVIEW.md`, bitácora,

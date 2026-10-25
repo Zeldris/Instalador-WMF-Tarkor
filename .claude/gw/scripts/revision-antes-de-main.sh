@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.2.0
+# galivelop-workflow v0.3.0
 # Claude Code PreToolUse hook: no pull request reaches the protected branch without /code-review of the same code,
 # and none is merged with CI not green (plan §5.2). Reads the hook JSON (tool_name, tool_input) on stdin.
 #   - Create: mcp__github__create_pull_request, mcp__github__update_pull_request that sets `base` to the protected
@@ -15,7 +15,13 @@
 #     commit status success (a commit with no CI reported at all is not green).
 #   - Anything else (other tools, update_pull_request_branch, other bases, Bash that only mentions `gh pr`) exits 0
 #     silently. pushToProtected does not matter: a PR is another way into the protected branch.
-# GitHub API: `gh api` when gh is on PATH and authenticated, else curl with $GITHUB_TOKEN or $GH_TOKEN, decided once
+#   - A PR that is already closed or merged: blocked with that fact (and `gh pr view`), no config is asked of its branch;
+#     an update_pull_request that itself reopens a closed PR (state: open) is judged like any other call on it.
+#   - Before python3 starts, a bash pre-filter lets through everything that has no PR tool name and no word `gh` followed
+#     by the word `pr`/`pulls` ("github", "projects" do not count). Without python3, a PR create/merge call is blocked
+#     with the command that checks it (python3 --version); any other call, `gh pr view` included, passes.
+# GitHub API: `gh api` when gh is on PATH and `gh api repos/<owner>/<repo>` answers (a GitHub App token cannot read
+# /user but can read the repo), else curl with $GITHUB_TOKEN or $GH_TOKEN, decided once
 # per run. No way to ask, or any API error: blocked (fail closed), as is any missing commit, config or script, and a
 # Bash command that cannot be parsed but looks like `gh … pr merge|create`.
 # Decision: exit 2 with the reason on stderr (Claude Code shows it to the agent); the last line is the command that
@@ -262,7 +268,7 @@ def classify(event):
         if not data.get("base"):
             return []  # editing title/body/state takes nothing to another branch
         return [{"kind": "retarget", "base": data["base"], "head": None, "repo": repo, "number": number,
-                 "how": "update_pull_request"}]
+                 "how": "update_pull_request", "reopens": data.get("state") == "open"}]
     if name in ("merge_pull_request", "enable_pr_auto_merge"):
         return [{"kind": "merge", "base": None, "head": None, "repo": repo, "number": number, "how": name}]
     return []  # update_pull_request_branch and the rest bring nothing new to the protected branch
@@ -335,14 +341,19 @@ def origin_repo(root):
 _BACKEND = []  # decided once per run: ("gh", None) or ("curl", token); never mixed within a run
 
 
-def backend():
+def backend(path):
     if not _BACKEND:
-        if shutil.which("gh") and run(["gh", "auth", "status"]).returncode == 0:
+        # Reading the repo itself proves the token works for it: `gh api user` answers 403 to a GitHub App
+        # installation token that can still read the repo, and `gh auth status` also fails over an unrelated stale
+        # account or host.
+        m = re.match(r"repos/([^/?]+)/([^/?]+)", path)
+        probe = f"repos/{m.group(1)}/{m.group(2)}" if m else path
+        if shutil.which("gh") and run(["gh", "api", probe]).returncode == 0:
             _BACKEND.append(("gh", None))
         else:
             token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
             if not token:
-                raise ApiError("gh is not installed or not authenticated, and neither GITHUB_TOKEN nor GH_TOKEN is set")
+                raise ApiError(f"gh is not installed or cannot read {probe}, and neither GITHUB_TOKEN nor GH_TOKEN is set")
             if not shutil.which("curl"):
                 raise ApiError("gh is not authenticated and curl is not installed")
             _BACKEND.append(("curl", token))
@@ -350,7 +361,7 @@ def backend():
 
 
 def api(path):
-    kind, token = backend()
+    kind, token = backend(path)
     if kind == "gh":
         r, how = run(["gh", "api", path]), "gh api " + path
     else:
@@ -371,7 +382,8 @@ def pr_info(repo, number):
     try:
         info = api(f"repos/{repo}/pulls/{number}")
         return {"base": info["base"]["ref"], "sha": info["head"]["sha"], "ref": info["head"]["ref"],
-                "url": info.get("html_url") or f"https://github.com/{repo}/pull/{number}"}
+                "url": info.get("html_url") or f"https://github.com/{repo}/pull/{number}",
+                "state": info.get("state") or "open", "merged": bool(info.get("merged") or info.get("merged_at"))}
     except ApiError as exc:
         block(f"cannot read PR #{number} of {repo}: {exc}",
               "authenticate (gh auth login, or export GITHUB_TOKEN) and retry; blocked because it could not be checked")
@@ -530,6 +542,11 @@ def handle(action, cfg, root, scripts):
     if number is None:
         block(f"{action['how']} without a PR number; cannot check it.", "pass pullNumber and retry")
     info = pr_info(repo, number)
+    reopened = action.get("reopens") and not info["merged"]  # the call itself reopens it: judge it as open
+    if info["state"] != "open" and not reopened:  # nothing to guard: say so instead of asking for a gw.json on a finished branch
+        done = "already merged" if info["merged"] else "closed"
+        block(f"PR #{number} of {repo} is {done}, so {action['how']} has nothing to do.",
+              f"check it: gh pr view {number} -R {repo}" + ("" if info["merged"] else " (reopen it if it should still be merged)"))
     if action["kind"] == "merge":
         protected = info["base"]
         guarded, tip = protected_tip(cfg, root, protected)
@@ -578,16 +595,34 @@ except Exception as exc:  # fail closed on anything unexpected
     sys.exit(2)
 PY
 input="$(cat)"
-# Cheap pre-filter: the matcher includes every Bash call, so anything that cannot be a PR action leaves here without
-# needing python3 (a missing python3 must not block unrelated commands). Only PR tools or text with "gh" and "pr" go on.
-case "$input" in
-  *pull_request*|*auto_merge*|*gh*pr*|*gh*pull*) ;;
-  *) exit 0 ;;
-esac
+# Cheap pre-filter, in bash with no external tools: the matcher includes every Bash call, so what cannot be a PR action
+# leaves here without python3 (a missing python3 must not block unrelated commands). It goes on for the PR tools, and
+# for text with the word `gh` (not "github") followed by the word `pr` or `pulls` (not "projects").
+word='[^[:alnum:]_-]'
+tool='"tool_name"[[:space:]]*:[[:space:]]*'
+pr_tools="${tool}\"mcp__[^\"]*(create_pull_request|update_pull_request|merge_pull_request|enable_pr_auto_merge)\""
+bash_tool="${tool}\"Bash\""
+gh="(^|$word|\\\\[nt])gh$word(.*$word)?"
+end="($word|\$)"
+any_pr="${gh}(pr|pulls)${end}"
+do_pr="${gh}(pr$word(.*$word)?(create|merge)|pulls/[^[:space:]]*merge)${end}"
+own=""  # 1 when the call is one this hook decides on (a PR tool, or gh creating/merging), for the python3-missing case
+if [[ $input =~ $pr_tools ]]; then own=1
+elif [[ $input =~ $bash_tool && $input =~ $any_pr ]]; then
+  if [[ $input =~ $do_pr ]]; then own=1; else own=0; fi
+else exit 0
+fi
+if ! command -v python3 >/dev/null 2>&1; then
+  if [ "$own" = "1" ]; then
+    echo "revision-antes-de-main: python3 is missing, so this PR call cannot be checked; blocked. Install python3 3.8+ and retry: python3 --version" >&2
+    exit 2
+  fi
+  exit 0  # gh pr view/list/…: not a call this hook decides on
+fi
 printf '%s' "$input" | python3 -I -c "$prog" "$here"
 status=$?
-if [ "$status" -ne 0 ] && [ "$status" -ne 2 ]; then  # python3 missing or crashed: still fail closed
-  echo "revision-antes-de-main: the check could not run (exit $status); blocked. Install python3 3.8+ and retry: python3 --version" >&2
+if [ "$status" -ne 0 ] && [ "$status" -ne 2 ]; then  # python3 crashed: still fail closed
+  echo "revision-antes-de-main: the check could not run (exit $status); blocked. Check python3 3.8+ and retry: python3 --version" >&2
   exit 2
 fi
 exit "$status"

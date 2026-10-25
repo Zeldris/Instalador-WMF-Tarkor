@@ -4,9 +4,11 @@ description: A relentless interview to sharpen a plan or design, which also crea
 disable-model-invocation: true
 license: MIT (see LICENSE-mattpocock-skills)
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
   source: "mattpocock/skills@5beb35b"
 ---
+
+If `.claude/gw/grill-with-docs.md` exists in the project, read it first: it holds what is specific to the project.
 
 > Original skill by Matt Pocock ([mattpocock/skills](https://github.com/mattpocock/skills), MIT).
 

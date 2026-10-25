@@ -3,7 +3,7 @@ name: pr
 description: "Use when writing a PR body."
 license: MIT (see LICENSE-mattpocock-skills)
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
   source: "mattpocock/skills@5beb35b"
   credits:
     skill: show-me
@@ -12,7 +12,11 @@ metadata:
     url: "https://github.com/humanlayer/skills/blob/main/plugins/show-me/skills/show-me/SKILL.md"
 ---
 
+If `.claude/gw/pr.md` exists in the project, read it first: it holds what is specific to the project.
+
 > Original skill by Matt Pocock ([mattpocock/skills](https://github.com/mattpocock/skills), MIT).
+
+If the PR description is saved as a file in the repo, its links are relative to its own folder, unless that folder is listed in `linkRoots` of `.claude/gw.json` (then they are relative to the repo root).
 
 Use this template for writing the PR body:
 

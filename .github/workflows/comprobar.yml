@@ -1,5 +1,5 @@
 # Linux y Windows: compilación, tests y lint del instalador. qa: los tests de las herramientas y los enlaces, y en un
-# pull request el pre-commit de la rama base sobre sus commits (de la plantilla de galivelop-workflow v0.2.0, FLU-2),
+# pull request el pre-commit de la rama base sobre sus commits (de la plantilla de galivelop-workflow v0.3.0, FLU-2),
 # para que un PR no pueda debilitar la comprobación que lo revisa.
 name: Comprobar
 

@@ -3,13 +3,15 @@ name: prototype
 description: Build a throwaway prototype to answer a design question. Use when the user wants to sanity-check whether a state model or logic feels right, or explore what a UI should look like.
 license: MIT (see LICENSE-mattpocock-skills)
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
   source: "mattpocock/skills@5beb35b"
 ---
 
 > Original skill by Matt Pocock ([mattpocock/skills](https://github.com/mattpocock/skills), MIT).
 
 # Prototype
+
+If `.claude/gw/prototype.md` exists in the project, read it first: it holds what is specific to the project.
 
 A prototype is **throwaway code that answers a question**. The question decides the shape.
 

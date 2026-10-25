@@ -4,11 +4,13 @@ description: Pick the skill and models for the task that is starting. Use at the
 license: MIT
 compatibility: Claude Code or any Agent Skills agent; reads .claude/gw.json when present
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
   source: "Galivelop workshop; generalised from the Tarkor, installer and portal selectors"
 ---
 
 # Selector
+
+If `.claude/gw/selector.md` exists in the project, read it first: it holds what is specific to the project.
 
 Classify the task with the table, then act on its row. Reply in the project's `language` (`.claude/gw.json`).
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.2.0
+# galivelop-workflow v0.3.0
 # Git pre-commit hook (copied into projects as .githooks/pre-commit; enable with: git config core.hooksPath .githooks).
 #   - No secrets in a commit: by file (.env except .env.example/.sample/.template, *.pem, *.key, *.p12, *.pfx, *.jks,
 #     id_rsa and friends, .netrc) and by added content (well-known key formats, and secret/password/token/api_key
@@ -13,7 +13,9 @@
 # Bash 3.2 compatible. Root from this hook's path, never from $CLAUDE_PROJECT_DIR or the current directory.
 set -uo pipefail
 hookdir="$(cd "$(dirname "$0")" && pwd)"
-root="$(git -C "$hookdir" rev-parse --show-toplevel 2>/dev/null)" || {
+# Git exports GIT_DIR/GIT_INDEX_FILE to the hook (in a linked worktree too), and with GIT_DIR set `rev-parse
+# --show-toplevel` answers the hook's own folder. Unset them for this one call (a subshell); the checks below keep them.
+root="$(unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; git -C "$hookdir" rev-parse --show-toplevel 2>/dev/null)" || {
   echo "pre-commit: $hookdir is not inside a git work tree; point git at the project's hooks: git config core.hooksPath .githooks" >&2; exit 1; }
 cd "$root" || exit 1
 

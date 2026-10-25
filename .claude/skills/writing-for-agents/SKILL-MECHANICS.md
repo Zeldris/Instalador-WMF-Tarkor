@@ -13,6 +13,10 @@ Pick model-invocation only when the agent must reach the skill on its own, or an
 
 Shared reference that two user-invoked skills both need can live in neither: with no descriptions, neither can fire the other. Push it to a plain file outside the skill system: external reference any skill can point at.
 
+## Project notes
+
+Anything specific to one project (what to track, what to skip, local commands, limits) never goes in the skill: it lives in `.claude/gw/<skill>.md` of the project. Every skill of this workflow carries one line right after its title that reads that file if it exists ("If `.claude/gw/<skill>.md` exists in the project, read it first: it holds what is specific to the project."); a new skill adds the same line, with its own name. A skill that needs a different shape for those notes (a fenced block a script reads, a list of sections) describes it in its own body.
+
 ## Splitting by invocation
 
 The invocation cut of splitting (the sequence cut lives in `SKILL.md`): split off a model-invoked skill when you have a distinct leading word that should trigger it on its own (a trigger word you actually use in your prompts), or another skill must reach it. You pay context load for the new always-loaded description, so that independent reach has to be worth it.
