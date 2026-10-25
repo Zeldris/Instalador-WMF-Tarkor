@@ -69,6 +69,40 @@ pub enum Estado {
     Detenido { motivo: String },
 }
 
+/// Avisa una sola vez de una parada: `Some(motivo)` si el proceso está `Detenido` y todavía no se
+/// había avisado. Mientras siga detenido (o se esté reintentando) no vuelve a avisar.
+pub fn aviso_nuevo(estado: &Estado, ya_avisado: bool) -> Option<&str> {
+    match estado {
+        Estado::Detenido { motivo } if !ya_avisado => Some(motivo),
+        _ => None,
+    }
+}
+
+/// Lo que se cuenta al frontal cuando el proceso se detiene (evento `motor-detenido`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MotorDetenido {
+    pub motivo: String,
+    /// El registro habla de falta de memoria: se ofrece un perfil más ligero.
+    pub sin_memoria: bool,
+}
+
+/// ¿Dicen las líneas del registro que el proceso murió por falta de memoria? Sin distinguir
+/// mayúsculas; son las frases de Ollama/llama.cpp (CPU, CUDA, ROCm y Vulkan).
+pub fn sin_memoria(texto: &str) -> bool {
+    const SENALES: [&str; 7] = [
+        "out of memory",
+        "cudamalloc failed",
+        "unable to allocate",
+        "failed to allocate",
+        "insufficient memory",
+        "requires more system memory",
+        "erroroutofdevicememory",
+    ];
+    let t = texto.to_lowercase();
+    SENALES.iter().any(|s| t.contains(s))
+}
+
 pub struct Proceso {
     pub espec: Especificacion,
     hijo: Option<Child>,
@@ -316,6 +350,32 @@ mod tests {
         // El reintento manual da otra oportunidad.
         proc.reintentar().unwrap();
         assert_eq!(proc.vigilar(), Estado::Funcionando);
+    }
+
+    #[test]
+    fn detecta_la_falta_de_memoria_en_el_registro() {
+        for linea in [
+            "ggml_backend_cuda_buffer_type_alloc_buffer: allocating 9000 MiB on device 0: cudaMalloc failed: out of memory",
+            "Error: model requires more system memory (6.1 GiB) than is available (4.0 GiB)",
+            "CUDAMALLOC FAILED",
+            "llama runner: unable to allocate CPU buffer",
+            "vk::Device::allocateMemory: ErrorOutOfDeviceMemory",
+            "failed to allocate compute buffers",
+            "insufficient memory to load",
+        ] {
+            assert!(sin_memoria(linea), "{linea}");
+        }
+        assert!(!sin_memoria(""));
+        assert!(!sin_memoria("time=2026 level=INFO msg=\"Listening on 127.0.0.1:11500\"\nexit status 2"));
+    }
+
+    #[test]
+    fn avisa_una_sola_vez_de_cada_parada() {
+        let parado = Estado::Detenido { motivo: "se cayó".into() };
+        assert_eq!(aviso_nuevo(&parado, false), Some("se cayó"));
+        assert_eq!(aviso_nuevo(&parado, true), None);
+        assert_eq!(aviso_nuevo(&Estado::Funcionando, false), None);
+        assert_eq!(aviso_nuevo(&Estado::Reiniciado, false), None);
     }
 
     #[cfg(unix)]

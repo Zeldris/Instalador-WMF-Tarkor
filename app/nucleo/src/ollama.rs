@@ -68,6 +68,48 @@ pub struct Cargado {
     pub modelo: String,
     /// 0-100: parte del modelo que está en la gráfica.
     pub porcentaje_gpu: u8,
+    /// Memoria que ocupa cargado, en MB (`size` de `/api/ps`).
+    pub memoria_mb: u64,
+    /// Bytes exactos de `size` y de `size_vram`: `resumen_uso` pesa por ellos, no por el porcentaje
+    /// redondeado. No se serializan.
+    #[serde(skip)]
+    pub tamano_bytes: u64,
+    #[serde(skip)]
+    pub vram_bytes: u64,
+}
+
+const MB: u64 = 1024 * 1024;
+
+/// Dónde corre la IA ahora mismo, con todos los modelos cargados juntos (docs/11, «Dónde corre la IA»).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Uso {
+    /// Parte de la memoria de los modelos que está en la gráfica, pesada por su tamaño. `None` si
+    /// no hay nada cargado.
+    pub porcentaje_gpu: Option<u8>,
+    pub memoria_mb: u64,
+}
+
+/// Resume `/api/ps`: porcentaje en la gráfica = suma de `size_vram` / suma de `size`.
+pub fn resumen_uso(cargados: &[Cargado]) -> Uso {
+    let total: u64 = cargados.iter().map(|c| c.tamano_bytes).sum();
+    let vram: u64 = cargados.iter().map(|c| c.vram_bytes.min(c.tamano_bytes)).sum();
+    Uso {
+        porcentaje_gpu: (total > 0).then(|| (vram as f64 / total as f64 * 100.0).round().clamp(0.0, 100.0) as u8),
+        memoria_mb: total / MB,
+    }
+}
+
+/// `nomic-embed-text` aparece en Ollama como `nomic-embed-text:latest`.
+pub fn tiene(hay: &[String], modelo: &str) -> bool {
+    hay.iter().any(|h| h == modelo || h.strip_suffix(":latest") == Some(modelo))
+}
+
+/// Modelos descargados que no son de ninguno de `del_perfil` (con el sufijo `:latest` de `tiene`).
+pub fn sobrantes(hay: Vec<(String, u64)>, del_perfil: &[&str]) -> Vec<(String, u64)> {
+    hay.into_iter()
+        .filter(|(h, _)| !del_perfil.iter().any(|m| tiene(std::slice::from_ref(h), m)))
+        .collect()
 }
 
 pub struct Cliente {
@@ -104,6 +146,17 @@ impl Cliente {
     pub fn modelos(&self) -> Result<Vec<String>, Error> {
         let v = self.get("/api/tags")?;
         Ok(v["models"].as_array().into_iter().flatten().filter_map(|m| m["name"].as_str().map(String::from)).collect())
+    }
+
+    /// Modelos descargados con su tamaño en disco, en bytes (`/api/tags`).
+    pub fn modelos_con_tamano(&self) -> Result<Vec<(String, u64)>, Error> {
+        let v = self.get("/api/tags")?;
+        Ok(v["models"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|m| Some((m["name"].as_str()?.to_string(), m["size"].as_u64().unwrap_or(0))))
+            .collect())
     }
 
     /// Descarga un modelo. Ollama reanuda solo lo que falte si se corta.
@@ -197,11 +250,18 @@ impl Cliente {
             .into_iter()
             .flatten()
             .map(|m| {
-                let total = m["size"].as_f64().unwrap_or(0.0);
-                let vram = m["size_vram"].as_f64().unwrap_or(0.0);
+                let tamano_bytes = m["size"].as_u64().unwrap_or(0);
+                let vram_bytes = m["size_vram"].as_u64().unwrap_or(0);
                 Cargado {
                     modelo: m["name"].as_str().unwrap_or_default().to_string(),
-                    porcentaje_gpu: if total > 0.0 { (vram / total * 100.0).round().clamp(0.0, 100.0) as u8 } else { 0 },
+                    porcentaje_gpu: if tamano_bytes > 0 {
+                        (vram_bytes as f64 / tamano_bytes as f64 * 100.0).round().clamp(0.0, 100.0) as u8
+                    } else {
+                        0
+                    },
+                    memoria_mb: tamano_bytes / MB,
+                    tamano_bytes,
+                    vram_bytes,
                 }
             })
             .collect())
@@ -239,11 +299,11 @@ mod tests {
                 let ruta = peticion.split_whitespace().nth(1).unwrap_or("").to_string();
                 let (estado, cuerpo) = match ruta.as_str() {
                     "/api/version" => ("200 OK", r#"{"version":"0.34.3"}"#.to_string()),
-                    "/api/tags" => ("200 OK", r#"{"models":[{"name":"qwen2.5:7b"},{"name":"nomic-embed-text:latest"}]}"#.to_string()),
+                    "/api/tags" => ("200 OK", r#"{"models":[{"name":"qwen2.5:7b","size":4700000000},{"name":"nomic-embed-text:latest","size":274000000}]}"#.to_string()),
                     "/api/pull" => ("200 OK", pull.to_string()),
                     "/api/generate" if peticion.contains("no-existe") => ("404 Not Found", r#"{"error":"model 'no-existe' not found"}"#.to_string()),
                     "/api/generate" => ("200 OK", r#"{"response":" La niebla lo cubre todo. ","eval_count":40,"eval_duration":4000000000}"#.to_string()),
-                    "/api/ps" => ("200 OK", r#"{"models":[{"name":"qwen2.5:7b","size":1000,"size_vram":750}]}"#.to_string()),
+                    "/api/ps" => ("200 OK", r#"{"models":[{"name":"qwen2.5:7b","size":4194304000,"size_vram":3145728000}]}"#.to_string()),
                     _ => ("404 Not Found", "{}".to_string()),
                 };
                 let _ = write!(s, "HTTP/1.1 {estado}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{cuerpo}", cuerpo.len());
@@ -335,7 +395,54 @@ mod tests {
     #[test]
     fn porcentaje_en_gpu() {
         let c = ollama_falso(PULL_OK);
-        assert_eq!(c.cargados().unwrap(), [Cargado { modelo: "qwen2.5:7b".into(), porcentaje_gpu: 75 }]);
+        let ps = c.cargados().unwrap();
+        assert_eq!(
+            ps,
+            [Cargado { modelo: "qwen2.5:7b".into(), porcentaje_gpu: 75, memoria_mb: 4000, tamano_bytes: 4_194_304_000, vram_bytes: 3_145_728_000 }]
+        );
+        assert_eq!(resumen_uso(&ps), Uso { porcentaje_gpu: Some(75), memoria_mb: 4000 });
+    }
+
+    fn cargado(tamano_bytes: u64, vram_bytes: u64) -> Cargado {
+        Cargado { modelo: "m".into(), porcentaje_gpu: 0, memoria_mb: 0, tamano_bytes, vram_bytes }
+    }
+
+    #[test]
+    fn resumen_sin_nada_cargado_no_da_porcentaje() {
+        assert_eq!(resumen_uso(&[]), Uso { porcentaje_gpu: None, memoria_mb: 0 });
+        // Un modelo de tamaño 0 (respuesta rara) tampoco: no se divide entre cero.
+        assert_eq!(resumen_uso(&[cargado(0, 0)]).porcentaje_gpu, None);
+    }
+
+    #[test]
+    fn resumen_pesa_por_tamano_y_no_por_porcentaje() {
+        // 100 % de un modelo de 1 MB y 0 % de uno de 3 MB: 25 % en total, no la media (50 %).
+        let u = resumen_uso(&[cargado(MB, MB), cargado(3 * MB, 0)]);
+        assert_eq!(u, Uso { porcentaje_gpu: Some(25), memoria_mb: 4 });
+        // Redondeo: 2/3 = 66,7 -> 67; y la VRAM nunca cuenta más que el tamaño.
+        assert_eq!(resumen_uso(&[cargado(3 * MB, 2 * MB)]).porcentaje_gpu, Some(67));
+        assert_eq!(resumen_uso(&[cargado(MB, 5 * MB)]).porcentaje_gpu, Some(100));
+    }
+
+    #[test]
+    fn modelos_con_su_tamano() {
+        let c = ollama_falso(PULL_OK);
+        assert_eq!(
+            c.modelos_con_tamano().unwrap(),
+            [("qwen2.5:7b".to_string(), 4_700_000_000), ("nomic-embed-text:latest".to_string(), 274_000_000)]
+        );
+    }
+
+    #[test]
+    fn sobrantes_respeta_el_sufijo_latest() {
+        let hay = vec![("qwen2.5:7b".to_string(), 5), ("nomic-embed-text:latest".to_string(), 1), ("llama3:8b".to_string(), 7)];
+        let s = sobrantes(hay.clone(), &["qwen2.5:7b", "nomic-embed-text"]);
+        assert_eq!(s, [("llama3:8b".to_string(), 7)]);
+        // Con otro perfil, sobran el narrador y el de embeddings.
+        let s = sobrantes(hay, &["llama3:8b", "nomic-embed-text"]);
+        assert_eq!(s, [("qwen2.5:7b".to_string(), 5)]);
+        // Un nombre que solo empieza igual no es el mismo modelo.
+        assert_eq!(sobrantes(vec![("qwen2.5:7b-instruct".to_string(), 1)], &["qwen2.5:7b"]).len(), 1);
     }
 
     #[test]

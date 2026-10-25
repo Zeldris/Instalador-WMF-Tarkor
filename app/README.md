@@ -9,8 +9,8 @@ Envoltorio Tauri v2 del juego: asistente de primer arranque, análisis del equip
 
 | Carpeta | Qué hay |
 |---|---|
-| `nucleo/` | Rust sin interfaz: detección de equipo (`equipo.rs`), perfiles y máximo seguro (`perfiles.rs`), `config.json` y carpetas (`config.rs`). Con tests. |
-| `src-tauri/` | App de Tauri: expone el núcleo al asistente como comandos. |
+| `nucleo/` | Rust sin interfaz: detección de equipo (`equipo.rs`), perfiles y máximo seguro (`perfiles.rs`), `config.json` y carpetas (`config.rs`), cliente de Ollama y uso de la gráfica (`ollama.rs`), vigilancia de procesos (`procesos.rs`) y texto de «Copiar informe» (`informe.rs`). Con tests. |
+| `src-tauri/` | App de Tauri: expone el núcleo al asistente como comandos (también `uso_ia`, `cambiar_perfil`, `modelos_sobrantes`, `borrar_modelos`, `informe`, `motor_detenido` y `reintentar_motor`, y el evento `motor-detenido` que emite un hilo que vigila el motor cada 2 s) y el plugin de portapapeles. |
 | `src/` | Asistente en React. Textos en `textos.ts`; tipos espejo de Rust en `tipos.ts`. |
 
 `src/simulacion.ts` simula la descarga y la comprobación hasta `INS-5`: no debe llegar a una

@@ -23,7 +23,7 @@ createServer(async (req, res) => {
   }
   const ruta = req.url
   if (ruta === '/api/version') return json({ version: '0.34.3-falso' })
-  if (ruta === '/api/tags') return json({ models: [...descargados].map((name) => ({ name })) })
+  if (ruta === '/api/tags') return json({ models: [...descargados].map((name) => ({ name, size: 500 })) })
   if (ruta === '/api/ps') return json({ models: [] })
   if (ruta === '/api/pull') {
     const { model } = await cuerpo(req)

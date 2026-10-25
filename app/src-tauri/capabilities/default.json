@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Permisos de la ventana principal: solo los comandos propios del asistente.",
   "windows": ["principal"],
-  "permissions": ["core:default", "dialog:allow-open"]
+  "permissions": ["core:default", "dialog:allow-open", "clipboard-manager:allow-write-text"]
 }

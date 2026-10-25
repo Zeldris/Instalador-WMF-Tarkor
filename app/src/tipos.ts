@@ -116,6 +116,25 @@ export interface Reparacion {
   modelos: string[]
 }
 
+/** Dónde corre la IA ahora (`uso_ia`, `/api/ps`): `porcentajeGpu` es `null` si no hay nada cargado. */
+export interface UsoIa {
+  porcentajeGpu: number | null
+  memoriaMb: number
+}
+
+/** Un modelo del Ollama propio que no es del perfil actual (`modelos_sobrantes`). */
+export interface Sobrante {
+  modelo: string
+  gb: number
+}
+
+/** Aviso de motor detenido: evento `motor-detenido` y comando `motor_detenido`. */
+export interface MotorDetenido {
+  motivo: string
+  /** El registro del motor habla de falta de memoria: se ofrece un perfil más ligero. */
+  sinMemoria: boolean
+}
+
 export type Comprobacion = { resultado: 'ok'; detalle: string } | { resultado: 'omitida'; motivo: string }
 
 /** Una tarjeta pide confirmar si el perfil no cabe en memoria (solo con análisis). */
