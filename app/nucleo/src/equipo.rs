@@ -6,7 +6,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use sysinfo::{Disks, System};
+use crate::carpetas::espacio_libre_mb;
+use sysinfo::System;
 
 const MB: u64 = 1024 * 1024;
 
@@ -64,7 +65,8 @@ pub struct Equipo {
     pub nucleos: usize,
     pub hilos: usize,
     pub gpus: Vec<Gpu>,
-    /// Espacio libre en el disco donde vive la carpeta de datos.
+    /// Espacio libre en el disco donde vive la carpeta de datos (informativo: el de la carpeta
+    /// de la IA, que decide qué perfiles caben, se pasa aparte a `perfiles::evaluar`).
     pub disco_libre_mb: u64,
     pub sistema: String,
 }
@@ -101,27 +103,9 @@ pub fn analizar(carpeta_datos: &Path) -> Equipo {
         nucleos,
         hilos,
         gpus: gpus(),
-        disco_libre_mb: disco_libre_mb(carpeta_datos),
+        disco_libre_mb: espacio_libre_mb(carpeta_datos),
         sistema: System::long_os_version().unwrap_or_else(|| std::env::consts::OS.into()),
     }
-}
-
-/// Espacio libre del disco cuyo punto de montaje es el prefijo más largo de `ruta`.
-fn disco_libre_mb(ruta: &Path) -> u64 {
-    let disks = Disks::new_with_refreshed_list();
-    // La carpeta de datos puede no existir todavía: se sube hasta un ancestro que exista.
-    let ruta = ruta
-        .ancestors()
-        .find(|p| p.exists())
-        .and_then(|p| p.canonicalize().ok())
-        .unwrap_or_else(|| ruta.to_path_buf());
-    disks
-        .list()
-        .iter()
-        .filter(|d| ruta.starts_with(d.mount_point()))
-        .max_by_key(|d| d.mount_point().as_os_str().len())
-        .map(|d| d.available_space() / MB)
-        .unwrap_or(0)
 }
 
 /// Clasifica una gráfica a partir de lo leído del sistema.

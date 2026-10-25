@@ -22,6 +22,8 @@ pub struct PerfilEvaluado {
     #[serde(flatten)]
     pub perfil: Perfil,
     pub descarga_gb: f64,
+    /// Lo que hay que tener libre para descargarlo: `descarga_gb` × `margen_disco`.
+    pub necesita_disco_gb: f64,
     pub cabe_en_memoria: bool,
     pub cabe_en_disco: bool,
 }
@@ -37,6 +39,8 @@ impl PerfilEvaluado {
 pub struct Evaluacion {
     /// `None` si el jugador eligió "a mano" (sin análisis).
     pub memoria_para_ia_gb: Option<f64>,
+    /// Espacio libre en la carpeta de la IA; `None` si no se midió.
+    pub disco_libre_gb: Option<f64>,
     pub perfiles: Vec<PerfilEvaluado>,
     pub maximo_seguro: Option<String>,
     pub recomendado: String,
@@ -57,20 +61,25 @@ pub fn memoria_para_ia_gb(reglas: &Reglas, equipo: &Equipo) -> f64 {
 }
 
 /// Evalúa los perfiles del catálogo para un equipo, o sin equipo si se eligió a mano.
-pub fn evaluar(catalogo: &Catalogo, equipo: Option<&Equipo>) -> Evaluacion {
+///
+/// `disco_libre_mb` es el espacio libre de la carpeta donde irá la IA, no un dato del análisis
+/// del equipo: se pasa aparte para que también bloquee la descarga en el modo "a mano".
+pub fn evaluar(catalogo: &Catalogo, equipo: Option<&Equipo>, disco_libre_mb: Option<u64>) -> Evaluacion {
     let reglas = &catalogo.reglas;
     let para_ia = equipo.map(|e| memoria_para_ia_gb(reglas, e));
-    let disco_gb = equipo.map(|e| e.disco_libre_mb as f64 / MB_POR_GB);
+    let disco_gb = disco_libre_mb.map(|mb| mb as f64 / MB_POR_GB);
 
     let perfiles: Vec<PerfilEvaluado> = catalogo
         .perfiles
         .iter()
         .map(|p| {
             let descarga_gb = catalogo.descarga_gb(p);
+            let necesita_disco_gb = descarga_gb * reglas.margen_disco;
             PerfilEvaluado {
                 cabe_en_memoria: para_ia.is_none_or(|m| p.memoria_gb <= m),
-                cabe_en_disco: disco_gb.is_none_or(|d| descarga_gb * reglas.margen_disco <= d),
+                cabe_en_disco: disco_gb.is_none_or(|d| necesita_disco_gb <= d),
                 descarga_gb,
+                necesita_disco_gb,
                 perfil: p.clone(),
             }
         })
@@ -83,7 +92,7 @@ pub fn evaluar(catalogo: &Catalogo, equipo: Option<&Equipo>) -> Evaluacion {
         .expect("el catálogo validado tiene al menos un perfil no experimental");
 
     let Some(para_ia) = para_ia else {
-        return Evaluacion { memoria_para_ia_gb: None, perfiles, maximo_seguro: None, recomendado: mas_ligero, equipo_insuficiente: false };
+        return Evaluacion { memoria_para_ia_gb: None, disco_libre_gb: disco_gb, perfiles, maximo_seguro: None, recomendado: mas_ligero, equipo_insuficiente: false };
     };
 
     let caben: Vec<&PerfilEvaluado> = perfiles.iter().filter(|p| p.cabe() && !p.perfil.experimental).collect();
@@ -96,6 +105,7 @@ pub fn evaluar(catalogo: &Catalogo, equipo: Option<&Equipo>) -> Evaluacion {
 
     Evaluacion {
         memoria_para_ia_gb: Some(para_ia),
+        disco_libre_gb: disco_gb,
         equipo_insuficiente: maximo.is_none(),
         perfiles,
         maximo_seguro: maximo,
@@ -126,7 +136,8 @@ pub(crate) mod tests {
     }
 
     fn ev(ram: u64, vram: Option<u64>, disco: u64) -> Evaluacion {
-        evaluar(&Catalogo::incrustado(), Some(&equipo(ram, vram, disco)))
+        let e = equipo(ram, vram, disco);
+        evaluar(&Catalogo::incrustado(), Some(&e), Some(e.disco_libre_mb))
     }
 
     // Ejemplos de la tabla de docs/09.
@@ -194,11 +205,53 @@ pub(crate) mod tests {
 
     #[test]
     fn sin_analisis_todo_disponible_y_el_mas_ligero_por_defecto() {
-        let e = evaluar(&Catalogo::incrustado(), None);
+        let e = evaluar(&Catalogo::incrustado(), None, None);
         assert_eq!(e.memoria_para_ia_gb, None);
         assert_eq!(e.maximo_seguro, None);
         assert_eq!(e.recomendado, "minimo");
         assert!(e.perfiles.iter().all(|p| p.cabe()));
+    }
+
+    #[test]
+    fn a_mano_con_disco_escaso_bloquea_lo_que_no_cabe() {
+        // Sin análisis de equipo, pero con 8 GB libres en la carpeta de destino.
+        let e = evaluar(&Catalogo::incrustado(), None, Some(8 * 1024));
+        assert_eq!(e.memoria_para_ia_gb, None);
+        assert_eq!(e.maximo_seguro, None);
+        assert_eq!(e.recomendado, "minimo");
+        assert_eq!(e.disco_libre_gb, Some(8.0));
+        let por_id = |id: &str| e.perfiles.iter().find(|p| p.perfil.id == id).unwrap();
+        assert!(por_id("equilibrado").cabe(), "6 x 1,1 GB caben en 8 GB");
+        let max = por_id("maximo");
+        assert!(max.cabe_en_memoria && !max.cabe_en_disco && !max.cabe());
+        assert!(max.necesita_disco_gb > 8.0);
+    }
+
+    #[test]
+    fn a_mano_sin_disco_medido_no_bloquea() {
+        let e = evaluar(&Catalogo::incrustado(), None, None);
+        assert_eq!(e.disco_libre_gb, None);
+        assert!(e.perfiles.iter().all(|p| p.cabe_en_disco));
+    }
+
+    #[test]
+    fn necesita_disco_es_la_descarga_por_el_margen() {
+        let cat = Catalogo::incrustado();
+        let e = evaluar(&cat, None, None);
+        for p in &e.perfiles {
+            assert!((p.necesita_disco_gb - p.descarga_gb * cat.reglas.margen_disco).abs() < 1e-9);
+        }
+        let json = serde_json::to_value(&e).unwrap();
+        assert!(json["perfiles"][0]["necesitaDiscoGb"].as_f64().unwrap() > 0.0);
+    }
+
+    #[test]
+    fn el_disco_ya_no_sale_del_equipo() {
+        // El equipo dice 500 GB libres, pero la carpeta de destino tiene 1 GB: manda la carpeta.
+        let eq = equipo(32, Some(12), 500);
+        let e = evaluar(&Catalogo::incrustado(), Some(&eq), Some(1024));
+        assert!(e.perfiles.iter().all(|p| !p.cabe_en_disco));
+        assert!(e.equipo_insuficiente);
     }
 
     #[test]
