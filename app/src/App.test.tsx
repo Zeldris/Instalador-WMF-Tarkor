@@ -92,7 +92,7 @@ describe('asistente de primer arranque', () => {
     await waitFor(() => expect(within(carpeta).getByText('/mnt/tarjeta-sd/Tarkor IA')).toBeTruthy())
     await waitFor(() => expect(screen.getAllByText(/libres 500 GB/).length).toBeGreaterThan(0))
     expect(await boton(/^Descargar/)).toHaveProperty('disabled', false)
-    expect((await ejemplo.cargarConfig()).carpetaIa).toBe('/mnt/tarjeta-sd')
+    expect((await ejemplo.cargarConfig()).carpetaIa).toBe('/mnt/tarjeta-sd/Tarkor IA')
   })
 
   it('en Ajustes se puede mover la carpeta de la IA', async () => {

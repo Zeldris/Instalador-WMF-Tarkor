@@ -45,8 +45,8 @@ export default function App() {
     if (!destino) return
     const nuevas = await api.cambiarCarpetaIa(destino)
     setRutas(nuevas)
-    // Se guarda también aquí: si no, el siguiente `actualizar` pisaría la carpeta con el valor viejo.
-    actualizar({ carpetaIa: destino })
+    // El núcleo ya la guardó; se copia al estado para que el siguiente `actualizar` no la pise.
+    actualizar({ carpetaIa: nuevas.ia })
     setEvaluacion(await api.evaluarPerfiles(ultima.current?.permisoAnalisis ? ultima.current.equipo : null))
   }, [actualizar])
 

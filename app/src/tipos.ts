@@ -70,7 +70,7 @@ export interface Config {
   modelosDescargados: string[]
   pasoAsistente: number
   asistenteCompletado: boolean
-  /** Carpeta elegida por la usuaria para la IA (el destino, sin «Tarkor IA»); null = la de por defecto. */
+  /** Carpeta de la IA elegida (`<elegida>/Tarkor IA`, la guarda el núcleo); null = la de por defecto. */
   carpetaIa: string | null
 }
 
