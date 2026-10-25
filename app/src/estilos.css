@@ -101,7 +101,6 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
 .tarjeta { text-align: left; font: inherit; color: inherit; cursor: pointer; border: 1px solid var(--iron-700); border-radius: 12px; padding: 16px; background: color-mix(in srgb, var(--wood-950) 40%, transparent); display: flex; flex-direction: column; gap: 10px; }
 .tarjeta:hover:not(:disabled) { border-color: var(--wood-500); }
 .tarjeta.sel { border-color: var(--accent-400); background: color-mix(in srgb, var(--accent-500) 12%, var(--wood-900)); box-shadow: 0 0 0 1px var(--accent-400) inset; }
-.tarjeta:disabled { cursor: not-allowed; opacity: .5; }
 .tarjeta .nombre { font-family: var(--serif); font-weight: 700; font-size: 18px; letter-spacing: .04em; }
 .tarjeta-caja { display: flex; flex-direction: column; gap: 8px; }
 .tarjeta-caja .tarjeta { flex: 1; }

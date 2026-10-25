@@ -103,7 +103,7 @@ pub fn analizar(carpeta_datos: &Path) -> Equipo {
         nucleos,
         hilos,
         gpus: gpus(),
-        disco_libre_mb: espacio_libre_mb(carpeta_datos),
+        disco_libre_mb: espacio_libre_mb(carpeta_datos).unwrap_or(0),
         sistema: System::long_os_version().unwrap_or_else(|| std::env::consts::OS.into()),
     }
 }

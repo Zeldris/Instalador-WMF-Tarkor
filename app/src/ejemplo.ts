@@ -39,7 +39,10 @@ let rutasEjemplo = rutasPorDefecto()
 /** Para los tests: fija el disco libre de la carpeta de IA actual. */
 export const fijarDiscoLibreIa = (gb: number) => { discoLibreIaGb = gb }
 /** Para los tests: vuelve a la carpeta y el disco por defecto. */
-export const reiniciarCarpetaIa = () => { discoLibreIaGb = equipoEjemplo.discoLibreMb / 1024; rutasEjemplo = rutasPorDefecto() }
+export const reiniciarCarpetaIa = () => { discoLibreIaGb = equipoEjemplo.discoLibreMb / 1024; rutasEjemplo = rutasPorDefecto(); errorCarpetaIa = null }
+let errorCarpetaIa: string | null = null
+/** Para los tests: el siguiente cambio de carpeta falla con este mensaje, como lo daría el núcleo. */
+export const fijarErrorCarpetaIa = (mensaje: string) => { errorCarpetaIa = mensaje }
 
 export function evaluarEjemplo(equipo: Equipo | null): Evaluacion {
   const r = catalogo.reglas
@@ -116,6 +119,7 @@ export const ejemplo: Api = {
   elegirCarpeta: async () => '/mnt/tarjeta-sd',
   cambiarCarpetaIa: async (destino) => {
     await pausa(60)
+    if (errorCarpetaIa) throw errorCarpetaIa
     discoLibreIaGb = DISCO_CARPETA_ELEGIDA_GB
     rutasEjemplo = { ...rutasEjemplo, ia: `${destino}/Tarkor IA` }
     return { ...rutasEjemplo }

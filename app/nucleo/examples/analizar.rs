@@ -7,7 +7,7 @@ fn main() {
     let e = equipo::analizar(&rutas.datos);
     println!("{}", serde_json::to_string_pretty(&e).unwrap());
     let (catalogo, origen) = Catalogo::cargar(&rutas.datos);
-    let ev = perfiles::evaluar(&catalogo, Some(&e), Some(carpetas::espacio_libre_mb(&rutas.ia)));
+    let ev = perfiles::evaluar(&catalogo, Some(&e), carpetas::espacio_libre_mb(&rutas.ia));
     println!("catálogo: {origen:?}");
     println!("{}", serde_json::to_string_pretty(&ev).unwrap());
     let recomendado = catalogo.perfil(&ev.recomendado).unwrap();

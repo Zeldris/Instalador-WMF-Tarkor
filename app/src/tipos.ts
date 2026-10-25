@@ -110,8 +110,6 @@ export interface ProgresoModelo {
 
 export type Comprobacion = { resultado: 'ok'; detalle: string } | { resultado: 'omitida'; motivo: string }
 
-export const cabe =(p: PerfilEvaluado) => p.cabeEnMemoria && p.cabeEnDisco
-
 /** Una tarjeta pide confirmar si el perfil no cabe en memoria (solo con análisis). */
 export const pideConfirmar = (e: Evaluacion, p: PerfilEvaluado) => e.memoriaParaIaGb !== null && !p.cabeEnMemoria
 /** Hay que impedir la descarga: no cabe en disco o falta la confirmación. */

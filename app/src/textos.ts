@@ -100,7 +100,7 @@ export const perfil = {
   cambiarCarpeta: 'Cambiar carpeta',
   carpeta: 'Carpeta de la IA',
   moviendo: 'Moviendo…',
-  errorCarpeta: 'No se pudo cambiar la carpeta. No se ha movido nada.',
+  errorCarpeta: 'No se pudo cambiar la carpeta.',
   usoCpu: 'Uso del procesador',
   moderado: 'Moderado',
   alto: 'Alto',

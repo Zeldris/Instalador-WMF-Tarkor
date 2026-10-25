@@ -14,8 +14,8 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-25). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #5 (2026-10-22, `89bb2ee`): `FLU-2`, piloto de Galivelop-workflow v0.2.0, y `FLU-3`, CI en local. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 🚧 2026-10-25: `INS-14` (tarjetas con aviso y confirmación, sin interruptor) e `INS-48` (carpeta de la IA elegible y movible, disco necesario frente a libre) implementadas; check, E2E y `ci-local` del commit en verde. Pendiente leve: con poco disco, el paso 3 dice «equipo insuficiente» aunque falte disco y no memoria (`perfiles::evaluar` mezcla los dos en `maximo_seguro`). Siguiente: `INS-49` («Reparar») o fase 3, según elija la usuaria; antes de `main`, las tres fases. |
-| **Tests** | 2026-10-25: núcleo `cargo test -p tarkor-nucleo` 66, asistente `vitest` 9, `tsc -b` 0, clippy 0 avisos, E2E del asistente (tauri-driver) en verde. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 🚧 2026-10-25: la usuaria confirma subir a `main` lo actual (`INS-14`, `INS-48`, `FLU-4`). Fase 1 hecha: `/code-review` con 17 hallazgos, graves y medios arreglados; los leves, en «Siguiente paso». Siguiente: fase 2 (`opt-tokens` y `retro`, presentadas a la usuaria) y fase 3; después `INS-49` o la fase 3 del plan. |
+| **Tests** | 2026-10-25: núcleo `cargo test -p tarkor-nucleo` 70, asistente `vitest` 10, `tsc -b` 0, clippy 0 avisos, `cargo check` del núcleo para Windows (mingw) en verde. |
 
 ## Dónde está todo (para saber qué sigue)
 
@@ -33,7 +33,11 @@ cada commit.**
    `routes/turn.integration.test.ts` y endurecer `lib/prisma.test.ts` (detalle en el
    [plan](../05-plan-de-trabajo.md#dónde-lo-dejamos-2026-09-28)).
 2. Fase 3 (modo empaquetado del juego, `INS-31`…`INS-37`) y fase 4 (`INS-41`…`INS-47`).
-3. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
+3. Pendientes leves de la revisión de `INS-48` (no vuelven a revisarse en su PR): `bloqueado` no descuenta lo
+   ya descargado en Ajustes; no se impide mover la carpeta con una descarga en marcha (el asistente hoy no lo
+   permite); `Estado::ia()` lee `config.json` en cada llamada; el aviso de restos del origen solo va a stderr;
+   con poco disco el paso 3 dice «equipo insuficiente».
+4. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
 
 ## Decisiones de la usuaria que bloquean algo
 

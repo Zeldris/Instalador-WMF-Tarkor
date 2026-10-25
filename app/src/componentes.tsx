@@ -147,23 +147,24 @@ export function Tarjetas({ evaluacion, seleccionado, onSeleccionar, confirmado, 
 /** Estado de «elegir carpeta y mover»: «Moviendo…» y el error, para mostrarlos donde convenga. */
 export function useMoverCarpeta(cambiar: () => Promise<void>) {
   const [moviendo, setMoviendo] = useState(false)
-  const [error, setError] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const mover = async () => {
     setMoviendo(true)
-    setError(false)
-    try { await cambiar() } catch { setError(true) } finally { setMoviendo(false) }
+    setError(null)
+    // El núcleo explica qué pasó y qué hacer (otra carpeta, poco espacio); se enseña tal cual.
+    try { await cambiar() } catch (e) { setError(typeof e === 'string' && e ? e : t.errorCarpeta) } finally { setMoviendo(false) }
   }
   return { moviendo, error, mover }
 }
 
-export function CarpetaIa({ ruta, accion, moviendo, error, onMover }: { ruta: string; accion: string; moviendo: boolean; error: boolean; onMover: () => void }) {
+export function CarpetaIa({ ruta, accion, moviendo, error, onMover }: { ruta: string; accion: string; moviendo: boolean; error: string | null; onMover: () => void }) {
   return (
     <div className="carpeta">
       <div className="fila">
         <span className="tenue">{t.carpeta}</span> <span className="ruta">{ruta}</span>
         <button type="button" className="enlace" disabled={moviendo} onClick={onMover}>{moviendo ? t.moviendo : accion}</button>
       </div>
-      {error && <div className="error" role="alert">{t.errorCarpeta}</div>}
+      {error && <div className="error" role="alert">{error}</div>}
     </div>
   )
 }

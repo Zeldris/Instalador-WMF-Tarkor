@@ -12,9 +12,9 @@ use sysinfo::Disks;
 const MB: u64 = 1024 * 1024;
 
 /// Espacio libre, en MB, del disco cuyo punto de montaje es el prefijo más largo de `ruta`.
-/// Si la ruta todavía no existe se sube hasta el primer antepasado que exista. Devuelve 0 si no
-/// se encuentra el disco.
-pub fn espacio_libre_mb(ruta: &Path) -> u64 {
+/// Si la ruta todavía no existe se sube hasta el primer antepasado que exista. `None` si no se
+/// encuentra el disco (un montaje que sysinfo no lista): no medido, que no es lo mismo que lleno.
+pub fn espacio_libre_mb(ruta: &Path) -> Option<u64> {
     let disks = Disks::new_with_refreshed_list();
     let ruta = absoluta(ruta);
     disks
@@ -23,7 +23,15 @@ pub fn espacio_libre_mb(ruta: &Path) -> u64 {
         .filter(|d| ruta.starts_with(d.mount_point()))
         .max_by_key(|d| d.mount_point().as_os_str().len())
         .map(|d| d.available_space() / MB)
-        .unwrap_or(0)
+}
+
+/// `canonicalize` en Windows devuelve `\\?\C:\...`, que no empieza por el punto de montaje
+/// (`C:\`) que da sysinfo. Se quita el prefijo de disco; uno de red (`\\?\UNC\`) se deja.
+fn sin_verbatim(ruta: PathBuf) -> PathBuf {
+    match ruta.to_str().and_then(|s| s.strip_prefix(r"\\?\")) {
+        Some(resto) if !resto.starts_with("UNC\\") => PathBuf::from(resto),
+        _ => ruta,
+    }
 }
 
 /// Ruta canónica aunque no exista del todo: se canoniza el primer antepasado que exista y se le
@@ -34,7 +42,7 @@ fn absoluta(ruta: &Path) -> PathBuf {
     loop {
         if actual.exists() {
             if let Ok(base) = actual.canonicalize() {
-                let mut fin = base;
+                let mut fin = sin_verbatim(base);
                 for parte in resto.iter().rev() {
                     fin.push(parte);
                 }
@@ -81,8 +89,11 @@ fn copiar_recursivo(origen: &Path, destino: &Path) -> io::Result<()> {
     for entrada in fs::read_dir(origen)? {
         let entrada = entrada?;
         let a = destino.join(entrada.file_name());
-        if entrada.file_type()?.is_dir() {
+        let tipo = entrada.file_type()?;
+        if tipo.is_dir() {
             copiar_recursivo(&entrada.path(), &a)?;
+        } else if tipo.is_symlink() {
+            copiar_enlace(&entrada.path(), &a)?;
         } else {
             fs::copy(entrada.path(), &a)?;
         }
@@ -90,24 +101,40 @@ fn copiar_recursivo(origen: &Path, destino: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// El paquete de Ollama para Linux trae las bibliotecas como enlaces (`libX.so -> libX.so.12`):
+/// se copia el enlace, no lo que apunta, para no duplicar cientos de MB.
+#[cfg(unix)]
+fn copiar_enlace(origen: &Path, destino: &Path) -> io::Result<()> {
+    std::os::unix::fs::symlink(fs::read_link(origen)?, destino)
+}
+
+/// En Windows el paquete del motor no trae enlaces; si hubiera uno, se copia su contenido.
+#[cfg(not(unix))]
+fn copiar_enlace(origen: &Path, destino: &Path) -> io::Result<()> {
+    fs::copy(origen, destino).map(|_| ())
+}
+
 /// Mueve la carpeta de la IA de `origen` a `destino`, con mensajes pensados para el jugador.
 ///
 /// - Si `origen` no existe (nada instalado todavía), solo se crea `destino`.
 /// - `destino` no puede ser `origen` ni estar dentro, y debe no existir o estar vacío.
-/// - Antes de tocar nada se comprueba que lo de `origen` cabe en el disco de `destino`.
-/// - Se intenta renombrar (instantáneo en el mismo disco); si no se puede (otro disco), se copia
-///   y después se borra el origen. Si la copia falla, se borra la copia parcial y el origen
-///   queda intacto.
-pub fn mover_carpeta(origen: &Path, destino: &Path) -> Result<(), String> {
-    mover_con(origen, destino, |a, b| fs::rename(a, b), espacio_libre_mb)
+/// - Se intenta renombrar (instantáneo en el mismo disco, no necesita espacio); si no se puede
+///   (otro disco), se comprueba que cabe, se copia y después se borra el origen. Si la copia
+///   falla, se borra la copia parcial y el origen queda intacto.
+/// - Ya copiado, el movimiento cuenta como hecho aunque no se pueda borrar del todo el origen
+///   (un archivo bloqueado en Windows): la configuración debe pasar a la carpeta nueva, que es la
+///   completa. Lo que quede del origen se devuelve como aviso.
+pub fn mover_carpeta(origen: &Path, destino: &Path) -> Result<Option<String>, String> {
+    mover_con(origen, destino, |a, b| fs::rename(a, b), copiar_recursivo, espacio_libre_mb)
 }
 
 fn mover_con(
     origen: &Path,
     destino: &Path,
     renombrar: impl Fn(&Path, &Path) -> io::Result<()>,
-    espacio: impl Fn(&Path) -> u64,
-) -> Result<(), String> {
+    copiar: impl Fn(&Path, &Path) -> io::Result<()>,
+    espacio: impl Fn(&Path) -> Option<u64>,
+) -> Result<Option<String>, String> {
     let (o, d) = (normalizada(origen), normalizada(destino));
     if o == d {
         return Err("La carpeta nueva es la misma que la actual.".into());
@@ -123,34 +150,43 @@ fn mover_con(
     }
     let falla = |e: io::Error| format!("No se pudo preparar la carpeta {}: {e}", destino.display());
     if !origen.exists() {
-        return fs::create_dir_all(destino).map_err(falla);
-    }
-    let necesario = tamano_bytes(origen).map_err(|e| format!("No se pudo medir la carpeta actual: {e}"))?;
-    let libre = espacio(destino);
-    if necesario.div_ceil(MB) > libre {
-        return Err(format!(
-            "No hay espacio suficiente en el disco de {}: hacen falta {} MB y hay {libre} MB libres.",
-            destino.display(),
-            necesario.div_ceil(MB)
-        ));
+        return fs::create_dir_all(destino).map(|_| None).map_err(falla);
     }
     if let Some(padre) = destino.parent() {
         fs::create_dir_all(padre).map_err(falla)?;
     }
     // En Windows renombrar sobre una carpeta existente (aunque esté vacía) falla.
-    if destino.exists() {
+    let estaba = destino.exists();
+    if estaba {
         fs::remove_dir(destino).map_err(falla)?;
     }
     if renombrar(origen, destino).is_ok() {
-        return Ok(());
+        return Ok(None);
     }
-    if let Err(e) = copiar_recursivo(origen, destino) {
-        let _ = fs::remove_dir_all(destino);
+    if estaba {
+        fs::create_dir(destino).map_err(falla)?;
+    }
+    let necesario = tamano_bytes(origen).map_err(|e| format!("No se pudo medir la carpeta actual: {e}"))?;
+    if let Some(libre) = espacio(destino) {
+        if necesario.div_ceil(MB) > libre {
+            return Err(format!(
+                "No hay espacio suficiente en el disco de {}: hacen falta {} MB y hay {libre} MB libres.",
+                destino.display(),
+                necesario.div_ceil(MB)
+            ));
+        }
+    }
+    if let Err(e) = copiar(origen, destino) {
+        if estaba {
+            let _ = fs::remove_dir_all(destino).and_then(|_| fs::create_dir(destino));
+        } else {
+            let _ = fs::remove_dir_all(destino);
+        }
         return Err(format!("No se pudo copiar a {}: {e}. La carpeta actual sigue como estaba.", destino.display()));
     }
-    fs::remove_dir_all(origen).map_err(|e| {
-        format!("Se copió a {}, pero no se pudo borrar la carpeta anterior ({}): {e}. Bórrala a mano.", destino.display(), origen.display())
-    })
+    Ok(fs::remove_dir_all(origen).err().map(|e| {
+        format!("Se movió a {}, pero quedó parte de la carpeta anterior ({}): {e}. Puedes borrarla a mano.", destino.display(), origen.display())
+    }))
 }
 
 #[cfg(test)]
@@ -173,9 +209,9 @@ mod tests {
     fn espacio_libre_de_ruta_inexistente_sube_al_antepasado() {
         let dir = tempfile::tempdir().unwrap();
         let futura = dir.path().join("no/existe/todavia");
-        let real = espacio_libre_mb(dir.path());
+        let real = espacio_libre_mb(dir.path()).unwrap();
         assert!(real > 0);
-        let de_futura = espacio_libre_mb(&futura);
+        let de_futura = espacio_libre_mb(&futura).unwrap();
         assert!(de_futura > 0, "una ruta que no existe debe dar el espacio de su disco");
         // Mismo disco: dos lecturas pueden variar un poco, no a cero.
         assert!(de_futura.abs_diff(real) < 100, "{de_futura} frente a {real}");
@@ -207,7 +243,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let o = con_contenido(dir.path());
         let d = dir.path().join("otro-disco");
-        mover_con(&o, &d, rename_falla, espacio_libre_mb).unwrap();
+        mover_con(&o, &d, rename_falla, copiar_recursivo, espacio_libre_mb).unwrap();
         assert!(!o.exists());
         assert_eq!(fs::read_to_string(d.join("a.txt")).unwrap(), "hola");
         assert!(d.join("modelos/sub/b.bin").exists());
@@ -251,24 +287,64 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let o = con_contenido(dir.path());
         let d = dir.path().join("nueva");
-        let e = mover_con(&o, &d, |a, b| fs::rename(a, b), |_| 0).unwrap_err();
+        let e = mover_con(&o, &d, rename_falla, copiar_recursivo, |_| Some(0)).unwrap_err();
         assert!(e.contains("No hay espacio suficiente"), "{e}");
         assert!(o.join("a.txt").exists() && !d.exists());
     }
 
-    #[cfg(unix)]
     #[test]
     fn si_la_copia_falla_se_borra_lo_parcial_y_el_origen_queda_intacto() {
         let dir = tempfile::tempdir().unwrap();
         let o = con_contenido(dir.path());
-        // Un enlace roto hace fallar `fs::copy` (aunque se ejecute como root, a diferencia de un
-        // permiso denegado).
-        std::os::unix::fs::symlink(dir.path().join("no-existe"), o.join("zzz-roto")).unwrap();
         let d = dir.path().join("otro-disco");
-        let e = mover_con(&o, &d, rename_falla, espacio_libre_mb).unwrap_err();
+        // Copia a medias: deja un archivo y falla.
+        let copia_rota = |_: &Path, b: &Path| {
+            fs::create_dir_all(b)?;
+            fs::write(b.join("a.txt"), "ho")?;
+            Err(io::Error::other("disco desconectado"))
+        };
+        let e = mover_con(&o, &d, rename_falla, copia_rota, espacio_libre_mb).unwrap_err();
         assert!(e.contains("No se pudo copiar") && e.contains("sigue como estaba"), "{e}");
         assert!(!d.exists(), "la copia parcial se borra");
         assert_eq!(fs::read_to_string(o.join("a.txt")).unwrap(), "hola");
         assert!(o.join("modelos/sub/b.bin").exists());
+    }
+
+    #[test]
+    fn renombrar_en_el_mismo_disco_no_pide_espacio() {
+        let dir = tempfile::tempdir().unwrap();
+        let o = con_contenido(dir.path());
+        let d = dir.path().join("nueva");
+        assert_eq!(mover_con(&o, &d, |a, b| fs::rename(a, b), copiar_recursivo, |_| Some(0)), Ok(None));
+        assert!(d.join("a.txt").exists() && !o.exists());
+    }
+
+    #[test]
+    fn un_disco_sin_medir_no_bloquea_la_copia() {
+        let dir = tempfile::tempdir().unwrap();
+        let o = con_contenido(dir.path());
+        let d = dir.path().join("nueva");
+        assert_eq!(mover_con(&o, &d, rename_falla, copiar_recursivo, |_| None), Ok(None));
+        assert!(d.join("modelos/sub/b.bin").exists() && !o.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn los_enlaces_se_copian_como_enlaces() {
+        let dir = tempfile::tempdir().unwrap();
+        let o = con_contenido(dir.path());
+        std::os::unix::fs::symlink("b.bin", o.join("modelos/sub/b.so")).unwrap();
+        std::os::unix::fs::symlink("sub", o.join("modelos/enlace-a-carpeta")).unwrap();
+        let d = dir.path().join("otro-disco");
+        mover_con(&o, &d, rename_falla, copiar_recursivo, espacio_libre_mb).unwrap();
+        assert_eq!(fs::read_link(d.join("modelos/sub/b.so")).unwrap(), Path::new("b.bin"));
+        assert_eq!(fs::read_link(d.join("modelos/enlace-a-carpeta")).unwrap(), Path::new("sub"));
+    }
+
+    #[test]
+    fn quita_el_prefijo_verbatim_de_windows() {
+        assert_eq!(sin_verbatim(PathBuf::from(r"\\?\C:\Users\a")), PathBuf::from(r"C:\Users\a"));
+        assert_eq!(sin_verbatim(PathBuf::from(r"\\?\UNC\srv\c")), PathBuf::from(r"\\?\UNC\srv\c"));
+        assert_eq!(sin_verbatim(PathBuf::from("/home/a")), PathBuf::from("/home/a"));
     }
 }

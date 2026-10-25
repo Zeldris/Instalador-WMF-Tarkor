@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import App from './App'
-import { ejemplo, configInicial, fijarDiscoLibreIa, reiniciarCarpetaIa } from './ejemplo'
+import { ejemplo, configInicial, fijarDiscoLibreIa, fijarErrorCarpetaIa, reiniciarCarpetaIa } from './ejemplo'
 
 afterEach(async () => {
   cleanup()
@@ -25,7 +25,7 @@ async function hastaElPermiso() {
 async function hastaElPerfil() {
   await hastaElPermiso()
   fireEvent.click(await boton('Analizar mi equipo'))
-  await screen.findByText(/Te recomendamos el perfil|Tu equipo no/, {}, { timeout: 2000 }).catch(() => {})
+  await screen.findByText(/Te recomendamos el perfil/, {}, { timeout: 2000 })
   fireEvent.click(await boton('Continuar'))
   await boton(/^Equilibrado/)
 }
@@ -97,7 +97,16 @@ describe('asistente de primer arranque', () => {
     expect((await ejemplo.cargarConfig()).carpetaIa).toBe('/mnt/tarjeta-sd/Tarkor IA')
   })
 
-  it('en Ajustes se puede mover la carpeta de la IA', async () => {
+  it('si no se puede cambiar la carpeta, dice por qué', async () => {
+    const motivo = 'La carpeta /mnt/tarjeta-sd/Tarkor IA ya existe y no está vacía. Elige otra.'
+    fijarErrorCarpetaIa(motivo)
+    await hastaElPerfil()
+    const carpeta = document.querySelector('.carpeta') as HTMLElement
+    fireEvent.click(within(carpeta).getByRole('button', { name: 'Cambiar carpeta' }))
+    expect((await within(carpeta).findByRole('alert')).textContent).toBe(motivo)
+  })
+
+  it('en Ajustes se puede mover la carpeta de la IA, y repetir el asistente no la olvida', async () => {
     await hastaElPerfil()
     fireEvent.click(await boton(/^Descargar/))
     fireEvent.click(await boton('Comprobar la instalación', 10000))
@@ -109,6 +118,12 @@ describe('asistente de primer arranque', () => {
     const carpeta = document.querySelector('.carpeta') as HTMLElement
     fireEvent.click(within(carpeta).getByRole('button', { name: 'Mover a otra carpeta' }))
     await waitFor(() => expect(within(carpeta).getByText('/mnt/tarjeta-sd/Tarkor IA')).toBeTruthy())
+
+    fireEvent.click(await boton('Volver'))
+    fireEvent.click(await boton('Repetir el asistente'))
+    await boton('Empezar')
+    await waitFor(async () => expect((await ejemplo.cargarConfig()).pasoAsistente).toBe(1))
+    expect((await ejemplo.cargarConfig()).carpetaIa).toBe('/mnt/tarjeta-sd/Tarkor IA')
   }, 20000)
 
   it('cada perfil explica qué resultado esperar', async () => {
