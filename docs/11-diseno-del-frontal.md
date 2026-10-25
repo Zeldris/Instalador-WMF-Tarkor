@@ -153,8 +153,10 @@ Accesible desde el menú del juego. Mismo estilo.
 - Uso del procesador.
 - **Carpeta de los modelos**: la ruta, su espacio y "Mover…", que copia el motor y los modelos a la
   nueva carpeta, comprueba y borra la vieja (LM Studio, "My Models"; Ollama, `OLLAMA_MODELS`).
-- **Reparar**: vuelve a comprobar la suma del motor y pide de nuevo los modelos del perfil;
-  `/api/pull` solo baja lo que falta o está dañado (el "healing" de itch.io).
+- **Reparar**: vuelve a comprobar la suma de cada archivo del motor (el "Verificar archivos" de Steam; las
+  sumas quedan en su marca `.completo` al instalarlo) y lo reinstala si alguna no casa; luego suma cada capa
+  de los modelos del perfil, borra las dañadas y pide de nuevo los modelos: `/api/pull` solo baja lo que
+  falta (el "healing" de itch.io). Ollama no vuelve a sumar las capas que ya tiene, por eso las suma Tarkor.
 - "Copiar informe del sistema" para pedir ayuda.
 
 ### Error: el motor se ha detenido

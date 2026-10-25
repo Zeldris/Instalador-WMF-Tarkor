@@ -137,8 +137,12 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
   de la carpeta aparte, comando `cambiar_carpeta_ia` (`<elegida>/Tarkor IA`, para y rearranca el
   motor) y selector nativo (`tauri-plugin-dialog` 2). Pendiente de `INS-8`: mover a la tarjeta SD de
   la Deck y entre discos en Windows (el test de copia fallida solo corre en Unix).
-- [ ] **INS-49** "Reparar": volver a comprobar la suma del motor y pedir de nuevo los modelos, desde
-  Ajustes y desde la comprobación final.
+- [x] **INS-49** (2026-10-25) "Reparar": volver a comprobar la suma del motor y pedir de nuevo los modelos, desde
+  Ajustes y desde la comprobación final. Hecho: `motor::instalar` guarda la suma de cada archivo en `.completo`
+  y `motor::reparar` las comprueba y reinstala si falla alguna; `nucleo/src/modelos.rs` suma las capas de cada
+  manifiesto de Ollama y borra las dañadas; comando `reparar` (para el motor, repara, borra capas, rearranca y
+  pide los modelos del perfil) y componente `Reparar` en Ajustes y en las filas «Motor de IA» y «Modelos» de la
+  comprobación. Pendiente de `INS-8`: reparar en Windows (archivos bloqueados por el motor) y en la Deck.
 
 ## Fase 5 — Prueba real
 

@@ -14,8 +14,8 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-25). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #6 (2026-10-25, `14f55ce`): `INS-14`, `INS-48` y `FLU-4`. La CI de GitHub no arrancó (pago); `ci-local` en verde sobre `7276a43`, Windows sin cubrir. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | ✅ 2026-10-25: PR #6 fusionado en `main` con la confirmación de la usuaria; la rama se rehace desde `main`. Siguiente: `/clear` y después `INS-49` («Reparar») o la fase 3 del plan. |
-| **Tests** | 2026-10-25: núcleo `cargo test -p tarkor-nucleo` 70, asistente `vitest` 10, `tsc -b` 0, clippy 0 avisos, `cargo check` del núcleo para Windows (mingw) en verde. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | `INS-49` «Reparar»: núcleo, comando, pantallas y tests hechos y subidos. Falta: el paso de Reparar en el E2E (`app/e2e/asistente.e2e.mjs`, Ajustes) y correrlo con la app recompilada. Siguiente: eso. |
+| **Tests** | 2026-10-25: núcleo `cargo test -p tarkor-nucleo` 80, asistente `vitest` 12, `tsc -b` 0, clippy 0 avisos, `cargo check` del núcleo para Windows (mingw) en verde. |
 
 ## Dónde está todo (para saber qué sigue)
 

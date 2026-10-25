@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from './api'
-import { Marco } from './componentes'
+import { Marco, Reparar } from './componentes'
 import * as tx from './textos'
 import type { Config, Evaluacion, ProgresoMotor } from './tipos'
 import { fmt } from './formato'
@@ -210,6 +210,7 @@ export function Comprobacion({ ir }: { ir: (paso: number) => void }) {
                 <span className="peq tenue" aria-live="polite">{copiado}</span>
               </div>
             )}
+            {estados[i] === 'fallo' && (paso.id === 'motor' || paso.id === 'modelos') && <Reparar alTerminar={reintentar} />}
           </li>
         ))}
       </ol>

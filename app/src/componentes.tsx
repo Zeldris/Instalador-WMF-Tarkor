@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { comun, pasos, perfil as t } from './textos'
-import type { Evaluacion, PerfilId, UsoCpu } from './tipos'
+import { api } from './api'
+import { comun, pasos, perfil as t, reparar as tr } from './textos'
+import type { Evaluacion, PerfilId, ProgresoModelo, ProgresoMotor, Reparacion, UsoCpu } from './tipos'
 import { pideConfirmar } from './tipos'
 import { fmt } from './formato'
 
@@ -163,6 +164,49 @@ export function CarpetaIa({ ruta, accion, moviendo, error, onMover }: { ruta: st
       <div className="fila">
         <span className="tenue">{t.carpeta}</span> <span className="ruta">{ruta}</span>
         <button type="button" className="enlace" disabled={moviendo} onClick={onMover}>{moviendo ? t.moviendo : accion}</button>
+      </div>
+      {error && <div className="error" role="alert">{error}</div>}
+    </div>
+  )
+}
+
+const pc = (hecho: number, total: number) => (total ? Math.round((hecho / total) * 100) : 0)
+
+function textoMotor(p: ProgresoMotor) {
+  return p.fase === 'descargando' ? tr.motor.descargando(pc(p.hecho, p.total)) : tr.motor[p.fase]
+}
+
+function textoModelo(p: ProgresoModelo) {
+  if (p.estado === 'verificando') return tr.comprobandoModelo(p.modelo)
+  return p.total > 0 && p.hecho < p.total ? tr.descargandoModelo(p.modelo, pc(p.hecho, p.total)) : tr.pidiendoModelo(p.modelo)
+}
+
+/** «Reparar» (`INS-49`): el botón, lo que está haciendo y cómo acabó. `alTerminar` solo se llama si salió bien. */
+export function Reparar({ alTerminar }: { alTerminar?: (r: Reparacion) => void }) {
+  const [reparando, setReparando] = useState(false)
+  const [estado, setEstado] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const empezar = async () => {
+    setReparando(true)
+    setError(null)
+    setEstado(tr.motor.verificando)
+    try {
+      const r = await api.reparar((p) => setEstado(textoMotor(p)), (p) => setEstado(textoModelo(p)))
+      const partes = [...(r.motorReinstalado ? [tr.motorReinstalado] : []), ...(r.capasRepuestas > 0 ? [tr.capas(r.capasRepuestas)] : [])]
+      setEstado(partes.length ? tr.hecho(partes) : tr.enOrden)
+      alTerminar?.(r)
+    } catch (e) {
+      setEstado('')
+      setError(String(e))
+    } finally {
+      setReparando(false)
+    }
+  }
+  return (
+    <div className="reparar">
+      <div className="fila">
+        <button type="button" className="btn" disabled={reparando} onClick={empezar}>{reparando ? tr.reparando : tr.boton}</button>
+        <span className="peq tenue" aria-live="polite">{estado || tr.explicacion}</span>
       </div>
       {error && <div className="error" role="alert">{error}</div>}
     </div>

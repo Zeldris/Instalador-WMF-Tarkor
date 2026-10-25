@@ -1,7 +1,7 @@
 // Pantallas del asistente de primer arranque (docs/11-diseno-del-frontal.md).
 
 import { useState } from 'react'
-import { CarpetaIa, ControlUsoCpu, DetallesTecnicos, Marco, Medidor, Pagina, Tarjetas, useMoverCarpeta } from './componentes'
+import { CarpetaIa, ControlUsoCpu, DetallesTecnicos, Marco, Medidor, Pagina, Reparar, Tarjetas, useMoverCarpeta } from './componentes'
 import * as tx from './textos'
 import type { Config, Equipo, Evaluacion, PerfilId, Rutas } from './tipos'
 import { bloqueado } from './tipos'
@@ -205,6 +205,7 @@ export function Ajustes({ config, evaluacion, rutas, cambiarCarpeta, actualizar,
           onSeleccionar={(id) => { setConfirmado(false); setElegido(id) }} />
         {rutas && <CarpetaIa ruta={rutas.ia} accion={t.moverCarpeta} moviendo={carpeta.moviendo} error={carpeta.error} onMover={carpeta.mover} />}
         <ControlUsoCpu uso={config.usoCpu} hilos={config.equipo?.hilos ?? 4} onCambiar={(usoCpu) => actualizar({ usoCpu })} />
+        <Reparar alTerminar={(r) => actualizar({ modelosDescargados: r.modelos })} />
         {nuevo.descargaGb < actual.descargaGb && <p className="peq tenue">{t.liberar(nuevo.nombre, fmt(actual.descargaGb - nuevo.descargaGb))}</p>}
       </Pagina>
     </div>

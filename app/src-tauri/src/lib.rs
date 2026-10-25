@@ -17,7 +17,7 @@ use tarkor_nucleo::ollama::{self, Cliente, ProgresoModelo};
 use tarkor_nucleo::perfiles::{self, Evaluacion, UsoCpu};
 use tarkor_nucleo::procesos::{self, Especificacion, Estado as EstadoProceso, Proceso};
 use tarkor_nucleo::rendimiento::{self, Ajustes};
-use tarkor_nucleo::{motor, rendimiento::hilos_para_ia};
+use tarkor_nucleo::{modelos, motor, rendimiento::hilos_para_ia};
 use tauri::ipc::Channel;
 use tauri::{Manager, RunEvent, State};
 
@@ -286,6 +286,69 @@ async fn descargar_modelos(app: tauri::AppHandle, canal: Channel<ProgresoModelo>
     .map_err(|e| e.to_string())?
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Reparacion {
+    motor_reinstalado: bool,
+    /// Capas de modelos dañadas o que faltaban, que `/api/pull` ha vuelto a bajar.
+    capas_repuestas: usize,
+    modelos: Vec<String>,
+}
+
+/// «Reparar» (`INS-49`, docs/11): para el motor, comprueba la suma de cada archivo suyo y lo
+/// reinstala si hace falta; comprueba las capas de los modelos del perfil y borra las dañadas;
+/// arranca el motor y pide todos los modelos con `/api/pull`, que solo baja lo que falta. Con un
+/// Ollama externo solo se pide de nuevo cada modelo: ni su motor ni su carpeta son de la app.
+#[tauri::command]
+async fn reparar(app: tauri::AppHandle, canal_motor: Channel<motor::Progreso>, canal: Channel<ProgresoModelo>) -> Res<Reparacion> {
+    let estado = app.state::<Estado>();
+    estado.cancelar.store(false, Ordering::Relaxed);
+    let config = estado.config();
+    let perfil = estado.perfil(&config)?.clone();
+    let modelos: Vec<String> = perfil.modelos().into_iter().map(String::from).collect();
+    let (mut motor_reinstalado, mut capas_repuestas) = (false, 0);
+    if estado.ollama_externo.is_none() {
+        // Parado, ningún archivo está en uso: en Windows no se podría reponer ni borrar.
+        if let Some(mut p) = estado.motor.lock().unwrap().take() {
+            p.parar();
+        }
+        let (ia, m, cancelar, lista) = (config.ia_efectiva(&estado.rutas), estado.catalogo.motor.clone(), estado.cancelar.clone(), modelos.clone());
+        let canal_modelos = canal.clone();
+        (motor_reinstalado, capas_repuestas) = tauri::async_runtime::spawn_blocking(move || -> Res<(bool, usize)> {
+            let reinstalado = motor::reparar(&ia, &m, &cancelar, &mut |p| {
+                let _ = canal_motor.send(p);
+            })
+            .map_err(|e| e.to_string())?;
+            let mut capas = 0;
+            for (i, modelo) in lista.iter().enumerate() {
+                let _ = canal_modelos.send(ProgresoModelo { modelo: modelo.clone(), estado: "verificando".into(), hecho: i as u64, total: lista.len() as u64 });
+                capas += modelos::borrar_capas_danadas(&ia.join("modelos"), modelo)
+                    .map_err(|e| format!("No se pudieron comprobar los archivos de {modelo}: {e}"))?;
+            }
+            Ok((reinstalado, capas))
+        })
+        .await
+        .map_err(|e| e.to_string())??;
+        arrancar_motor(&app).await?;
+    }
+    let cliente = estado.cliente()?;
+    let cancelar = estado.cancelar.clone();
+    let lista = modelos.clone();
+    tauri::async_runtime::spawn_blocking(move || -> Res<()> {
+        for m in &lista {
+            cliente
+                .descargar_modelo(m, &cancelar, &mut |p| {
+                    let _ = canal.send(p);
+                })
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    Ok(Reparacion { motor_reinstalado, capas_repuestas, modelos })
+}
+
 /// `nomic-embed-text` aparece en Ollama como `nomic-embed-text:latest`.
 fn tiene(hay: &[String], modelo: &str) -> bool {
     hay.iter().any(|h| h == modelo || h.strip_suffix(":latest") == Some(modelo))
@@ -374,6 +437,7 @@ pub fn run() {
             cambiar_carpeta_ia,
             vigilar_motor,
             descargar_modelos,
+            reparar,
             comprobar
         ])
         .build(tauri::generate_context!())
