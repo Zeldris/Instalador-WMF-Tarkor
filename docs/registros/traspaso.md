@@ -14,8 +14,8 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-25). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #7 (2026-10-25, `8566d48`): `INS-49`, con la confirmación de la usuaria. La CI de GitHub no arrancó (pago); `ci-local` en verde sobre `04a37c6`, Windows sin cubrir. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-10-25: `INS-43` (Ajustes → Rendimiento de la IA y motor detenido), elegida por la usuaria porque el punto 1 va en el repo del juego. Decisiones en `docs/11`. Reparto: (1) núcleo y comandos de Rust, (2) frontal, (3) E2E. Trozo 1 (Rust: comandos `uso_ia`, `cambiar_perfil`, `informe`, `reintentar_motor`, evento `motor-detenido`) hecho el 2026-10-25; faltan el 2 (frontal) y el 3 (E2E). Presupuesto: 1 compactación (la sesión lleva 19). Siguiente: trozo 2 (frontal). |
-| **Tests** | 2026-10-25: núcleo `cargo test -p tarkor-nucleo` 87, asistente `vitest` 14, `tsc -b` 0, clippy 0 avisos, `cargo check` del núcleo para Windows (mingw) en verde; E2E del asistente con el Ollama falso en verde. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-10-25: `INS-43` (Ajustes → Rendimiento de la IA y motor detenido), elegida por la usuaria porque el punto 1 va en el repo del juego. Decisiones en `docs/11`. Reparto: (1) núcleo y comandos de Rust, (2) frontal, (3) E2E. Trozo 1 (Rust: comandos `uso_ia`, `cambiar_perfil`, `informe`, `reintentar_motor`, evento `motor-detenido`) hecho el 2026-10-25, revisado y arreglado (se añade `ultimo_motivo_parada` al Estado y la marca de arranque en el registro); faltan el 2 (frontal) y el 3 (E2E). Presupuesto: 1 compactación (la sesión lleva 19). Siguiente: trozo 2 (frontal). |
+| **Tests** | 2026-10-25: núcleo `cargo test -p tarkor-nucleo` 104, asistente `vitest` 14, `tsc -b` 0, clippy 0 avisos, `cargo check` del núcleo para Windows (mingw) en verde; E2E del asistente con el Ollama falso en verde. |
 
 ## Dónde está todo (para saber qué sigue)
 
@@ -37,13 +37,14 @@ cada commit.**
    ya descargado en Ajustes; no se impide mover la carpeta con una descarga en marcha (el asistente hoy no lo
    permite); `Estado::ia()` lee `config.json` en cada llamada; el aviso de restos del origen solo va a stderr;
    con poco disco el paso 3 dice «equipo insuficiente».
-4. Pendientes leves de la revisión de `INS-49` (no vuelven a revisarse en su PR): con un `.completo` vacío (lo
+4. Pendientes leves de la revisión de `INS-43`: `cliente()` espera al Mutex del motor durante el reinicio automático (hasta 30 s): conviene guardar la URL aparte; `cambiar_perfil` pone `cancelar` a false y puede deshacer una pausa de otra descarga.
+5. Pendientes leves de la revisión de `INS-49` (no vuelven a revisarse en su PR): con un `.completo` vacío (lo
    instalado antes de `INS-49`) el primer Reparar vuelve a bajar el motor aunque esté sano; `alTerminar` de
    Ajustes guarda los modelos del perfil leído al empezar aunque se cambie durante la reparación; el porcentaje
    al reponer un modelo es el de cada capa y vuelve a 0 %; `escribir_sumas` relee todo el motor tras extraerlo
    en vez de sumar al extraer; la lista única de modelos de un perfil está copiada en cuatro sitios (conviene un
    `modelosDe(perfil)` en `catalogo.ts`).
-5. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
+6. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
 
 ## Decisiones de la usuaria que bloquean algo
 

@@ -87,6 +87,23 @@ pub struct MotorDetenido {
     pub sin_memoria: bool,
 }
 
+/// Principio de la línea que `Proceso::lanzar` escribe en el registro antes de cada arranque.
+const MARCA_ARRANQUE: &str = "--- Tarkor: arranque de ";
+
+/// Lo que el registro lleva desde la última marca de arranque (desde la propia marca); sin marca,
+/// todo el texto. Así una falta de memoria de un arranque anterior no cuenta para el último.
+pub fn desde_ultimo_arranque(texto: &str) -> &str {
+    let mut ini = None;
+    let mut pos = 0;
+    for linea in texto.split_inclusive('\n') {
+        if linea.starts_with(MARCA_ARRANQUE) {
+            ini = Some(pos);
+        }
+        pos += linea.len();
+    }
+    &texto[ini.unwrap_or(0)..]
+}
+
 /// ¿Dicen las líneas del registro que el proceso murió por falta de memoria? Sin distinguir
 /// mayúsculas; son las frases de Ollama/llama.cpp (CPU, CUDA, ROCm y Vulkan).
 pub fn sin_memoria(texto: &str) -> bool {
@@ -130,7 +147,9 @@ impl Proceso {
         if let Some(dir) = e.registro.parent() {
             fs::create_dir_all(dir)?;
         }
-        let log = File::options().create(true).append(true).open(&e.registro)?;
+        let mut log = File::options().create(true).append(true).open(&e.registro)?;
+        // Marca de arranque: separa en el registro un arranque de otro (`desde_ultimo_arranque`).
+        writeln!(log, "{MARCA_ARRANQUE}{} ---", e.nombre)?;
         let mut cmd = Command::new(&e.programa);
         cmd.args(&e.argumentos)
             .envs(&e.entorno)
@@ -178,13 +197,6 @@ impl Proceso {
             Ok(()) => Estado::Reiniciado,
             Err(e) => Estado::Detenido { motivo: e.to_string() },
         }
-    }
-
-    /// Reintento manual desde la pantalla "El motor se ha detenido": vuelve a dar un reinicio.
-    pub fn reintentar(&mut self) -> io::Result<()> {
-        self.parar();
-        self.reinicios = 0;
-        self.lanzar()
     }
 
     pub fn parar(&mut self) {
@@ -347,9 +359,9 @@ mod tests {
         assert_eq!(proc.vigilar(), Estado::Reiniciado);
         thread::sleep(Duration::from_millis(600));
         assert!(matches!(proc.vigilar(), Estado::Detenido { motivo } if motivo.contains("dos veces")));
-        // El reintento manual da otra oportunidad.
-        proc.reintentar().unwrap();
-        assert_eq!(proc.vigilar(), Estado::Funcionando);
+        // Cada arranque deja su marca en el registro.
+        let log = fs::read_to_string(dir.path().join("registros/prueba.log")).unwrap();
+        assert_eq!(log.matches(MARCA_ARRANQUE).count(), 2, "{log}");
     }
 
     #[test]
@@ -367,6 +379,22 @@ mod tests {
         }
         assert!(!sin_memoria(""));
         assert!(!sin_memoria("time=2026 level=INFO msg=\"Listening on 127.0.0.1:11500\"\nexit status 2"));
+    }
+
+    #[test]
+    fn la_falta_de_memoria_de_un_arranque_viejo_no_cuenta() {
+        let log = format!(
+            "{MARCA_ARRANQUE}El motor de IA ---\nllama runner: out of memory\n{MARCA_ARRANQUE}El motor de IA ---\nListening on 127.0.0.1:11500\nexit status 2\n"
+        );
+        assert!(sin_memoria(&log), "el registro entero sí la tiene");
+        let ultimo = desde_ultimo_arranque(&log);
+        assert!(ultimo.starts_with(MARCA_ARRANQUE) && ultimo.contains("Listening"), "{ultimo}");
+        assert!(!sin_memoria(ultimo), "{ultimo}");
+        // Si la falta de memoria es del último arranque, sí.
+        let log2 = format!("{MARCA_ARRANQUE}x ---\nbien\n{MARCA_ARRANQUE}x ---\nout of memory\n");
+        assert!(sin_memoria(desde_ultimo_arranque(&log2)));
+        // Sin marca (registro de antes de la marca): todo.
+        assert_eq!(desde_ultimo_arranque("a\nb"), "a\nb");
     }
 
     #[test]

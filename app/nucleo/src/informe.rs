@@ -77,28 +77,34 @@ fn es_de_nombre(c: char) -> bool {
     c.is_alphanumeric() || c == '_' || c == '-'
 }
 
-/// Cambia la carpeta personal por `~`, con una barra o con la otra (Ollama escribe rutas a su
-/// manera) y, en Windows, sin distinguir mayúsculas. `/home/ana` no toca `/home/ana2`.
-pub fn anonimizar(texto: &str, carpeta_personal: &Path) -> String {
-    let c = carpeta_personal.to_string_lossy();
-    let c = c.trim_end_matches(['/', '\\']);
-    if c.is_empty() || c == "." {
-        return texto.to_string();
-    }
-    let mut formas = vec![c.to_string()];
-    for otra in [c.replace('\\', "/"), c.replace('/', "\\")] {
-        if !formas.contains(&otra) {
-            formas.push(otra);
+/// Cambia la carpeta de la IA por `<carpeta de la IA>` y la personal por `~`, con una barra o con
+/// la otra (Ollama escribe rutas a su manera), con las barras invertidas dobladas (el registro de
+/// Ollama en Windows: `C:\\Users\\Ana`) y, en Windows, sin distinguir mayúsculas. `/home/ana` no toca
+/// `/home/ana2`. Se sustituye primero la forma más larga: la carpeta de la IA suele colgar de la
+/// personal, y si no, quedaría `~/…` en vez de `<carpeta de la IA>`.
+pub fn anonimizar(texto: &str, carpeta_personal: &Path, carpeta_ia: &Path) -> String {
+    let mut formas: Vec<(String, &str)> = Vec::new();
+    for (carpeta, cambio) in [(carpeta_personal, "~"), (carpeta_ia, "<carpeta de la IA>")] {
+        let c = carpeta.to_string_lossy();
+        let c = c.trim_end_matches(['/', '\\']);
+        if c.is_empty() || c == "." {
+            continue;
+        }
+        for forma in [c.to_string(), c.replace('\\', "/"), c.replace('/', "\\"), c.replace('\\', "\\\\")] {
+            if !formas.iter().any(|(f, _)| *f == forma) {
+                formas.push((forma, cambio));
+            }
         }
     }
+    formas.sort_by_key(|(f, _)| std::cmp::Reverse(f.len()));
     let mut salida = texto.to_string();
-    for forma in &formas {
-        salida = sustituir(&salida, forma);
+    for (forma, cambio) in &formas {
+        salida = sustituir(&salida, forma, cambio);
     }
     salida
 }
 
-fn sustituir(texto: &str, forma: &str) -> String {
+fn sustituir(texto: &str, forma: &str, cambio: &str) -> String {
     // El paso a minúsculas ASCII conserva las posiciones en bytes.
     let (pajar, aguja) = if cfg!(windows) { (texto.to_ascii_lowercase(), forma.to_ascii_lowercase()) } else { (texto.to_string(), forma.to_string()) };
     let mut salida = String::with_capacity(texto.len());
@@ -110,7 +116,7 @@ fn sustituir(texto: &str, forma: &str) -> String {
         if texto[fin..].chars().next().is_some_and(es_de_nombre) {
             salida.push_str(&texto[ini..fin]);
         } else {
-            salida.push('~');
+            salida.push_str(cambio);
         }
         resto = fin;
     }
@@ -150,8 +156,9 @@ fn describir_equipo(e: Option<&Equipo>) -> String {
     s
 }
 
-/// Arma el informe en texto plano, con la carpeta personal cambiada por `~`.
-pub fn componer(d: &Datos, carpeta_personal: &Path) -> String {
+/// Arma el informe en texto plano, con la carpeta personal cambiada por `~` y la de la IA por
+/// `<carpeta de la IA>`.
+pub fn componer(d: &Datos, carpeta_personal: &Path, carpeta_ia: &Path) -> String {
     let mut t = String::new();
     let mut seccion = |titulo: &str, cuerpo: String| {
         t.push_str(&format!("== {titulo} ==\n{cuerpo}\n\n"));
@@ -214,7 +221,7 @@ pub fn componer(d: &Datos, carpeta_personal: &Path) -> String {
         &format!("Últimas {LINEAS_REGISTRO} líneas de motor-ia.log"),
         if d.registro.trim().is_empty() { "(registro vacío o inexistente)".into() } else { d.registro.to_string() },
     );
-    anonimizar(t.trim_end(), carpeta_personal)
+    anonimizar(t.trim_end(), carpeta_personal, carpeta_ia)
 }
 
 #[cfg(test)]
@@ -259,20 +266,42 @@ mod tests {
     #[test]
     fn anonimiza_la_carpeta_personal() {
         let casa = Path::new("/home/ana");
-        assert_eq!(anonimizar("cargando /home/ana/.local/share/tarkor/ia y /home/ana", casa), "cargando ~/.local/share/tarkor/ia y ~");
+        assert_eq!(anonimizar("cargando /home/ana/.local/share/tarkor/ia y /home/ana", casa, Path::new("")), "cargando ~/.local/share/tarkor/ia y ~");
         // Otro usuario con el mismo comienzo no se toca.
-        assert_eq!(anonimizar("/home/ana2/x", casa), "/home/ana2/x");
+        assert_eq!(anonimizar("/home/ana2/x", casa, Path::new("")), "/home/ana2/x");
         // Con barra final en la carpeta, igual.
-        assert_eq!(anonimizar("/home/ana/x", Path::new("/home/ana/")), "~/x");
+        assert_eq!(anonimizar("/home/ana/x", Path::new("/home/ana/"), Path::new("")), "~/x");
         // Sin carpeta personal conocida no se cambia nada (ni se rompe).
-        assert_eq!(anonimizar("/home/ana/x", Path::new("")), "/home/ana/x");
+        assert_eq!(anonimizar("/home/ana/x", Path::new(""), Path::new("")), "/home/ana/x");
     }
 
     #[test]
     fn anonimiza_rutas_de_windows_con_cualquier_barra() {
         let casa = Path::new(r"C:\Users\Ana");
-        let r = anonimizar(r"C:\Users\Ana\AppData\Local y C:/Users/Ana/AppData", casa);
+        let r = anonimizar(r"C:\Users\Ana\AppData\Local y C:/Users/Ana/AppData", casa, Path::new(""));
         assert_eq!(r, r"~\AppData\Local y ~/AppData");
+    }
+
+    #[test]
+    fn anonimiza_las_barras_dobladas_del_registro_de_ollama_en_windows() {
+        let casa = Path::new(r"C:\Users\Ana");
+        let r = anonimizar(r"OLLAMA_MODELS:C:\\Users\\Ana\\AppData\\models y C:\Users\Ana\x", casa, Path::new(""));
+        assert_eq!(r, r"OLLAMA_MODELS:~\\AppData\\models y ~\x");
+        assert!(!r.contains("Ana"), "{r}");
+    }
+
+    #[test]
+    fn anonimiza_la_carpeta_de_la_ia_antes_que_la_personal() {
+        let casa = Path::new("/home/ana");
+        let ia = Path::new("/home/ana/Juegos/Tarkor IA");
+        let r = anonimizar("modelos en /home/ana/Juegos/Tarkor IA/ollama y en /home/ana/otra", casa, ia);
+        assert_eq!(r, "modelos en <carpeta de la IA>/ollama y en ~/otra");
+        // Una carpeta de la IA fuera de la personal también.
+        let r = anonimizar("en /mnt/datos/ia/modelos", casa, Path::new("/mnt/datos/ia"));
+        assert_eq!(r, "en <carpeta de la IA>/modelos");
+        // Con las barras dobladas de Windows.
+        let r = anonimizar(r"D:\\Tarkor IA\\models", casa, Path::new(r"D:\Tarkor IA"));
+        assert_eq!(r, r"<carpeta de la IA>\\models");
     }
 
     fn equipo() -> Equipo {
@@ -315,7 +344,7 @@ mod tests {
         let e = equipo();
         let o = Origen::Incrustado;
         let ps = [Cargado { modelo: "qwen2.5:7b".into(), porcentaje_gpu: 60, memoria_mb: 5000, tamano_bytes: 5000 * 1024 * 1024, vram_bytes: 3000 * 1024 * 1024 }];
-        let i = componer(&datos(Some(&e), Ok(&ps), "error en /home/ana/.local/share/tarkor/ia/ollama\nout of memory", &o), Path::new("/home/ana"));
+        let i = componer(&datos(Some(&e), Ok(&ps), "error en /home/ana/.local/share/tarkor/ia/ollama\nout of memory", &o), Path::new("/home/ana"), Path::new(""));
         for esperado in [
             "Versión de la app: 0.1.0",
             "linux x86_64",
@@ -341,7 +370,7 @@ mod tests {
     #[test]
     fn el_informe_sin_analisis_ni_motor_dice_por_que() {
         let o = Origen::ExternoInvalido { motivo: "json roto".into() };
-        let i = componer(&datos(None, Err("El motor de IA no está en marcha."), "", &o), Path::new("/home/ana"));
+        let i = componer(&datos(None, Err("El motor de IA no está en marcha."), "", &o), Path::new("/home/ana"), Path::new(""));
         assert!(i.contains("== Equipo analizado ==\nsin analizar"), "{i}");
         assert!(i.contains("No se pudo leer: El motor de IA no está en marcha."), "{i}");
         assert!(i.contains("(registro vacío o inexistente)"), "{i}");
@@ -351,7 +380,7 @@ mod tests {
     #[test]
     fn el_informe_con_nada_cargado_lo_dice() {
         let o = Origen::Incrustado;
-        let i = componer(&datos(None, Ok(&[]), "x", &o), Path::new("/home/ana"));
+        let i = componer(&datos(None, Ok(&[]), "x", &o), Path::new("/home/ana"), Path::new(""));
         assert!(i.contains("Nada cargado"), "{i}");
     }
 }
