@@ -134,7 +134,8 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
   `modelos_sobrantes`, `borrar_modelos`, `informe`, `motor_detenido` y `reintentar_motor`, hilo de vigilancia con
   el evento `motor-detenido`; frontal: línea de uso cada 5 s, cambio de perfil con progreso y pausa, borrar
   sobrantes, `CopiarInforme` y la pantalla del motor detenido (Reintentar, "Cambiar a un perfil más ligero");
-  tests de vitest y E2E `app/e2e/rendimiento.e2e.mjs`.
+  tests de vitest y E2E `app/e2e/rendimiento.e2e.mjs`. Pendiente de `INS-8`: en Windows, la vigilancia y el
+  reinicio del motor, el informe con rutas de Windows (`anonimizar`) y la línea de uso con una gráfica real.
 - [ ] **INS-44** NSIS: castellano, instalación por usuario, desinstalador con las dos casillas.
 - [ ] **INS-45** AppImage (+ `.deb` opcional) compilado en Ubuntu 22.04.
 - [ ] **INS-46** Workflow de GitHub Actions en el repo privado que publica releases con `SHA256SUMS`
