@@ -5,7 +5,7 @@ import { api } from './api'
 import { CarpetaIa, CopiarInforme, ControlUsoCpu, DetallesTecnicos, Marco, Medidor, Pagina, Reparar, Tarjetas, textoModelo, useMoverCarpeta } from './componentes'
 import * as tx from './textos'
 import type { Config, Equipo, Evaluacion, PerfilId, Rutas, Sobrante, UsoIa } from './tipos'
-import { bloqueado } from './tipos'
+import { bloqueado, perfilDe } from './tipos'
 import { fmt, gbDeMb } from './formato'
 
 interface Nav {
@@ -88,7 +88,7 @@ export function TuEquipo({ ir, config, evaluacion, analizar, elegirAMano }: Nav 
 
   const gpu = e.gpus.find((g) => !g.integrada) ?? e.gpus[0]
   const integrada = !e.gpus.some((g) => !g.integrada)
-  const recomendado = evaluacion.perfiles.find((p) => p.id === evaluacion.recomendado)!
+  const recomendado = perfilDe(evaluacion, evaluacion.recomendado)
   return (
     <Marco paso={3} titulo={t.titulo} lead={t.lead}
       barra={<><button type="button" className="btn" disabled={analizando} onClick={lanzar}>{t.reanalizar}</button><span className="hueco" />
@@ -126,8 +126,9 @@ export function ElegirPerfil({ ir, config, evaluacion, rutas, cambiarCarpeta, ac
   const [confirmado, setConfirmado] = useState(false)
   const carpeta = useMoverCarpeta(cambiarCarpeta)
   const manual = evaluacion.memoriaParaIaGb === null
-  const elegido = config.perfil ?? evaluacion.recomendado
-  const p = evaluacion.perfiles.find((x) => x.id === elegido)!
+  // Un perfil guardado que ya no existe cuenta como el recomendado: la tarjeta marcada y lo que se guarda son el mismo.
+  const p = perfilDe(evaluacion, config.perfil)
+  const elegido = p.id
   const hilos = config.equipo?.hilos ?? 4
   return (
     <Marco paso={4} titulo={t.titulo} lead={manual ? t.leadManual : t.lead}
@@ -148,7 +149,7 @@ export function ElegirPerfil({ ir, config, evaluacion, rutas, cambiarCarpeta, ac
 
 export function Listo({ config, evaluacion, rutas, jugar }: { config: Config; evaluacion: Evaluacion; rutas: Rutas | null; jugar: () => void }) {
   const t = tx.listo
-  const p = evaluacion.perfiles.find((x) => x.id === (config.perfil ?? evaluacion.recomendado))!
+  const p = perfilDe(evaluacion, config.perfil)
   return (
     <Marco paso={7} titulo={t.titulo} lead={t.lead}
       barra={<><span className="hueco" /><button type="button" className="btn pri" onClick={jugar}>{t.accion}</button></>}>
@@ -261,7 +262,7 @@ export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpe
   useEffect(() => { alCambiar?.(cambio.cambiando) }, [alCambiar, cambio.cambiando])
   useEffect(() => () => alCambiar?.(false), [alCambiar])
   // Un perfil guardado que ya no está en la evaluación cuenta como el recomendado.
-  const actual = evaluacion.perfiles.find((x) => x.id === config.perfil) ?? evaluacion.perfiles.find((x) => x.id === evaluacion.recomendado)!
+  const actual = perfilDe(evaluacion, config.perfil)
   // Un id que no está en la evaluación (un perfil que ya no existe) no deja nada preseleccionado.
   const nuevo = evaluacion.perfiles.find((x) => x.id === elegido)
   const extra = nuevo ? Math.max(0, nuevo.descargaGb - actual.descargaGb) : 0

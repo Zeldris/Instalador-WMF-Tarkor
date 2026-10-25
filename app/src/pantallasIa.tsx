@@ -6,6 +6,7 @@ import { api } from './api'
 import { Marco, Reparar } from './componentes'
 import * as tx from './textos'
 import type { Config, Evaluacion, ProgresoMotor } from './tipos'
+import { perfilDe } from './tipos'
 import { fmt } from './formato'
 
 type EstadoFila = 'cola' | 'bajando' | 'verificando' | 'extrayendo' | 'listo'
@@ -27,7 +28,7 @@ interface Props {
 
 export function Descarga({ ir, config, evaluacion, actualizar }: Props) {
   const t = tx.descarga
-  const p = evaluacion.perfiles.find((x) => x.id === (config.perfil ?? evaluacion.recomendado))!
+  const p = perfilDe(evaluacion, config.perfil)
   const [filas, setFilas] = useState<Fila[] | null>(null)
   const [fase, setFase] = useState<'trabajando' | 'pausada' | 'error' | 'fin'>('trabajando')
   const [error, setError] = useState<string | null>(null)

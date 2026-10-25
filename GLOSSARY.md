@@ -10,7 +10,7 @@ mantiene al día (skill `domain-modeling`). El flujo nunca sobrescribe este arch
   check.
 - **Relevo**: una sesión que se acaba y otra que sigue desde la bitácora, sin preguntar por dónde iba.
 - **Punto estable**: un estado con el check en verde, con commit y subido.
-- **Check**: las órdenes del proyecto que tienen que pasar en cada commit que se sube: `bash tools/qa/en-app.sh npx tsc -b`, `bash tools/qa/en-app.sh cargo clippy -q --workspace --all-targets -- -D warnings`, `python3 .claude/gw/scripts/enlaces-md.py`, `python3 -m unittest discover -s tools/qa/tests`, `python3 -m unittest discover -s tools/banco`.
+- **Check**: las órdenes del proyecto que tienen que pasar en cada commit que se sube: `bash tools/qa/en-app.sh npx tsc -b`, `bash tools/qa/en-app.sh cargo clippy -q --workspace --all-targets -- -D warnings`, `python3 .claude/gw/scripts/enlaces-md.py`, `python3 tools/qa/sin-find-forzado.py`, `python3 -m unittest discover -s tools/qa/tests`, `python3 -m unittest discover -s tools/banco`.
 - **Commit `WIP:`**: un commit subido con algo a medias o en rojo; la bitácora dice qué falla y por qué.
 - **Rama protegida**: `main`, lo publicado; solo recibe trabajo revisado, con confirmación de la
   usuaria.

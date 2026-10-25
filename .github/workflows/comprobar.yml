@@ -68,6 +68,8 @@ jobs:
           python3 -m unittest discover -s .claude/skills/scout-updates/scripts
       - name: Enlaces de los documentos
         run: python3 .claude/gw/scripts/enlaces-md.py
+      - name: Sin find(...)! en el asistente
+        run: python3 tools/qa/sin-find-forzado.py
       - name: Pre-commit de la rama base sobre el pull request
         if: github.event_name == 'pull_request'
         run: |

@@ -63,7 +63,7 @@ export function evaluarEjemplo(equipo: Equipo | null): Evaluacion {
       necesitaDiscoGb,
     }
   })
-  const masLigero = perfiles.find((p) => !p.experimental)!.id
+  const masLigero = (perfiles.find((p) => !p.experimental) ?? perfiles[0]).id
   if (paraIa === null) return { memoriaParaIaGb: null, discoLibreGb: disco, perfiles, maximoSeguro: null, recomendado: masLigero, equipoInsuficiente: false }
   const caben = perfiles.filter((p) => p.cabeEnMemoria && p.cabeEnDisco && !p.experimental)
   const ultimo = caben.at(-1)

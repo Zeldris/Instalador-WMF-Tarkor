@@ -1,9 +1,10 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import App from './App'
-import { perfilMasLigero } from './tipos'
+import { perfilDe, perfilMasLigero } from './tipos'
 import { catalogo } from './catalogo'
-import { Ajustes } from './pantallas'
+import { Ajustes, ElegirPerfil, Listo } from './pantallas'
+import { Descarga } from './pantallasIa'
 import { ejemplo, configInicial, evaluarEjemplo, equipoEjemplo, fijarDiscoLibreIa, fijarErrorCambioPerfil, fijarRetardoCambioPerfil, fijarErrorCarpetaIa, fijarModelosDanados, fijarUsoIa, reiniciarCarpetaIa, reiniciarModelos, emitirMotorDetenido, fijarErrorCopiar, fijarErrorReintento, fijarMotorDetenido, oyentesMotor, reiniciarMotorDetenido, textoCopiado, TEXTO_INFORME } from './ejemplo'
 
 afterEach(async () => {
@@ -267,6 +268,44 @@ describe('asistente de primer arranque', () => {
       actualizar={() => {}} reemplazarConfig={() => {}} reanalizar={async () => {}} volver={() => {}} />)
     expect(await boton('Reparar')).toBeTruthy()
     expect(screen.getByText(new RegExp(`^Perfil actual: ${recomendado.nombre}`))).toBeTruthy()
+  })
+
+  describe('un perfil guardado que ya no está en la evaluación (INS-43)', () => {
+    const huerfana = () => ({ ...configInicial(), perfil: 'no-existe' as never })
+    const recomendadoDe = (e: ReturnType<typeof evaluarEjemplo>) => e.perfiles.find((x) => x.id === e.recomendado)!
+
+    it('perfilDe devuelve el perfil pedido, y si no está (o es null) el recomendado, y si tampoco el primero', () => {
+      const e = evaluarEjemplo(equipoEjemplo)
+      expect(perfilDe(e, 'ligero').id).toBe('ligero')
+      expect(perfilDe(e, 'no-existe').id).toBe(e.recomendado)
+      expect(perfilDe(e, null).id).toBe(e.recomendado)
+      expect(perfilDe(e, undefined).id).toBe(e.recomendado)
+      expect(perfilDe({ ...e, recomendado: 'tampoco' }, 'no-existe')).toBe(e.perfiles[0])
+      expect(() => perfilDe({ ...e, perfiles: [] }, 'ligero')).toThrow('La evaluación no trae ningún perfil')
+    })
+
+    it('Descarga no se cae y descarga el perfil recomendado', async () => {
+      const e = evaluarEjemplo(equipoEjemplo)
+      render(<Descarga ir={() => {}} config={huerfana()} evaluacion={e} actualizar={() => {}} />)
+      expect(await screen.findByText(new RegExp(`^Perfil ${recomendadoDe(e).nombre}\\.`))).toBeTruthy()
+    })
+
+    it('Perfil no se cae, marca el recomendado y guarda el recomendado, no el id que no existe', async () => {
+      const e = evaluarEjemplo(equipoEjemplo)
+      const guardados: unknown[] = []
+      render(<ElegirPerfil ir={() => {}} config={huerfana()} evaluacion={e} rutas={null} cambiarCarpeta={async () => {}}
+        actualizar={(c) => guardados.push(c.perfil)} />)
+      const tarjeta = await boton(new RegExp(`^${recomendadoDe(e).nombre}`))
+      expect(tarjeta.getAttribute('aria-pressed')).toBe('true')
+      fireEvent.click(await boton(/^Descargar/))
+      expect(guardados).toEqual([e.recomendado])
+    })
+
+    it('Listo no se cae y enseña el perfil recomendado', () => {
+      const e = evaluarEjemplo(equipoEjemplo)
+      render(<Listo config={huerfana()} evaluacion={e} rutas={null} jugar={() => {}} />)
+      expect(screen.getByText(recomendadoDe(e).nombre)).toBeTruthy()
+    })
   })
 
   it('durante un cambio de perfil, el control de CPU, Reparar y la carpeta están desactivados', async () => {

@@ -142,6 +142,18 @@ export const pideConfirmar = (e: Evaluacion, p: PerfilEvaluado) => e.memoriaPara
 /** Hay que impedir la descarga: no cabe en disco o falta la confirmación. */
 export const bloqueado = (e: Evaluacion, p: PerfilEvaluado, confirmado: boolean) => !p.cabeEnDisco || (pideConfirmar(e, p) && !confirmado)
 
+/**
+ * El perfil de la evaluación con ese id; si no está (un perfil guardado que ya no existe, o `null`) cuenta como el
+ * recomendado, y si tampoco, el primero. Sin `!`: una evaluación sin perfiles es un fallo del núcleo y lo dice.
+ */
+export function perfilDe(evaluacion: Evaluacion, id: PerfilId | null | undefined): PerfilEvaluado {
+  const perfil = evaluacion.perfiles.find((p) => p.id === id)
+    ?? evaluacion.perfiles.find((p) => p.id === evaluacion.recomendado)
+    ?? evaluacion.perfiles[0]
+  if (!perfil) throw new Error('La evaluación no trae ningún perfil')
+  return perfil
+}
+
 /** El perfil de menos memoria justo por debajo del actual (por `memoriaGb`, sin experimentales ni los que no caben en disco); null si ya es el más ligero. */
 export function perfilMasLigero(perfiles: { id: PerfilId; memoriaGb: number; experimental?: boolean; cabeEnDisco?: boolean }[], actual: PerfilId | null): PerfilId | null {
   const ref = perfiles.find((p) => p.id === actual)
