@@ -83,6 +83,13 @@ ni un *stack trace* a la vista.
 
 Los datos viven **fuera** de la carpeta de la app: actualizar o reinstalar nunca toca las partidas.
 
+La carpeta del motor de IA y los modelos es la de la tabla por defecto, pero se puede cambiar
+antes de descargar y moverla después desde Ajustes (decidido el 2026-10-25, `INS-48`); la ruta
+elegida se guarda en `config.json` y se pasa al motor como `OLLAMA_MODELS`. Un Ollama o unos
+modelos que el jugador ya tenga **no se aprovechan en la v1**: mezclarlos rompe el aislamiento
+(otra versión del motor, otra de `nomic-embed-text`). Se apunta para más adelante (itch.io adopta
+carpetas existentes, LM Studio importa modelos).
+
 ## Desinstalación
 
 - **Windows:** el desinstalador de NSIS pregunta, con dos casillas **sin marcar**:
@@ -102,11 +109,12 @@ Los datos viven **fuera** de la carpeta de la app: actualizar o reinstalar nunca
 | Desinstalador limpio que pregunte por las partidas | Sí (arriba) |
 | Firma de código | **ABIERTO**, ver [`04-empaquetado-tauri.md`](04-empaquetado-tauri.md) |
 | Verificación de integridad | `SHA256SUMS` en cada release; Ollama y modelos verificados al descargar |
+| Reparar sin reinstalar | Sí: "Reparar" en Ajustes y en la comprobación final (`INS-49`) |
 | Sin permisos de administrador | Sí |
 | Desinstalador visible en el panel del sistema | Sí (Windows) |
 | Registros accesibles para pedir ayuda | Sí: "Copiar informe" en errores y en Ajustes |
-| Nada en segundo plano sin avisar | Sí: nada arranca con el sistema; Ollama y el backend se paran al cerrar |
-| Actualizaciones automáticas | Fuera de la v1. Se deja preparado el plugin de actualizaciones de Tauri para la v2 |
+| Nada en segundo plano sin avisar | Sí: nada arranca con el sistema, sin icono en la bandeja; Ollama y el backend se paran al cerrar (al revés que Ollama y LM Studio, confirmado el 2026-10-25) |
+| Actualizaciones automáticas | Fuera de la v1. En la v2, preguntando antes de descargar (Heroic, `autoDownload=false`), no en segundo plano como itch.io; comprobar si hay versión nueva es una conexión que `08` tendrá que declarar |
 | Idioma | Castellano en instalador, asistente y juego |
 
 ## Abierto

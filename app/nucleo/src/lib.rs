@@ -4,11 +4,13 @@
 //! Windows desde Linux. Cada módulo corresponde a un documento de `docs/`:
 //!
 //! - [`catalogo`]: modelos, perfiles y reglas, leídos de `catalogo/catalogo.json` (docs/12).
+//! - [`carpetas`]: espacio libre y mover la carpeta de la IA (docs/07, "Dónde vive cada cosa").
 //! - [`equipo`]: análisis del equipo (docs/09, "Qué se detecta").
 //! - [`perfiles`]: evaluación de perfiles y cálculo del máximo seguro (docs/09).
 //! - [`rendimiento`]: ajustes de Ollama y del backend para cada equipo y perfil (docs/12).
 //! - [`config`]: `config.json` en la carpeta de datos (docs/07 y docs/09, "Dónde se guarda").
 
+pub mod carpetas;
 pub mod catalogo;
 pub mod config;
 pub mod equipo;

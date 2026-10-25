@@ -46,10 +46,14 @@ export interface PerfilEvaluado extends Perfil {
   descargaGb: number
   cabeEnMemoria: boolean
   cabeEnDisco: boolean
+  /** Descarga × margen de disco: lo que hay que tener libre en la carpeta de la IA. */
+  necesitaDiscoGb: number
 }
 
 export interface Evaluacion {
   memoriaParaIaGb: number | null
+  /** Espacio libre en la carpeta de la IA; null si no se pudo medir. */
+  discoLibreGb: number | null
   perfiles: PerfilEvaluado[]
   maximoSeguro: PerfilId | null
   recomendado: PerfilId
@@ -66,6 +70,8 @@ export interface Config {
   modelosDescargados: string[]
   pasoAsistente: number
   asistenteCompletado: boolean
+  /** Carpeta de la IA elegida (`<elegida>/Tarkor IA`, la guarda el núcleo); null = la de por defecto. */
+  carpetaIa: string | null
 }
 
 export interface Rutas {
@@ -104,4 +110,7 @@ export interface ProgresoModelo {
 
 export type Comprobacion = { resultado: 'ok'; detalle: string } | { resultado: 'omitida'; motivo: string }
 
-export const cabe =(p: PerfilEvaluado) => p.cabeEnMemoria && p.cabeEnDisco
+/** Una tarjeta pide confirmar si el perfil no cabe en memoria (solo con análisis). */
+export const pideConfirmar = (e: Evaluacion, p: PerfilEvaluado) => e.memoriaParaIaGb !== null && !p.cabeEnMemoria
+/** Hay que impedir la descarga: no cabe en disco o falta la confirmación. */
+export const bloqueado = (e: Evaluacion, p: PerfilEvaluado, confirmado: boolean) => !p.cabeEnDisco || (pideConfirmar(e, p) && !confirmado)

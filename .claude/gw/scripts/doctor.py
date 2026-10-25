@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.2.0
+# galivelop-workflow v0.3.0
 """Check that a project has the workflow set up (used by /gw-doctor and CI). No AI, no network.
 
   python3 doctor.py            # one line per check: OK / WARN / FAIL, each problem with the command that fixes it
@@ -7,7 +7,7 @@
   python3 doctor.py --root R   # check the project at R (default: config.find_root)
 
 Exit 1 if any check FAILs (WARNs do not fail). Checks: the config; core.hooksPath and other hook managers; the git
-hooks (present, executable, version); the log and its next step; the `check` and `install` commands exist; a CI
+hooks (present, executable, version); the log and its next step; the `check`, `install` and `setup` commands exist; a CI
 workflow; .claude/settings.json (WMF P4: SessionStart matchers, `compact` only runs recuperar.py --estado, hook
 commands point to existing files, the PR guard on PreToolUse); AGENTS.md/CLAUDE.md authorise dealing work to
 subagents (VeriNews P1); copied skills at the config's version; a session opened outside the repo (VeriNews P3);
@@ -33,7 +33,7 @@ import config  # noqa: E402
 import registro_sesion  # noqa: E402
 
 HEADER = re.compile(r"^# galivelop-workflow v(\S+)\s*$", re.M)
-NEXT_STEP = re.compile(r"siguiente paso|next step", re.I)
+NEXT_STEP = re.compile(r"siguientes? pasos?|next steps?", re.I)
 PR_TOOLS = ("create_pull_request", "merge_pull_request")
 PR_GUARD = "revision-antes-de-main.sh"
 INTERPRETERS = {"bash", "sh", "zsh", "python", "python3", "node", "env", "exec"}
@@ -131,10 +131,22 @@ MUST_BE_TRACKED = (".claude/gw.json", ".claude/gw/scripts/config.py", ".claude/s
                    ".claude/skills/selector/SKILL.md", ".githooks/pre-push")
 
 
+def must_be_tracked(root):
+    """MUST_BE_TRACKED plus the config's `reviewMark` file: git ignoring it breaks the pre-push without saying why."""
+    paths = list(MUST_BE_TRACKED)
+    try:
+        mark = config.load(root).get("reviewMark")
+    except config.ConfigError:
+        mark = None  # the config check reports it
+    if mark and mark not in paths:
+        paths.append(mark)
+    return paths
+
+
 def ignored_paths(root):
-    """[(path, the .gitignore rule that ignores it)] for MUST_BE_TRACKED; a tracked file is never ignored."""
+    """[(path, the .gitignore rule that ignores it)] for must_be_tracked(root); a tracked file is never ignored."""
     out = []
-    for rel in MUST_BE_TRACKED:
+    for rel in must_be_tracked(root):
         r = subprocess.run(["git", "-C", str(root), "check-ignore", "-v", "--", rel], capture_output=True, text=True)
         if r.returncode == 0:
             rule = r.stdout.split("\t")[0].strip()
@@ -200,7 +212,15 @@ def check_log(rep, root, cfg):
 def check_commands(rep, root, cfg):
     if cfg is None:
         return
-    for key, bad in (("check", rep.fail), ("install", rep.warn)):
+    wrapper = (cfg.get("checkWrapper") or "").strip()
+    if wrapper:
+        word = first_word(wrapper)
+        if resolves(word, root):
+            rep.ok("checkWrapper", f"'{wrapper}' ({word} found)")
+        else:
+            rep.fail("checkWrapper", f"'{wrapper}': '{word}' is not a command on PATH nor a file in the repo",
+                     f"fix checkWrapper in .claude/gw.json, then: python3 {HERE / 'doctor.py'}")
+    for key, bad in (("check", rep.fail), ("install", rep.warn), ("setup", rep.warn)):
         for command in cfg.get(key) or []:
             word = first_word(command)
             if resolves(word, root):
@@ -210,15 +230,33 @@ def check_commands(rep, root, cfg):
                     f"install {word} or fix '{key}' in .claude/gw.json, then: python3 {HERE / 'doctor.py'}")
 
 
-def check_ci(rep, root):
+def runs_check(text, cfg):
+    """True when a workflow's text runs the project's check: it reads `check` through config.py, is the workflow's
+    own comprobar.yml, or spells out one of the `check` commands."""
+    if "config.py get check" in text or ("galivelop-workflow v" in text and "pre-commit --rango" in text):
+        return True
+    code = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("#"))
+    return any(c.strip() and re.search(r"(?<![\w./-])" + re.escape(c.strip()) + r"(?![\w./-])", code)
+               for c in (cfg or {}).get("check") or [])
+
+
+def check_ci(rep, root, cfg=None):
     wf = root / ".github" / "workflows"
-    found = sorted(p.name for p in wf.glob("*.y*ml")) if wf.is_dir() else []
-    if found:
-        rep.ok("ci", f"CI workflow(s): {', '.join(found)}")
-    else:
+    found = sorted(p for p in wf.glob("*.y*ml")) if wf.is_dir() else []
+    if not found:
         rep.warn("ci", "no CI workflow under .github/workflows, so nothing checks pushes outside this machine",
                  "copy the workflow's CI template: mkdir -p .github/workflows && cp <workflow>/templates/github/"
                  "comprobar.yml .github/workflows/")
+        return
+    names = ", ".join(p.name for p in found)
+    running = [p.name for p in found if runs_check(p.read_text(encoding="utf-8", errors="replace"), cfg)]
+    if running:
+        rep.ok("ci", f"CI workflow(s): {names}; {', '.join(running)} run(s) the check")
+    else:
+        rep.warn("ci", f"CI workflow(s) {names}, but none seems to run the project's `check` commands",
+                 "add the check to one of them, or copy the workflow's CI template (mkdir -p .github/workflows && cp "
+                 "<workflow>/templates/github/comprobar.yml .github/workflows/); to keep your own CI, add only its "
+                 "step that runs the base branch's .githooks/pre-commit --rango (docs/en/apply.md, Existing CI)")
 
 
 def hook_files(command, root):
@@ -234,15 +272,33 @@ def hook_files(command, root):
     return files
 
 
-def stale_flow_hooks(hooks):
-    """[(event, command)] of SessionStart/PreToolUse hooks that run a workflow script from another folder."""
+def is_flow_script(command, root):
+    """True when the command runs a script of the workflow: a file named like one of FLOW_HOOK_SCRIPTS that carries
+    the workflow's header (`# galivelop-workflow vX`). A project's own script with the same name is not one; a file
+    that does not exist is not decided here (the settings check already fails on it)."""
+    expanded = command.replace("${CLAUDE_PROJECT_DIR}", str(root)).replace("$CLAUDE_PROJECT_DIR", str(root))
+    try:
+        words = shlex.split(expanded)
+    except ValueError:
+        return False
+    for w in words:
+        if Path(w).name in FLOW_HOOK_SCRIPTS:
+            path = Path(w) if os.path.isabs(w) else Path(root) / w
+            if path.is_file() and header_version(path):
+                return True
+    return False
+
+
+def stale_flow_hooks(hooks, root):
+    """[(event, command)] of SessionStart/PreToolUse hooks that run a workflow script (by name and by its header)
+    from another folder."""
     out = []
     for event in ("SessionStart", "PreToolUse"):
         for entry in hooks.get(event) or []:
             for h in (entry.get("hooks") or []) if isinstance(entry, dict) else []:
                 command = h.get("command", "") if isinstance(h, dict) else ""
                 if (any(re.search(rf"(^|[/\s\"']){re.escape(n)}\b", command) for n in FLOW_HOOK_SCRIPTS)
-                        and ".claude/gw/scripts/" not in command):
+                        and ".claude/gw/scripts/" not in command and is_flow_script(command, root)):
                     out.append((event, command))
     return out
 
@@ -301,7 +357,7 @@ def check_settings(rep, root):
                         rel = os.path.relpath(f, str(root))
                         rep.fail(f"settings {event}", f"hook command points to {rel}, which does not exist",
                                  "restore it (/gw-update) or fix the command in .claude/settings.json")
-    for event, command in stale_flow_hooks(hooks):
+    for event, command in stale_flow_hooks(hooks, root):
         problems += 1
         rep.warn(f"settings {event}", f"'{command}' runs a workflow script from outside .claude/gw/scripts/ "
                  f"(an older copy?), so it may run twice", "delete that entry from .claude/settings.json")
@@ -331,6 +387,28 @@ def check_subagents(rep, root):
         rep.warn("agents", "neither AGENTS.md nor CLAUDE.md mentions orchestrate-dealer, so the session may not deal "
                  "work to subagents", "add to AGENTS.md: 'Multi-step work is dealt to subagents (skill "
                  "orchestrate-dealer); the main session plans, decides and reviews.'")
+
+
+def check_glossary(rep, root):
+    """WARN when the same `**Term**:` is defined twice in GLOSSARY.md (case and spacing do not matter)."""
+    path = root / "GLOSSARY.md"
+    if not path.is_file():
+        return
+    seen, dup = {}, []
+    for n, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+        m = re.match(r"^\s*(?:[-*]\s+)?\*\*(.+?)\*\*\s*:", line)
+        if not m:
+            continue
+        key = " ".join(m.group(1).lower().split())
+        if key in seen and m.group(1) not in dup:
+            dup.append(m.group(1))
+        seen.setdefault(key, n)
+    if dup:
+        where = ", ".join(f"{t} (line {seen[' '.join(t.lower().split())]})" for t in dup)
+        rep.warn("glossary", f"GLOSSARY.md defines the same term twice: {where}",
+                 "merge the entries into one in GLOSSARY.md (grep -n '\\*\\*<term>\\*\\*:' GLOSSARY.md)")
+    else:
+        rep.ok("glossary", "GLOSSARY.md has no repeated term")
 
 
 def skill_metadata(path):
@@ -410,9 +488,10 @@ def run(root):
     check_githooks(rep, root, version)
     check_log(rep, root, cfg)
     check_commands(rep, root, cfg)
-    check_ci(rep, root)
+    check_ci(rep, root, cfg)
     check_settings(rep, root)
     check_subagents(rep, root)
+    check_glossary(rep, root)
     proposals = check_proposals(rep, root)
     check_skills(rep, root, version, proposals)
     check_session(rep, root)

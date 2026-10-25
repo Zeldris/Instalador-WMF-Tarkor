@@ -4,13 +4,15 @@ description: Scan a codebase for deepening opportunities, present them as a visu
 disable-model-invocation: true
 license: MIT (see LICENSE-mattpocock-skills)
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
   source: "mattpocock/skills@5beb35b"
 ---
 
 > Original skill by Matt Pocock ([mattpocock/skills](https://github.com/mattpocock/skills), MIT).
 
 # Improve Codebase Architecture
+
+If `.claude/gw/improve-codebase-architecture.md` exists in the project, read it first: it holds what is specific to the project.
 
 Surface architectural friction and propose **deepening opportunities**: refactors that turn shallow modules into deep ones. The aim is testability and AI-navigability.
 

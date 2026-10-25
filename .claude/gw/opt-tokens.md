@@ -1,4 +1,4 @@
-<!-- galivelop-workflow v0.2.0 -->
+<!-- galivelop-workflow v0.3.0 -->
 # opt-tokens — notas del proyecto
 
 Las lee la skill `opt-tokens` antes de proponer nada, y se actualizan cuando la usuaria aprueba un cambio. El flujo
@@ -19,6 +19,12 @@ antes de la `/retro`; todo en español, y solo lo que confirme la usuaria entra 
 - **Pre-push con tests de lo que cambia** (`QA-88`): `relatedTests` de `.claude/gw.json` llama a
   `tools/qa/tests-app.sh` (`vitest related` para `app/src`, `cargo test -p tarkor-nucleo` para el núcleo y el
   catálogo); no hace falta pasar todo tras cada cambio.
+- **Texto de cada pantalla en la e2e** (opt-tokens del 2026-10-25): `app/e2e/asistente.e2e.mjs` guarda junto a
+  cada `NN-pantalla.png` un `NN-pantalla.txt` con su `innerText`. Se revisa el `.txt`; la imagen, solo si importa
+  lo visual (una pantalla que cambia de aspecto).
+- **Bitácora en el pre-commit** (opt-tokens del 2026-10-25): `.githooks/pre-commit` corre `bitacora.py check` sobre
+  la bitácora preparada, así el tope de 600 caracteres salta al hacer el commit y no al subir, cuando arreglarlo
+  obliga a rehacer commits.
 
 ## Costes conocidos
 
@@ -42,3 +48,11 @@ antes de la `/retro`; todo en español, y solo lo que confirme la usuaria entra 
 ## Referencias medidas
 
 <!-- Cifras medidas con las que comparar: fecha, sesión, contexto medio, llamadas, total. -->
+
+## Medidas
+
+- **2026-10-25, `INS-14`, `INS-48`, `FLU-4` en una sola sesión**: 749 llamadas, 13 compactaciones, contexto medio
+  267k (los tramos con la ventana de 200k: ~117k de media). El 96 % de la entrada fue de la sesión principal.
+  Acordado: **`/clear` tras cada subida a `main`** (o cada tarea grande), sin enlazar tareas en una sesión; el código
+  de un plan cerrado, a subagentes con Sonnet (`orchestrate-dealer`) con `/code-review` corto de su diff; el repo del
+  juego, solo con un subagente (`docs/06` y su `index.css` arrastraron 1,9M).

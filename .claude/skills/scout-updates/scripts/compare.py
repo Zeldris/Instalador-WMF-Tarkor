@@ -2,8 +2,17 @@
 """Compare `architecture.md` with the project for `scout-updates`. Python 3 standard library only.
 
 Usage:
-  compare.py <architecture.md> [--root <root>] [--json] [--report <report.md>]
-  compare.py <architecture.md> --section <title>   print only that section (to reread it without the whole file)
+  compare.py [<architecture.md>] [--root <root>] [--json] [--report <report.md>]
+  (default root: the project holding this copy in .claude/skills, else `git rev-parse --show-toplevel`; never the
+  current directory, so it works from a subfolder)
+  compare.py [<architecture.md>] --section <title>   print only that section (to reread it without the whole file)
+
+Without <architecture.md>, it is `architecture.md` in the `scoutDir` folder of the project's `.claude/gw.json`
+(read with `.claude/gw/scripts/config.py`; default `.claude/gw/scout`).
+
+The words the script looks for come in English and in Spanish (the `language` values of the config), whichever the
+project uses: seal `seal`/`sello`, section `Constraints`/`Restricciones`, report section `Coverage`/`Cobertura`,
+table header `Component`/`Componente`.
 
 For every `## ...` section with a seal `<!-- seal: YYYY-MM-DD | <commit> | path, path -->` (references/formats.md;
 the separator is `|`, a middle dot also works):
@@ -28,8 +37,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import inventory
 
 SECTION_RE = re.compile(r'^##\s+(.+?)\s*$', re.M)
-SEAL_RE = re.compile(r'<!--\s*seal:\s*(\d{4}-\d{2}-\d{2})\s*[·|]\s*([0-9a-f]{4,40})\s*[·|]\s*(.*?)\s*-->')
-NOT_COMPARED = ('constraints',)
+SEAL_RE = re.compile(r'<!--\s*(?:seal|sello):\s*(\d{4}-\d{2}-\d{2})\s*[·|]\s*([0-9a-f]{4,40})\s*[·|]\s*(.*?)\s*-->')
+NOT_COMPARED = ('constraints', 'restricciones')
+COVERAGE = ('coverage', 'cobertura')
+HEADERS = ('component', 'componente')
 
 
 def sections(text):
@@ -54,7 +65,7 @@ def first_column(body):
         if not line.startswith('|') or re.match(r'^\|\s*:?-', line):
             continue
         cell = line.split('|')[1].replace('`', '').strip().lower()
-        if cell and cell != 'component':
+        if cell and cell not in HEADERS:
             cells.append(cell)
     return cells
 
@@ -69,9 +80,21 @@ def uncovered(arch_text, report_text):
     parts = SECTION_RE.split(report_text)
     covered = set()
     for title, body in zip(parts[1::2], parts[2::2]):
-        if title.strip().lower() == 'coverage':
+        if title.strip().lower() in COVERAGE:
             covered |= set(first_column(body))
     return [c for c in components if c not in covered]
+
+
+def scout_dir(root):
+    """The `scoutDir` of the project's config, read with the project's copy of config.py (the only reader)."""
+    config = os.path.join(root, '.claude', 'gw', 'scripts', 'config.py')
+    if not os.path.isfile(config):
+        sys.exit('scoutDir: %s not found; pass <architecture.md> explicitly, or apply the workflow: '
+                 'python3 <workflow>/scripts/aplicar.py --update %s' % (config, root))
+    r = subprocess.run([sys.executable, config, '--root', root, 'get', 'scoutDir'], capture_output=True, text=True)
+    if r.returncode:
+        sys.exit('scoutDir: could not read it (%s); fix the config: python3 %s validate' % (r.stderr.strip(), config))
+    return r.stdout.strip()
 
 
 def git(root, *args):
@@ -125,14 +148,32 @@ def section(text, title):
     return '\n'.join(chunks) or None
 
 
+def default_root():
+    """The project root, never the current directory: the project that holds this copy (it is installed in
+    <root>/.claude/skills/scout-updates/scripts), else the git top level (from the plugin cache)."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    parts = here.replace(os.sep, '/').rstrip('/').split('/')
+    if parts[-4:] == ['.claude', 'skills', 'scout-updates', 'scripts']:
+        return os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(here))))
+    r = subprocess.run(['git', 'rev-parse', '--show-toplevel'], capture_output=True, text=True)
+    if r.returncode != 0 or not r.stdout.strip():
+        sys.exit('compare.py: not inside a git repository, so the project root is unknown; pass it: '
+                 'python3 compare.py --root <project root>')
+    return r.stdout.strip()
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    ap.add_argument('architecture')
-    ap.add_argument('--root', default='.', help='project root (default: current directory)')
+    ap.add_argument('architecture', nargs='?', help='default: <scoutDir>/architecture.md of the project config')
+    ap.add_argument('--root', help='project root (default: the project holding this copy, else the git top level)')
     ap.add_argument('--json', action='store_true')
     ap.add_argument('--report', help='step-6 report: checks its coverage table')
     ap.add_argument('--section', help='print only the sections whose title contains this text')
     a = ap.parse_args(argv)
+    if not a.root:
+        a.root = default_root()
+    if not a.architecture:
+        a.architecture = os.path.join(a.root, scout_dir(a.root), 'architecture.md')
     if a.section:
         with open(a.architecture, encoding='utf-8') as f:
             text = f.read()

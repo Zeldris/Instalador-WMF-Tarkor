@@ -33,6 +33,7 @@ import sys
 
 IMAGE_TOKENS = 1600
 CHARS_PER_TOKEN = 3.5
+MIXED_RATIO = 1.5  # peaks of closed stretches whose max/min exceeds this: the session mixes compaction windows
 MIN_OUTPUT = 100  # output tokens per call below which a subagent log's output is not trustworthy
 
 
@@ -314,15 +315,16 @@ def main():
     print(f'Average output per call: {usage["output_tokens"] / api_calls:,.0f} tokens (includes reasoning)')
     # Curve between compactions: the floor is the fixed context (instructions, tools, summary) and the ceiling is
     # how far it grows before compacting. A ceiling far above the floor says compaction comes too late.
-    stretches, start = [], 0
+    stretches, closed, start = [], [], 0  # closed: the stretch ended in a compaction (it peaked where compaction fires)
     for c in cuts + [api_calls]:
         if c > start:
             stretches.append(contexts[start:c])
+            closed.append(c in cuts)
         start = c
     # With a clipped period the first stretch starts midway (no compaction opened it): its first call is no floor.
     partial = clipped and (not cuts or cuts[0] > 0) and len(stretches) > 1
     if partial:
-        stretches = stretches[1:]
+        stretches, closed = stretches[1:], closed[1:]
     if stretches:
         floors = [s[0] for s in stretches]
         ceilings = [max(s) for s in stretches]
@@ -334,6 +336,13 @@ def main():
         # it will not match the ceiling). Each stretch on its own, the last 8, shows the current regime.
         print('Per stretch, oldest to latest (average/ceiling, thousands): ' + '  '.join(
             f'{sum(s) / len(s) / 1000:,.0f}/{max(s) / 1000:,.0f}' for s in stretches[-8:]))
+        # Stretches that ended in a compaction peak where the window fires. Peaks far apart mean the window changed
+        # (or a compaction was manual) inside the period: every average above mixes regimes.
+        peaks = [max(s) for s, c in zip(stretches, closed) if c]
+        if len(peaks) > 1 and max(peaks) > MIXED_RATIO * min(peaks):
+            print(f'WARNING: this session mixes compaction windows (stretches ended in a compaction at '
+                  f'{min(peaks) / 1000:,.0f}k to {max(peaks) / 1000:,.0f}k): the averages above mix regimes; '
+                  f'measure the current one with --since <date or commit of the change>')
         if partial:
             rest = [c for s in stretches for c in s]
             print(f'Average context without the first stretch: {sum(rest) / len(rest):,.0f} tokens')

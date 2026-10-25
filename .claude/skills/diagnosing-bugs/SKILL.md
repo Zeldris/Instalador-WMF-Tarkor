@@ -3,13 +3,15 @@ name: diagnosing-bugs
 description: Diagnosis loop for hard bugs and performance regressions. Use when the user says "diagnose"/"debug this", or reports something broken/throwing/failing/slow.
 license: MIT (see LICENSE-mattpocock-skills)
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
   source: "mattpocock/skills@5beb35b"
 ---
 
 > Original skill by Matt Pocock ([mattpocock/skills](https://github.com/mattpocock/skills), MIT).
 
 # Diagnosing Bugs
+
+If `.claude/gw/diagnosing-bugs.md` exists in the project, read it first: it holds what is specific to the project.
 
 A discipline for hard bugs. Skip phases only when explicitly justified.
 

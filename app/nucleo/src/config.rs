@@ -30,6 +30,9 @@ pub struct Config {
     /// Último paso alcanzado, para continuar si se cerró la app a medias.
     pub paso_asistente: u8,
     pub asistente_completado: bool,
+    /// Carpeta elegida para el motor de IA y los modelos (docs/07). `None` = la de por defecto
+    /// de [`Rutas`].
+    pub carpeta_ia: Option<PathBuf>,
 }
 
 impl Default for Config {
@@ -44,6 +47,7 @@ impl Default for Config {
             modelos_descargados: Vec::new(),
             paso_asistente: 1,
             asistente_completado: false,
+            carpeta_ia: None,
         }
     }
 }
@@ -60,6 +64,11 @@ impl Config {
             }),
             Err(_) => Config::default(),
         }
+    }
+
+    /// La carpeta de la IA que se usa de verdad: la elegida o la de por defecto.
+    pub fn ia_efectiva(&self, rutas: &Rutas) -> PathBuf {
+        self.carpeta_ia.clone().unwrap_or_else(|| rutas.ia.clone())
     }
 
     /// Guarda de forma atómica (fichero temporal + renombrado): un corte de luz a mitad de
@@ -152,6 +161,23 @@ mod tests {
         let c = Config::cargar(dir.path());
         assert_eq!(c.perfil.as_deref(), Some("maximo"));
         assert_eq!(c.uso_cpu, UsoCpu::Moderado);
+    }
+
+    #[test]
+    fn carpeta_ia_ausente_es_none_y_se_guarda_en_camel_case() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join(NOMBRE_CONFIG), r#"{"version":1,"perfil":"maximo"}"#).unwrap();
+        let c = Config::cargar(dir.path());
+        assert_eq!(c.carpeta_ia, None);
+        let rutas = Rutas { datos: "d".into(), ia: "ia".into(), registros: "r".into() };
+        assert_eq!(c.ia_efectiva(&rutas), PathBuf::from("ia"));
+        assert_eq!(serde_json::to_value(&c).unwrap()["carpetaIa"], serde_json::Value::Null);
+
+        let c = Config { carpeta_ia: Some("/otra/Tarkor IA".into()), ..Config::default() };
+        assert_eq!(serde_json::to_value(&c).unwrap()["carpetaIa"], "/otra/Tarkor IA");
+        assert_eq!(c.ia_efectiva(&rutas), PathBuf::from("/otra/Tarkor IA"));
+        c.guardar(dir.path()).unwrap();
+        assert_eq!(Config::cargar(dir.path()), c);
     }
 
     #[test]

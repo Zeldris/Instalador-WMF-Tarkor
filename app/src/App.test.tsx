@@ -1,11 +1,12 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import App from './App'
-import { ejemplo, configInicial } from './ejemplo'
+import { ejemplo, configInicial, fijarDiscoLibreIa, fijarErrorCarpetaIa, reiniciarCarpetaIa } from './ejemplo'
 
 afterEach(async () => {
   cleanup()
   await ejemplo.guardarConfig(configInicial())
+  reiniciarCarpetaIa()
 })
 
 const boton = (nombre: string | RegExp, timeout = 1000) => screen.findByRole('button', { name: nombre }, { timeout })
@@ -19,6 +20,14 @@ async function hastaElPermiso() {
   expect(aceptar).toHaveProperty('disabled', false)
   fireEvent.click(aceptar)
   await screen.findByText('¿Podemos revisar tu equipo?')
+}
+
+async function hastaElPerfil() {
+  await hastaElPermiso()
+  fireEvent.click(await boton('Analizar mi equipo'))
+  await screen.findByText(/Te recomendamos el perfil/, {}, { timeout: 2000 })
+  fireEvent.click(await boton('Continuar'))
+  await boton(/^Equilibrado/)
 }
 
 describe('asistente de primer arranque', () => {
@@ -37,10 +46,85 @@ describe('asistente de primer arranque', () => {
     fireEvent.click(await boton(/^Máximo/))
     expect(await boton('Descargar 9,4 GB')).toBeTruthy()
 
-    // Ultra no cabe en la Deck: deshabilitado salvo que se pidan los no recomendados.
-    expect(await boton(/^Ultra/)).toHaveProperty('disabled', true)
+    // Ultra no cabe en la Deck, pero se puede elegir: tras el aviso hay que confirmar.
     expect(screen.getByText('Experimental')).toBeTruthy()
+    expect(screen.queryByRole('checkbox', { name: /Mostrar perfiles no recomendados/ })).toBeNull()
   })
+
+  it('un perfil que no cabe en memoria se elige, avisa y pide confirmar en su tarjeta', async () => {
+    await hastaElPerfil()
+    expect(screen.queryByText(/Puede dejar tu equipo lento/)).toBeNull()
+    const ultra = await boton(/^Ultra/)
+    expect(ultra).toHaveProperty('disabled', false)
+    fireEvent.click(ultra)
+    expect(ultra.getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByText(/Puede dejar tu equipo lento/)).toBeTruthy()
+    const descargar = await boton(/^Descargar/)
+    expect(descargar).toHaveProperty('disabled', true)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Usar este perfil igualmente' }))
+    expect(descargar).toHaveProperty('disabled', false)
+
+    // La confirmación se pierde al cambiar de tarjeta.
+    fireEvent.click(await boton(/^Equilibrado/))
+    expect(screen.queryByText(/Puede dejar tu equipo lento/)).toBeNull()
+    expect(screen.queryByRole('checkbox', { name: 'Usar este perfil igualmente' })).toBeNull()
+    fireEvent.click(await boton(/^Ultra/))
+    expect(screen.getByRole('checkbox', { name: 'Usar este perfil igualmente' })).toHaveProperty('checked', false)
+    expect(await boton(/^Descargar/)).toHaveProperty('disabled', true)
+  })
+
+  it('cada tarjeta dice cuánto necesita y cuánto queda libre', async () => {
+    await hastaElPerfil()
+    const lineas = [...document.querySelectorAll('.espacio')].map((n) => n.textContent)
+    expect(lineas).toHaveLength(5)
+    lineas.forEach((l) => expect(l).toMatch(/^Necesita .* GB · libres 180 GB$/))
+  })
+
+  it('sin disco para el perfil elegido se bloquea la descarga hasta cambiar de carpeta', async () => {
+    fijarDiscoLibreIa(8)
+    await hastaElPerfil()
+    fireEvent.click(await boton(/^Máximo/))
+    const sin = await screen.findAllByText(/libres 8 GB/)
+    expect(sin.some((n) => n.closest('.espacio')?.classList.contains('sin'))).toBe(true)
+    expect(await boton(/^Descargar/)).toHaveProperty('disabled', true)
+
+    const carpeta = document.querySelector('.carpeta') as HTMLElement
+    expect(within(carpeta).getByText(/ia$/)).toBeTruthy()
+    fireEvent.click(within(carpeta).getByRole('button', { name: 'Cambiar carpeta' }))
+    await waitFor(() => expect(within(carpeta).getByText('/mnt/tarjeta-sd/Tarkor IA')).toBeTruthy())
+    await waitFor(() => expect(screen.getAllByText(/libres 500 GB/).length).toBeGreaterThan(0))
+    expect(await boton(/^Descargar/)).toHaveProperty('disabled', false)
+    expect((await ejemplo.cargarConfig()).carpetaIa).toBe('/mnt/tarjeta-sd/Tarkor IA')
+  })
+
+  it('si no se puede cambiar la carpeta, dice por qué', async () => {
+    const motivo = 'La carpeta /mnt/tarjeta-sd/Tarkor IA ya existe y no está vacía. Elige otra.'
+    fijarErrorCarpetaIa(motivo)
+    await hastaElPerfil()
+    const carpeta = document.querySelector('.carpeta') as HTMLElement
+    fireEvent.click(within(carpeta).getByRole('button', { name: 'Cambiar carpeta' }))
+    expect((await within(carpeta).findByRole('alert')).textContent).toBe(motivo)
+  })
+
+  it('en Ajustes se puede mover la carpeta de la IA, y repetir el asistente no la olvida', async () => {
+    await hastaElPerfil()
+    fireEvent.click(await boton(/^Descargar/))
+    fireEvent.click(await boton('Comprobar la instalación', 10000))
+    await screen.findByText(/palabras por segundo/, {}, { timeout: 5000 })
+    fireEvent.click(await boton('Continuar'))
+    fireEvent.click(await boton('Jugar'))
+    fireEvent.click(await boton(/Ajustes/))
+    await screen.findByText('Rendimiento de la IA')
+    const carpeta = document.querySelector('.carpeta') as HTMLElement
+    fireEvent.click(within(carpeta).getByRole('button', { name: 'Mover a otra carpeta' }))
+    await waitFor(() => expect(within(carpeta).getByText('/mnt/tarjeta-sd/Tarkor IA')).toBeTruthy())
+
+    fireEvent.click(await boton('Volver'))
+    fireEvent.click(await boton('Repetir el asistente'))
+    await boton('Empezar')
+    await waitFor(async () => expect((await ejemplo.cargarConfig()).pasoAsistente).toBe(1))
+    expect((await ejemplo.cargarConfig()).carpetaIa).toBe('/mnt/tarjeta-sd/Tarkor IA')
+  }, 20000)
 
   it('cada perfil explica qué resultado esperar', async () => {
     await hastaElPermiso()

@@ -39,6 +39,24 @@ export default function App() {
 
   const ir = useCallback((paso: number) => actualizar({ pasoAsistente: Math.min(7, Math.max(1, paso)) }), [actualizar])
 
+  // Elegir carpeta, mover la IA, y volver a evaluar los perfiles con el disco de la carpeta nueva.
+  const cambiarCarpeta = useCallback(async () => {
+    const destino = await api.elegirCarpeta()
+    if (!destino) return
+    try {
+      const nuevas = await api.cambiarCarpetaIa(destino)
+      setRutas(nuevas)
+      // El núcleo ya la guardó; se copia al estado para que el siguiente `actualizar` no la pise.
+      actualizar({ carpetaIa: nuevas.ia })
+    } catch (e) {
+      // Puede fallar después de mover (el motor no arranca): se lee lo que guardó el núcleo.
+      setRutas(await api.rutas())
+      actualizar({ carpetaIa: (await api.cargarConfig()).carpetaIa })
+      throw e
+    }
+    setEvaluacion(await api.evaluarPerfiles(ultima.current?.permisoAnalisis ? ultima.current.equipo : null))
+  }, [actualizar])
+
   const analizar = useCallback(async () => {
     const equipo = await api.analizarEquipo()
     const ev = await api.evaluarPerfiles(equipo)
@@ -57,10 +75,10 @@ export default function App() {
   const aviso = error && <div className="error" role="alert" style={{ position: 'fixed', bottom: 16, left: 16, right: 16 }}>{error}</div>
 
   if (vista === 'juego') {
-    return <>{aviso}<Juego abrirAjustes={() => setVista('ajustes')} repetir={() => { setVista('asistente'); actualizar({ ...configInicial(), pasoAsistente: 1 }); setEvaluacion(null) }} /></>
+    return <>{aviso}<Juego abrirAjustes={() => setVista('ajustes')} repetir={() => { setVista('asistente'); actualizar({ ...configInicial(), carpetaIa: config.carpetaIa, pasoAsistente: 1 }); setEvaluacion(null) }} /></>
   }
   if (vista === 'ajustes' && evaluacion) {
-    return <>{aviso}<Ajustes config={config} evaluacion={evaluacion} actualizar={actualizar} reanalizar={analizar} volver={() => setVista('juego')} /></>
+    return <>{aviso}<Ajustes config={config} evaluacion={evaluacion} rutas={rutas} cambiarCarpeta={cambiarCarpeta} actualizar={actualizar} reanalizar={analizar} volver={() => setVista('juego')} /></>
   }
 
   // Sin evaluación no se puede pasar del paso 3.
@@ -71,7 +89,7 @@ export default function App() {
     case 1: pantalla = <Bienvenida {...nav} />; break
     case 2: pantalla = <QueSeInstala {...nav} config={config} rutas={rutas} actualizar={actualizar} />; break
     case 3: pantalla = <TuEquipo {...nav} config={config} evaluacion={evaluacion} analizar={analizar} elegirAMano={elegirAMano} />; break
-    case 4: pantalla = <ElegirPerfil {...nav} config={config} evaluacion={evaluacion!} actualizar={actualizar} />; break
+    case 4: pantalla = <ElegirPerfil {...nav} config={config} evaluacion={evaluacion!} rutas={rutas} cambiarCarpeta={cambiarCarpeta} actualizar={actualizar} />; break
     case 5: pantalla = <Descarga {...nav} config={config} evaluacion={evaluacion!} actualizar={actualizar} />; break
     case 6: pantalla = <Comprobacion {...nav} />; break
     default: pantalla = <Listo config={config} evaluacion={evaluacion!} rutas={rutas} jugar={() => { actualizar({ asistenteCompletado: true }); setVista('juego') }} />

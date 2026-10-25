@@ -97,9 +97,14 @@ La pantalla central del asistente.
   marcas), y una etiqueta de estado:
   - `Recomendado` (accent) en el preseleccionado.
   - `Máximo seguro` en el más alto que cabe.
-  - `Supera tu equipo` (danger) en los que no caben: deshabilitados.
-- Interruptor "Mostrar perfiles no recomendados": habilita los que no caben, con aviso en `cost`
-  ("Puede dejar tu equipo lento o cerrar el juego") y confirmación en la propia tarjeta.
+  - `Supera tu equipo` (danger) en los que no caben en memoria: se pueden elegir, pero al
+    hacerlo la tarjeta muestra el aviso en `cost` ("Puede dejar tu equipo lento o cerrar el
+    juego") y pide confirmación en la propia tarjeta. Sin interruptor aparte (LM Studio estima si
+    un modelo cabe, avisa y deja cargarlo; decidido el 2026-10-25, `INS-14`).
+- **Espacio en disco** en cada tarjeta: "Necesita X GB · libres Y GB". Si no cabe, la línea va en
+  `danger` con el enlace "Cambiar carpeta", y el botón de descarga se deshabilita hasta que quepa
+  (itch.io y Heroic muestran necesario frente a disponible; aquí se bloquea el inicio porque la
+  descarga fallaría a medias).
 - **Uso del procesador:** control segmentado Moderado / Alto con una frase de efecto.
 - "Ver detalles técnicos" desplegable: modelos exactos de cada perfil.
 - Pie: "Podrás cambiarlo cuando quieras en Ajustes → Rendimiento de la IA".
@@ -114,17 +119,22 @@ La pantalla central del asistente.
 - Barra total arriba con tiempo estimado restante.
 - Acciones: **Pausar / Reanudar**; "Cancelar" pide confirmación en la propia pantalla (nunca un
   diálogo del sistema) y avisa de que lo descargado se conserva para continuar.
-- Si se pierde la conexión: la fila afectada pasa a "Esperando conexión" y se reintenta sola.
+- Si se pierde la conexión: la descarga se pausa sola, la fila pasa a "Esperando conexión" y se
+  reanuda al volver la red, con reintentos cada vez más espaciados (Heroic: autopausa y reanuda).
+- Encima de las filas, la carpeta de destino con "Cambiar carpeta" mientras no haya empezado
+  (LM Studio y Ollama permiten cambiar la carpeta de modelos; en la Deck, para la tarjeta SD).
 
 ### 6. Comprobación
 
 Lista de las 7 comprobaciones de [`07`](07-flujo-de-instalacion.md) con un icono de estado cada
 una (pendiente, en curso, correcto, fallo). La última, "Narración de prueba", muestra la frase
-generada y la velocidad medida ("unas 9 palabras por segundo").
+generada y la velocidad medida ("unas 9 palabras por segundo"), sacada de `eval_count /
+eval_duration`. Por debajo de 3 palabras/s se sugiere un perfil más ligero. Es la única prueba de
+velocidad: no hay botón aparte (LM Studio muestra la velocidad en cada respuesta).
 
 En caso de fallo, la fila se expande con la explicación, **Reintentar**, "Ver detalles" y
 **Copiar informe**. Si el fallo es de memoria, se ofrece "Probar un perfil más ligero" que vuelve
-al paso 4.
+al paso 4. Si falla el motor de IA o un modelo, también **Reparar** (ver Ajustes).
 
 ### 7. Listo
 
@@ -141,6 +151,10 @@ Accesible desde el menú del juego. Mismo estilo.
   tamaño en el botón ("Cambiar y descargar 2,7 GB"); si sobran modelos, "Borrar modelos que ya no
   uso (X GB)".
 - Uso del procesador.
+- **Carpeta de los modelos**: la ruta, su espacio y "Mover…", que copia el motor y los modelos a la
+  nueva carpeta, comprueba y borra la vieja (LM Studio, "My Models"; Ollama, `OLLAMA_MODELS`).
+- **Reparar**: vuelve a comprobar la suma del motor y pide de nuevo los modelos del perfil;
+  `/api/pull` solo baja lo que falta o está dañado (el "healing" de itch.io).
 - "Copiar informe del sistema" para pedir ayuda.
 
 ### Error: el motor se ha detenido

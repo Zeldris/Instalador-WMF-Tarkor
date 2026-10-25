@@ -78,7 +78,9 @@ Se pueden resolver en paralelo a la fase 0. Ver la tabla del [README](../README.
 - [ ] **INS-12** Licencia del juego (propuesta: todos los derechos reservados) y de este repo.
 - [x] **INS-13** Perfiles pequeños: se ofrecen Mínimo y Ligero con modelos Apache 2.0, avisando del
   resultado (calidad a confirmar en `INS-8`).
-- [ ] **INS-14** Perfiles por encima del máximo seguro: bloqueados o con aviso.
+- [x] **INS-14** (2026-10-25) Perfiles por encima del máximo seguro: se pueden elegir con aviso y
+  confirmación en la tarjeta, sin interruptor (ver `09` y `11`). Implementado el mismo día en el
+  asistente y en Ajustes (`Tarjetas`, `pideConfirmar`/`bloqueado` en `app/src/tipos.ts`).
 - [ ] **INS-15** Confirmar licencias de modelos e imágenes.
 
 ## Fase 2 — Migración a SQLite (repo del juego) — código hecho, PR #1 sin fusionar
@@ -119,7 +121,8 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
 - [ ] **INS-41** Integrar el build del juego (frontend + backend en bytecode + plantilla) en la app de
   Tauri.
 - [ ] **INS-42** Asistente real de punta a punta: descargas y comprobaciones de verdad; calentar el
-  narrador al arrancar.
+  narrador al arrancar. Incluye la autopausa al perder la red con reanudación sola y la velocidad
+  de la narración de prueba (ronda de diseño del 2026-10-25).
 - [ ] **INS-43** Ajustes → Rendimiento de la IA (con uso de la gráfica vía `/api/ps`) y pantalla de
   motor detenido.
 - [ ] **INS-44** NSIS: castellano, instalación por usuario, desinstalador con las dos casillas.
@@ -127,6 +130,15 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
 - [ ] **INS-46** Workflow de GitHub Actions en el repo privado que publica releases con `SHA256SUMS`
   en este repo.
 - [ ] **INS-47** Pantalla "Licencias de terceros" generada en el build.
+- [x] **INS-48** (2026-10-25) Carpeta del motor y los modelos elegible antes de descargar y movible desde Ajustes
+  (`OLLAMA_MODELS`); espacio necesario frente a libre en cada tarjeta, con la descarga bloqueada si no
+  cabe (ver `07` y `11`). Hecho: `carpetaIa` en `config.json`, `nucleo/src/carpetas.rs`
+  (`espacio_libre_mb`, `mover_carpeta`: renombra o copia y borra), `perfiles::evaluar` con el disco
+  de la carpeta aparte, comando `cambiar_carpeta_ia` (`<elegida>/Tarkor IA`, para y rearranca el
+  motor) y selector nativo (`tauri-plugin-dialog` 2). Pendiente de `INS-8`: mover a la tarjeta SD de
+  la Deck y entre discos en Windows (el test de copia fallida solo corre en Unix).
+- [ ] **INS-49** "Reparar": volver a comprobar la suma del motor y pedir de nuevo los modelos, desde
+  Ajustes y desde la comprobación final.
 
 ## Fase 5 — Prueba real
 
@@ -156,3 +168,5 @@ ganchos, `.claude/gw/scripts`, `tools/qa` y las skills ([runbook](runbooks/skill
 - [x] **FLU-3** (2026-10-22) `tools/qa/ci-local.py` (retro del piloto): con la CI de GitHub agotada, corre en local
   los pasos de los jobs de Ubuntu de `comprobar.yml` (los lee del workflow, no los copia) y, con `--apuntar`, deja
   fecha, commit y resultado en [`ci-local.md`](registros/ci-local.md). El job de Windows sale como «sin cubrir».
+- [x] **FLU-4** (2026-10-25) `/gw-update` a Galivelop-workflow v0.3.0: scripts, esquema, skills y ganchos al día;
+  `comprobar.yml` conserva sus jobs (el cambio de `ciInstall` no le toca) y `REVIEW.md` gana dos reglas de la plantilla.

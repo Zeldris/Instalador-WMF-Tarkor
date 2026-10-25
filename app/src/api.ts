@@ -3,6 +3,7 @@
 
 import { Channel, invoke } from '@tauri-apps/api/core'
 import type { Comprobacion, Config, Equipo, Evaluacion, InfoMotor, ProgresoModelo, ProgresoMotor, Rutas } from './tipos'
+import { open } from '@tauri-apps/plugin-dialog'
 import { ejemplo } from './ejemplo'
 
 export const enTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -19,6 +20,10 @@ export interface Api {
   descargarModelos(progreso: (p: ProgresoModelo) => void): Promise<string[]>
   cancelarDescargas(): Promise<void>
   comprobar(id: string): Promise<Comprobacion>
+  /** Diálogo de carpeta del sistema; null si se cancela. */
+  elegirCarpeta(): Promise<string | null>
+  /** Mueve la IA a `<destino>/Tarkor IA` y devuelve las rutas nuevas. */
+  cambiarCarpetaIa(destino: string): Promise<Rutas>
 }
 
 function canal<T>(fn: (m: T) => void): Channel<T> {
@@ -39,6 +44,11 @@ const tauri: Api = {
   descargarModelos: (progreso) => invoke('descargar_modelos', { canal: canal(progreso) }),
   cancelarDescargas: () => invoke('cancelar_descargas'),
   comprobar: (id) => invoke('comprobar', { id }),
+  elegirCarpeta: async () => {
+    const r = await open({ directory: true })
+    return typeof r === 'string' ? r : null
+  },
+  cambiarCarpetaIa: (destino) => invoke('cambiar_carpeta_ia', { destino }),
 }
 
 export const api: Api = enTauri ? tauri : ejemplo

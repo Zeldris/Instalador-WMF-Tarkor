@@ -18,6 +18,7 @@ check it before relying on it); project-specific ones carry the `app.` prefix. A
 | `app.task` | text | The project's task name (a warm-up task is excluded from the analysis) |
 | `app.machine_profile` | text | Machine profile; unset becomes `unknown` and `medir.py` warns |
 | `app.num_ctx` | integer | Context length asked for, or the loaded model's effective one |
+| `app.turn` | text | Id shared by the calls of one user-facing step; `medir.py` adds a per-turn table (needs `ts` and `app.duration_ms`) |
 | `app.event` | text | A marker line with no call; `medir.py` ignores it |
 | `app.keep_alive` | text | How long the model stays loaded |
 | `app.duration_ms` | number | Whole call, measured by the client |

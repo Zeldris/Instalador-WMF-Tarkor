@@ -5,11 +5,13 @@ disable-model-invocation: true
 license: MIT
 compatibility: Claude Code or any Agent Skills agent; git, bash and python3 3.8+; the Galivelop-workflow repo cloned or added to the session
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
   source: "Galivelop workshop"
 ---
 
 # gw-init
+
+If `.claude/gw/gw-init.md` exists in the project, read it first: it holds what is specific to the project.
 
 A thin wrapper: the procedure lives in the workflow repo's guide, `docs/en/apply.md` (Spanish: `docs/es/aplicar.md`).
 Follow it step by step. This skill only fixes where to find things and what to confirm.

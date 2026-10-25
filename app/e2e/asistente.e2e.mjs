@@ -78,7 +78,10 @@ async function texto(xpath, timeoutMs) {
 let n = 0
 async function captura(nombre) {
   const png = await wd('GET', s('/screenshot'))
-  writeFileSync(join(capturas, `${String(++n).padStart(2, '0')}-${nombre}.png`), Buffer.from(png, 'base64'))
+  const base = join(capturas, `${String(++n).padStart(2, '0')}-${nombre}`)
+  writeFileSync(`${base}.png`, Buffer.from(png, 'base64'))
+  // El texto de la pantalla, para revisarla sin abrir la imagen (la imagen, solo si importa lo visual).
+  writeFileSync(`${base}.txt`, await wd('POST', s('/execute/sync'), { script: 'return document.body.innerText', args: [] }).catch(() => ''))
 }
 
 function comprobar(cond, mensaje) {

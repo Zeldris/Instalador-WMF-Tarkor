@@ -5,11 +5,13 @@ disable-model-invocation: true
 license: MIT
 compatibility: Claude Code or any Agent Skills agent; git and python3 3.8+; reads .claude/gw.json
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
   source: "Galivelop workshop"
 ---
 
 # gw-doctor
+
+If `.claude/gw/gw-doctor.md` exists in the project, read it first: it holds what is specific to the project.
 
 The check itself is a script, `doctor.py`: deterministic, no AI, no network. This skill runs it, explains what it
 prints and applies fixes the user approves. Reply in the project's `language` (`.claude/gw.json`).

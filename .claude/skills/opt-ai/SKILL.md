@@ -5,7 +5,7 @@ disable-model-invocation: true
 license: MIT
 compatibility: Projects with local or self-hosted AI models; python3 (standard library) for scripts/medir.py
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
   source: "Galivelop workshop; generalised from the Tarkor and installer opt-ai"
 ---
 
@@ -53,7 +53,8 @@ create it from the shape below with the user before measuring. Shape:
 1. **Measure.** `python3 <skill folder>/scripts/medir.py [<log>] [--previous <earlier log>] [--profile P]`; `--help`
    lists the options. Read only its output, never the whole log. Per profile, task and model it gives p50/p95,
    time to first token, tok/s, cold loads, truncated prompts and errors (failed calls count in neither p50 nor
-   tok/s), plus the retrieval table. **The minimum profile always**, even if the round was played on another: with
+   tok/s), plus the retrieval table and, when calls carry `app.turn`, a per-turn table (p50/p95/max of the
+   whole turn). **The minimum profile always**, even if the round was played on another: with
    no rows for it, say so and ask for them. *Done when* every row has its difference from the previous round (or
    "no previous") and every task with no profile is flagged. **Too few samples, no comparison:** with fewer than ~8
    turns (or calls per task) in either round, report the figures but do not call anything a regression or an

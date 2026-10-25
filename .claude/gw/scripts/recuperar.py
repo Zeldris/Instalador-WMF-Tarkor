@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.2.0
+# galivelop-workflow v0.3.0
 """Get back what a compaction or a /clear dropped, without reading the whole session transcript.
 
   recuperar.py --estado         what the SessionStart hook (clear|compact) puts back into the context: the log's

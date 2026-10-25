@@ -106,7 +106,7 @@ tiene que leer y pasar en cada petición a Ollama (`INS-35` del plan):
 - **Ver dónde corre la IA:** `GET /api/ps` de Ollama dice qué parte de cada modelo está en la
   gráfica. Se muestra en Ajustes ("La IA usa la gráfica al 100 %") y sirve para diagnosticar
   (`INS-43`).
-- **Velocidad real:** la prueba rápida de `09` usa `eval_count / eval_duration` de la respuesta de
+- **Velocidad real:** la narración de prueba (`07`, `09`) usa `eval_count / eval_duration` de la respuesta de
   Ollama (tokens por segundo exactos), no un cronómetro.
 - **Steam Deck:** probar en `INS-8` Vulkan (por defecto) frente a ROCm con
   `HSA_OVERRIDE_GFX_VERSION=10.3.0` y quedarse con el más rápido. Si ROCm gana, la regla se añade

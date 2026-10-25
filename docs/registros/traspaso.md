@@ -10,13 +10,12 @@ cada commit.**
 
 | | |
 |---|---|
-| **Actualizado** | 2026-10-22 |
-| **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` y `claude/piloto-galivelop-workflow`. Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
-| **Último commit en `main`** | Fusión del PR #2 (2026-09-28, `3418c2d`): fases `INS-1`…`INS-6` del plan con pruebas de punta a punta. |
+| **Actualizado** | 2026-10-25 |
+| **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-25). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
+| **Último commit en `main`** | Fusión del PR #5 (2026-10-22, `89bb2ee`): `FLU-2`, piloto de Galivelop-workflow v0.2.0, y `FLU-3`, CI en local. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | `FLU-1` hecha (flujo y skills de Tarkor, revisión, `/opt-tokens` y retro). PR a `main`; al fusionarse, rama terminada. |
-| **Tarea en curso · `claude/piloto-galivelop-workflow`** | 🚧 `FLU-2`: piloto de Galivelop-workflow v0.2.0 aplicado y comprobado en local (2026-10-22). Fases 1 y 2 hechas ([retro](retro-2026-10-22-piloto-galivelop.md); `FLU-3` aplicado, `/clear` tras el PR). Leves pendientes: `medir.py` sin test; `tools/qa/en-app.sh` enlaza el `node_modules` del checkout principal aunque cambie `package-lock.json`. Tres fases hechas; [PR #5](https://github.com/Zeldris/Instalador-WMF-Tarkor/pull/5) abierto. Fusión confirmada por la usuaria (2026-10-22) con la CI de GitHub agotada y la local en verde. Siguiente paso: `/clear`. [Registro](piloto-galivelop-workflow.md). |
-| **Tests** | 2026-10-21: núcleo `cargo test -p tarkor-nucleo` 52, asistente `vitest` 5, `tsc -b` 0, clippy 0 avisos; `tools/qa/tests` 80 en verde. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 🚧 2026-10-25: la usuaria confirma subir a `main` lo actual (`INS-14`, `INS-48`, `FLU-4`). Fase 1 hecha: `/code-review` con 17 hallazgos, graves y medios arreglados; los leves, en «Siguiente paso». Fase 2 hecha: `opt-tokens` y `retro` aprobadas y aplicadas ([retro](retro-2026-10-25-ins48.md)). Fase 3: PR #6; con la CI de GitHub sin arrancar, el gancho de fusión acepta `ci-local` (aprobado). Siguiente: `ci-local`, `revisado.sh`, fusionar el #6 y `/clear`; después `INS-49` o la fase 3 del plan. |
+| **Tests** | 2026-10-25: núcleo `cargo test -p tarkor-nucleo` 70, asistente `vitest` 10, `tsc -b` 0, clippy 0 avisos, `cargo check` del núcleo para Windows (mingw) en verde. |
 
 ## Dónde está todo (para saber qué sigue)
 
@@ -34,7 +33,11 @@ cada commit.**
    `routes/turn.integration.test.ts` y endurecer `lib/prisma.test.ts` (detalle en el
    [plan](../05-plan-de-trabajo.md#dónde-lo-dejamos-2026-09-28)).
 2. Fase 3 (modo empaquetado del juego, `INS-31`…`INS-37`) y fase 4 (`INS-41`…`INS-47`).
-3. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
+3. Pendientes leves de la revisión de `INS-48` (no vuelven a revisarse en su PR): `bloqueado` no descuenta lo
+   ya descargado en Ajustes; no se impide mover la carpeta con una descarga en marcha (el asistente hoy no lo
+   permite); `Estado::ia()` lee `config.json` en cada llamada; el aviso de restos del origen solo va a stderr;
+   con poco disco el paso 3 dice «equipo insuficiente».
+4. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
 
 ## Decisiones de la usuaria que bloquean algo
 
@@ -44,7 +47,6 @@ cada commit.**
   [`ci-local.md`](ci-local.md) con fecha y commit (`FLU-3`). Los tests del núcleo **en Windows** no se pueden correr
   así: quedan pendientes hasta que vuelva la CI. Cuando vuelva, se re-lanza sobre `main`.
 - Firma de código en Windows (`INS-11`) y licencias (`INS-12`, `INS-15`).
-- Perfiles por encima del máximo seguro: bloqueados o con aviso (`INS-14`; propuesta en el README).
 
 ## Comandos para comprobar el estado
 
@@ -60,8 +62,16 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 # Pruebas de punta a punta del asistente (tauri-driver + xvfb): ver app/README.md.
 ```
 
-## Hecho recientemente
+## Hecho (5 últimas)
 
+Dos líneas cada una como mucho; el detalle está en el commit y la más antigua sale cuando hay más de 5.
+
+- ~~`INS-48` · Carpeta de la IA elegible y movible~~ (2026-10-25): espacio necesario frente a libre en cada
+  tarjeta, «Cambiar carpeta» en el paso 4 y «Mover a otra carpeta» en Ajustes.
+- ~~`INS-14` · Perfiles por encima del máximo seguro~~ (2026-10-25): se pueden elegir con aviso y confirmación
+  en la tarjeta, sin interruptor; implementado el mismo día.
+- ~~`FLU-4` · Galivelop-workflow v0.3.0~~ (2026-10-25): `/gw-update` de scripts, skills y ganchos; `comprobar.yml`
+  se queda el local; dos reglas nuevas en `REVIEW.md`.
 - ~~`FLU-3` · CI en local~~ (2026-10-22): `tools/qa/ci-local.py` corre los jobs de Ubuntu de `comprobar.yml` y
   apunta el resultado en [`ci-local.md`](ci-local.md) mientras la CI de GitHub está agotada.
 - ~~`FLU-1` · flujo de trabajo y skills de Tarkor~~ (2026-10-21): `CLAUDE.md`, `REVIEW.md`, bitácora,

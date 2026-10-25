@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.2.0
+# galivelop-workflow v0.3.0
 """Hand-off log rules, for projects with `"logRows": true` in .claude/gw.json (a no-op otherwise).
 
 The log (config `log`) has a state table with one row per branch, labelled "<anything> · `<branch>`" (for example
@@ -7,12 +7,14 @@ The log (config `log`) has a state table with one row per branch, labelled "<any
 contradicting "Next" lines, so each branch writes only in its own row and the row stays short.
 
   bitacora.py check [FILE] [--date YYYY-MM-DD]   rows well formed, one per branch, <= 600 characters; with --date,
-                                                 the "Updated" row is not older than that day
+                                                 the "Updated" row is not older than that day; a "Task in progress"
+                                                 row with no `branch` fails even if the other rows are fine
   bitacora.py own-row COMMIT BRANCH [--shared]   fail if COMMIT changes another branch's row or a shared row of the
                                                  state table ("Updated" and "Tests" are free); --shared, or
                                                  BITACORA_COMPARTIDA=1 / GW_SHARED_LOG=1, allows it
   bitacora.py closed BASE SHA                    every task closed in the plan between BASE and SHA ("- [x] **ID**"
-                                                 or struck through) is also listed in the "Done" section of SHA's log
+                                                 or struck through) is also recorded in the "Done" section of SHA's
+                                                 log: struck through there, or named on a line that starts with a date
   bitacora.py in-progress BASE SHA               WARNING only: a task marked 🚧 that the commits name, whose plan
                                                  entry did not change (it may still say "Next: X" with X done)
   bitacora.py close-row BRANCH [--text TEXT]     rewrite BRANCH's row as "merged, branch finished" (last commit
@@ -43,6 +45,9 @@ DEFAULT_ID = r"[A-Z]{2,5}-\d+[a-z]?"
 ROW = re.compile(r"^\|\s*\*\*(?P<label>.+?) · `(?P<branch>[^`]+)`\*\*\s*\|(?P<text>.*)\|\s*$")
 STATE_HEADING = re.compile(r"^##\s+(Estado actual|Current state|Status)\b.*$", re.M | re.I)
 DONE_HEADING = re.compile(r"^##\s+(Hecho|Done)\b.*$", re.M | re.I)
+TASK_ROW = re.compile(r"^\|\s*\*\*(Tarea en curso|Task in progress)\b.*?\*\*\s*\|", re.I)
+LIST_ITEM = re.compile(r"^\s*(?:[-*]|\d+\.)\s")
+DATE_LINE = re.compile(r"^\s*(?:[-*]|\d+\.)?\s*(?:\*\*|`|\[)?\s*\d{4}-\d{2}-\d{2}\b")
 RANGE = r"\s*(?:…|\.\.\.|–|—|\ba\b|\bto\b)\s*"
 CLOSED_TEXT = {"es": "Al fusionarse, rama terminada: no queda nada pendiente en ella.",
                "en": "Merged, branch finished: nothing is pending on it."}
@@ -64,14 +69,17 @@ class Ctx:
         self.plans = plans
         pattern = args.id_regex or os.environ.get("GW_TASK_ID") or self.config.get("taskId") or DEFAULT_ID
         try:
+            re.compile(pattern)
+            pattern = gwconfig.non_capturing(pattern)  # `(INS|FLU)-\d+` must not make findall return groups
             self.id = re.compile(pattern)
         except re.error as exc:
             raise Usage(f"--id-regex / GW_TASK_ID is not a valid regex ({exc}); fix it and rerun")
+        except gwconfig.ConfigError as exc:
+            raise Usage(f"--id-regex / GW_TASK_ID: {exc}; fix it and rerun")
         self.id_src = f"(?:{pattern})"
         self.sep = rf"(?:{RANGE}|\s*(?:,|\by\b|\band\b)\s*)"
         self.closed_box = re.compile(rf"^\s*[-*]\s*\[[xX]\]\s*(?:\*\*)?`?(?P<id>{self.id_src})", re.M)
         self.entry = re.compile(rf"[-|]\s*(?:\[(?P<box>[ xX])\]\s*)?(?P<strike>~~)?\s*(?:\*\*)?`?(?P<id>{self.id_src})")
-        self.bullet = re.compile(rf"^\s*(?:[-*]|\d+\.)\s*(?:\*\*)?`?(?P<id>{self.id_src})", re.M)
 
     def git(self, *a):
         return subprocess.run(["git", "-C", str(self.root), *a], capture_output=True, text=True)
@@ -169,6 +177,10 @@ def cmd_check(ctx, args):
     branches = []
     if not rows:
         problems.append("there is no row \"| **<label> · `<branch>`** | … |\"; add one for this branch")
+    for line in lines:  # a "task in progress" row with no branch, whatever the other rows are
+        if TASK_ROW.match(line) and not ROW.match(line) and line not in rows:
+            problems.append(f"task row without a branch, it must be \"| **{TASK_ROW.match(line).group(1)} · `<branch>`** "
+                            f"| … |\": {line[:80]}")
     for line in rows:
         m = ROW.match(line)
         if not m:
@@ -222,7 +234,17 @@ def cmd_closed(ctx, args):
     text = log_at(ctx, args.sha)
     m = DONE_HEADING.search(text)
     done = text[m.end():].split("\n## ", 1)[0] if m else ""
-    listed = ctx.closed_ids(done) | {x.group("id") for x in ctx.bullet.finditer(done)}
+    # recorded = struck through in "Done", or named in an entry that starts with a date, its indented continuation
+    # lines included (an id that is merely mentioned, or listed unstruck, does not count)
+    listed = ctx.struck_ids(done)
+    dated = False
+    for line in done.splitlines():
+        if DATE_LINE.match(line):
+            dated = True
+        elif not (dated and line[:1].isspace() and line.strip() and not LIST_ITEM.match(line)):
+            dated = False
+        if dated:
+            listed |= set(ctx.ids(line))
     missing = sorted(new - listed)
     for t in missing:
         print(f"bitacora: {t} is closed in the plan; list it in the \"Done\" section of {ctx.log}")

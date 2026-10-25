@@ -1,4 +1,4 @@
-<!-- galivelop-workflow v0.2.0 -->
+<!-- galivelop-workflow v0.3.0 -->
 # Guía de revisión
 
 Lo que el revisor (`/code-review`) comprueba en cada diff del instalador, además de los fallos de
@@ -20,8 +20,11 @@ aquí con su `FLU-n` o `INS-n`.
 - Los ganchos **fallan cerrados** cuando les falta un dato (un commit que el clon no tiene, una API que no responde),
   con la orden que lo arregla.
 - Los scripts de shell corren en bash 3.2 (macOS): nada de `mapfile` ni arrays asociativos.
+- Una carpeta con nombre fijo en un directorio compartido (`$TMPDIR`, `/tmp`) es por usuario, se crea con permisos 700
+  y se rechaza si ya existe como symlink o de otro usuario; los archivos sueltos, con `mktemp`.
 - Cada cambio en un gancho o un script lleva su caso en los tests; un caso que espera un fallo comprueba el motivo,
-  no solo el código de salida.
+  no solo el código de salida. Los scripts de `.claude/gw/scripts/` se prueban en el repo del flujo y no se editan
+  aquí (un cambio va al flujo como propuesta, con `gw-harvest`); esta regla vale para los scripts propios del proyecto.
 
 ## Traído de otro repo: se adapta a los contratos de este
 
@@ -47,6 +50,12 @@ aquí con su `FLU-n` o `INS-n`.
 - **Linux y Windows a la vez.** Lo que toca procesos, rutas o permisos se escribe para los dos (en
   Windows no hay señales ni `chmod`; en Linux no hay `.exe`) y la CI de Windows lo compila. Un
   `#[cfg]` nuevo tiene su rama para la otra plataforma o dice por qué no la necesita.
+- **Rutas comparadas con lo que da el sistema.** En Windows `canonicalize` devuelve `\\?\C:\…` y `sysinfo` da
+  los puntos de montaje sin ese prefijo: una ruta que se compara, se busca en una lista o se guarda pasa antes por
+  la misma forma (`carpetas::sin_verbatim`).
+- **Disco que falla a medias.** Copiar, mover o guardar puede fallar en mitad: lo que queda es el estado de antes o
+  el nuevo entero (la copia parcial se borra, la carpeta vuelve si no se pudo guardar la config), y los enlaces
+  simbólicos se copian como enlaces, no siguiéndolos.
 - **Puertos.** Se pide un puerto libre (`puerto_libre`) y solo se escucha en `127.0.0.1`, nunca en
   `0.0.0.0`: el motor y el backend no se exponen a la red.
 - **Esperas con tope.** Una espera (health-check, descarga, `/api/pull`) tiene límite y se puede

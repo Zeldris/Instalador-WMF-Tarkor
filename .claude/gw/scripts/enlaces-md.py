@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.2.0
+# galivelop-workflow v0.3.0
 """Broken links and stale references in the project's Markdown (a check for CI and `check`).
 
 1. Relative links `[text](path)` and `[text](path#anchor)` in the tracked .md files: the file must exist and, when
@@ -7,7 +7,10 @@
    External links (http, mailto...) are not looked at; code fences and `inline code` are skipped.
 2. `staleRefs` of .claude/gw.json: case-insensitive regexes that must not appear in the tracked files of docs/ and
    in README* at the root (a renamed task id or a removed phase that a document still mentions). The log file
-   (config `log`) and .claude/ are skipped: the log may talk about the past.
+   (config `log`), .claude/ and the files matching the globs of `staleRefs.skip` are skipped: they may talk about
+   the past (`staleRefs` is a list of regexes, or {"patterns": [...], "skip": [globs]}).
+3. `linkRoots` of .claude/gw.json: folders whose Markdown files write their relative links from the repo root
+   (e.g. a saved PR description), not from their own folder; the check resolves them that way.
 
   python3 enlaces-md.py [--files-only]     # --files-only: do not check anchors
 Prints `file:line: problem` for each; exit 1 if any (the last line has the command to rerun), 2 on a bad config.
@@ -60,10 +63,17 @@ def tracked(root, *patterns):
     return [f for f in out.stdout.split('\0') if f and (root / f).is_file()]
 
 
-def broken_links(root, md_files, files_only):
+def from_root(rel, link_roots):
+    """True when the file `rel` is inside one of the `linkRoots` folders (links resolve from the repo root)."""
+    return any(r == '.' or rel == r or rel.startswith(r + '/') for r in link_roots)
+
+
+def broken_links(root, md_files, files_only, link_roots=()):
     problems = []
+    roots = [(r[2:] if r.startswith('./') else r).strip('/') or '.' for r in link_roots]
     for rel in md_files:
         path = root / rel
+        base = root if from_root(rel, roots) else path.parent
         in_code = False
         for n, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
             if FENCE.match(line):
@@ -76,16 +86,22 @@ def broken_links(root, md_files, files_only):
                 where, _, frag = target.partition('#')
                 frag = urllib.parse.unquote(frag).lower()  # GitHub accepts upper case and encoded accents
                 where = urllib.parse.unquote(where)
-                dest = (path.parent / where).resolve() if where else path
-                if where and not dest.exists():
+                if where.startswith('/'):
+                    dest = (root / where.lstrip('/')).resolve()   # `/x` is the repo root, as on GitHub
+                else:
+                    dest = (base / where).resolve() if where else path
+                if where and not (dest == root.resolve() or root.resolve() in dest.parents):
+                    problems.append(f'{rel}:{n}: link {where} leaves the repo; point it inside the repo')
+                elif where and not dest.exists():
                     problems.append(f'{rel}:{n}: no such file {where}; fix the link or create the file')
                 elif frag and not files_only and dest.suffix == '.md' and dest.is_file() and frag not in anchors_of(dest):
                     problems.append(f'{rel}:{n}: {where or "(this file)"} has no heading with the anchor #{frag}')
     return problems
 
 
-def stale_refs(root, patterns, log):
+def stale_refs(root, patterns, log, skip=()):
     problems = []
+    skipped = [gwconfig.glob_regex(g) for g in skip]
     compiled = []
     for p in patterns:
         try:
@@ -95,7 +111,7 @@ def stale_refs(root, patterns, log):
     if not compiled:
         return problems
     files = [f for f in tracked(root) if (f.startswith('docs/') or ('/' not in f and f.upper().startswith('README')))
-             and f != log and not f.startswith('.claude/')]
+             and f != log and not f.startswith('.claude/') and not any(rx.match(f) for rx in skipped)]
     for rel in files:
         try:
             text = (root / rel).read_text(encoding='utf-8')
@@ -117,8 +133,9 @@ def main(argv=None):
     try:
         cfg = gwconfig.load()
         root = cfg['_root']
-        problems = broken_links(root, tracked(root, '*.md'), '--files-only' in argv)
-        problems += stale_refs(root, cfg.get('staleRefs', []), cfg['log'])
+        problems = broken_links(root, tracked(root, '*.md'), '--files-only' in argv, cfg.get('linkRoots', []))
+        patterns, skip = gwconfig.stale_refs(cfg)
+        problems += stale_refs(root, patterns, cfg['log'], skip)
     except gwconfig.ConfigError as exc:
         print(f'enlaces-md: {exc}; fix it: python3 {HERE / "config.py"} validate', file=sys.stderr)
         return 2

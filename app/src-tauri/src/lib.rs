@@ -5,9 +5,11 @@
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fs;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tarkor_nucleo::carpetas::{espacio_libre_mb, mover_carpeta};
 use tarkor_nucleo::catalogo::{Catalogo, Origen, Perfil};
 use tarkor_nucleo::config::{Config, Rutas};
 use tarkor_nucleo::equipo::{self, Equipo};
@@ -34,6 +36,11 @@ impl Estado {
         Config::cargar(&self.rutas.datos)
     }
 
+    /// Carpeta de la IA que se usa de verdad: la elegida por el jugador o la de por defecto.
+    fn ia(&self) -> PathBuf {
+        self.config().ia_efectiva(&self.rutas)
+    }
+
     fn perfil(&self, config: &Config) -> Result<&Perfil, String> {
         let id = config.perfil.as_deref().ok_or("todavía no se ha elegido perfil")?;
         self.catalogo.perfil(id).ok_or_else(|| format!("perfil desconocido: {id}"))
@@ -52,7 +59,7 @@ type Res<T> = Result<T, String>;
 
 #[tauri::command]
 fn rutas(estado: State<'_, Estado>) -> Rutas {
-    estado.rutas.clone()
+    Rutas { ia: estado.ia(), ..estado.rutas.clone() }
 }
 
 /// De dónde salió el catálogo (incrustado, externo, o externo inválido y por qué).
@@ -80,7 +87,7 @@ async fn analizar_equipo(estado: State<'_, Estado>) -> Res<Equipo> {
 
 #[tauri::command]
 fn evaluar_perfiles(estado: State<'_, Estado>, equipo: Option<Equipo>) -> Evaluacion {
-    perfiles::evaluar(&estado.catalogo, equipo.as_ref())
+    perfiles::evaluar(&estado.catalogo, equipo.as_ref(), espacio_libre_mb(&estado.ia()))
 }
 
 #[tauri::command]
@@ -105,7 +112,7 @@ fn estado_motor(estado: State<'_, Estado>) -> InfoMotor {
     let m = &estado.catalogo.motor;
     InfoMotor {
         version: m.version.clone(),
-        instalado: estado.ollama_externo.is_some() || motor::instalado(&estado.rutas.ia, m),
+        instalado: estado.ollama_externo.is_some() || motor::instalado(&estado.ia(), m),
         en_marcha: estado.cliente().and_then(|c| c.version().map_err(|e| e.to_string())).is_ok(),
         descarga_gb: if estado.ollama_externo.is_some() { 0.0 } else { m.paquete().map_or(0.0, |p| p.descarga_gb) },
         modelos_gb: estado.catalogo.modelos.iter().map(|(k, v)| (k.clone(), v.descarga_gb)).collect(),
@@ -126,7 +133,7 @@ async fn instalar_motor(app: tauri::AppHandle, canal: Channel<motor::Progreso>) 
         return Ok(());
     }
     estado.cancelar.store(false, Ordering::Relaxed);
-    let (ia, m, cancelar) = (estado.rutas.ia.clone(), estado.catalogo.motor.clone(), estado.cancelar.clone());
+    let (ia, m, cancelar) = (estado.ia(), estado.catalogo.motor.clone(), estado.cancelar.clone());
     tauri::async_runtime::spawn_blocking(move || {
         motor::instalar(&ia, &m, &cancelar, &mut |p| {
             let _ = canal.send(p);
@@ -142,14 +149,21 @@ async fn instalar_motor(app: tauri::AppHandle, canal: Channel<motor::Progreso>) 
 /// marcha lo reinicia, para aplicar un perfil nuevo.
 #[tauri::command]
 async fn iniciar_motor(app: tauri::AppHandle) -> Res<()> {
+    arrancar_motor(&app).await
+}
+
+/// Lo que hace `iniciar_motor`; también lo usa `cambiar_carpeta_ia` para volver a arrancar el
+/// motor con la carpeta nueva.
+async fn arrancar_motor(app: &tauri::AppHandle) -> Res<()> {
     let estado = app.state::<Estado>();
     if estado.ollama_externo.is_some() {
         return Ok(());
     }
     let config = estado.config();
+    let ia = config.ia_efectiva(&estado.rutas);
     let perfil = estado.perfil(&config)?.clone();
     let m = &estado.catalogo.motor;
-    let ejecutable = motor::ejecutable(&motor::carpeta(&estado.rutas.ia, m));
+    let ejecutable = motor::ejecutable(&motor::carpeta(&ia, m));
     if !ejecutable.exists() {
         return Err("El motor de IA no está instalado.".into());
     }
@@ -157,7 +171,7 @@ async fn iniciar_motor(app: tauri::AppHandle) -> Res<()> {
     let puerto = procesos::puerto_libre().map_err(|e| e.to_string())?;
     let mut entorno: BTreeMap<String, String> = ajustes.ollama.into_iter().collect();
     entorno.insert("OLLAMA_HOST".into(), format!("127.0.0.1:{puerto}"));
-    entorno.insert("OLLAMA_MODELS".into(), estado.rutas.ia.join("modelos").to_string_lossy().into_owned());
+    entorno.insert("OLLAMA_MODELS".into(), ia.join("modelos").to_string_lossy().into_owned());
     let espec = Especificacion {
         nombre: "El motor de IA".into(),
         programa: ejecutable,
@@ -177,6 +191,63 @@ async fn iniciar_motor(app: tauri::AppHandle) -> Res<()> {
         .map_err(|e| e.to_string())?;
     *estado.motor.lock().unwrap() = Some(proceso);
     Ok(())
+}
+
+/// Mueve la carpeta de la IA a `<destino>/Tarkor IA` (como la «SteamLibrary» que crea Steam
+/// dentro de la carpeta elegida), guarda la nueva ruta en `config.json` y devuelve las rutas
+/// efectivas. Para el motor mientras se mueve y, si estaba en marcha, lo arranca con la ruta
+/// nueva; si el movimiento falla, lo deja como estaba. Si ya es esa carpeta, no hace nada; si se
+/// elige una «Tarkor IA», se usa tal cual en vez de anidar otra.
+///
+/// Un error después de mover (el motor no arranca) llega con la carpeta ya cambiada y guardada:
+/// el asistente vuelve a leer `config.json` y las rutas en cualquier error.
+#[tauri::command]
+async fn cambiar_carpeta_ia(app: tauri::AppHandle, destino: String) -> Res<Rutas> {
+    let estado = app.state::<Estado>();
+    let elegida = PathBuf::from(destino);
+    let nueva = if elegida.file_name().is_some_and(|n| n == "Tarkor IA") { elegida } else { elegida.join("Tarkor IA") };
+    let actual = estado.ia();
+    if nueva == actual {
+        return Ok(Rutas { ia: actual, ..estado.rutas.clone() });
+    }
+    let parado = estado.motor.lock().unwrap().take();
+    let en_marcha = parado.is_some();
+    if let Some(mut p) = parado {
+        p.parar();
+    }
+    let (origen, a) = (actual.clone(), nueva.clone());
+    let movido = tauri::async_runtime::spawn_blocking(move || mover_carpeta(&origen, &a))
+        .await
+        .map_err(|e| e.to_string())
+        .and_then(|r| r);
+    if let Err(e) = movido {
+        if en_marcha {
+            let _ = arrancar_motor(&app).await;
+        }
+        return Err(e);
+    }
+    // Se vuelve a leer: lo que el asistente guardara durante la copia no se pisa.
+    let mut config = estado.config();
+    config.carpeta_ia = Some(nueva.clone());
+    if let Err(e) = config.guardar(&estado.rutas.datos) {
+        // Sin guardar, la próxima apertura buscaría la IA en la carpeta de antes: se devuelve allí.
+        let (a, b) = (nueva.clone(), actual.clone());
+        let vuelta = tauri::async_runtime::spawn_blocking(move || mover_carpeta(&a, &b)).await.map_err(|e| e.to_string()).and_then(|r| r);
+        if en_marcha {
+            let _ = arrancar_motor(&app).await;
+        }
+        return Err(match vuelta {
+            Ok(_) => format!("No se pudo guardar el cambio ({e}); la carpeta sigue en {}.", actual.display()),
+            Err(v) => format!("No se pudo guardar el cambio ({e}) ni devolver la carpeta a {}: {v}", actual.display()),
+        });
+    }
+    if let Ok(Some(aviso)) = movido {
+        eprintln!("{aviso}");
+    }
+    if en_marcha {
+        arrancar_motor(&app).await.map_err(|e| format!("La carpeta se movió a {}, pero el motor de IA no arranca: {e}", nueva.display()))?;
+    }
+    Ok(Rutas { ia: nueva, ..estado.rutas.clone() })
 }
 
 #[tauri::command]
@@ -278,6 +349,7 @@ pub fn run() {
     let rutas_app = Rutas::del_sistema();
     let (catalogo, origen) = Catalogo::cargar(&rutas_app.datos);
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(Estado {
             rutas: rutas_app,
             catalogo,
@@ -299,6 +371,7 @@ pub fn run() {
             cancelar_descargas,
             instalar_motor,
             iniciar_motor,
+            cambiar_carpeta_ia,
             vigilar_motor,
             descargar_modelos,
             comprobar

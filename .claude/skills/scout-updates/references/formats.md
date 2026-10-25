@@ -1,6 +1,6 @@
 # Formats of the scout memory files
 
-Both files live in `.claude/gw/scout/` of the target project and are kept by `scout-updates`; the user may edit them
+Both files live in the `scoutDir` folder (default `.claude/gw/scout/`) of the target project and are kept by `scout-updates`; the user may edit them
 (above all the constraints).
 
 ## `architecture.md`
