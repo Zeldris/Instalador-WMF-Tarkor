@@ -36,6 +36,10 @@ npm run tauri build              # instaladores (.exe en Windows; .AppImage y .d
 
 `TARKOR_DATOS=/ruta` cambia la carpeta de datos (para pruebas sin tocar la real).
 
+Un test nuevo del núcleo vive en el `mod tests` del mismo archivo que el arreglo, así que
+`rojo-sin-arreglo.sh` se llevaría también el test: se comprueba a mano, quitando solo la lógica del arreglo,
+viendo fallar el test con su motivo y devolviéndola.
+
 ## Prueba de punta a punta (Linux)
 
 Recorre el asistente en la app instalada pulsando los botones por su texto, guarda una captura de

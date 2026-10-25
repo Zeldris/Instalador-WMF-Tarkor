@@ -39,6 +39,12 @@ antes de la `/retro`; todo en español, y solo lo que confirme la usuaria entra 
 - **Documentos largos del repo** (retro del 2026-10-21): el plan y el `README` fueron lo que más arrastró en
   `FLU-1` (leídos enteros 19 y 10 veces). Se leen por tramos (`grep -n` y `sed -n` de la sección); enteros solo
   al cambiar la estructura del documento.
+- **Arreglos de una revisión** (retro de `INS-49`, 2026-10-25): los 11 arreglos de la fase 1 en la sesión principal
+  costaron ~60 llamadas a 116k de media. Si son más de tres, a un subagente (`orchestrate-dealer`) con la lista de
+  hallazgos como encargo (ya trae rutas y escenario), el modelo grande si hay graves y `/code-review` corto de su
+  diff. Los hallazgos se guardan en el scratchpad al salir de la revisión: la lista de leves se copia de ahí.
+- **Archivos de código de más de ~300 líneas** (retro de `INS-49`): `lib.rs` y `motor.rs`, leídos enteros 8 y 11
+  veces, arrastraron ~300k. Por tramos (`grep -n` del nombre y `sed -n`), como el plan.
 - **El registro de la sesión** pesa cientos de MB: medirlo con `medir.py` de la skill, nunca leerlo.
 
 ## Ajustes en vigor
