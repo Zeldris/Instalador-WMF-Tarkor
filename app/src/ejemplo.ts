@@ -17,6 +17,7 @@ export const configInicial = (): Config => ({
   modelosDescargados: [],
   pasoAsistente: 1,
   asistenteCompletado: false,
+  carpetaIa: null,
 })
 
 export const equipoEjemplo: Equipo = {
@@ -30,27 +31,39 @@ export const equipoEjemplo: Equipo = {
   sistema: 'Linux (SteamOS 3.7)',
 }
 
+const rutasPorDefecto = () => ({ datos: '~/.local/share/tarkor', ia: '~/.local/share/tarkor/ia', registros: '~/.local/state/tarkor/registros' })
+/** Disco libre de la carpeta de IA simulada: el del equipo de ejemplo, y mucho en la carpeta que se «elige». */
+const DISCO_CARPETA_ELEGIDA_GB = 500
+let discoLibreIaGb = equipoEjemplo.discoLibreMb / 1024
+let rutasEjemplo = rutasPorDefecto()
+/** Para los tests: fija el disco libre de la carpeta de IA actual. */
+export const fijarDiscoLibreIa = (gb: number) => { discoLibreIaGb = gb }
+/** Para los tests: vuelve a la carpeta y el disco por defecto. */
+export const reiniciarCarpetaIa = () => { discoLibreIaGb = equipoEjemplo.discoLibreMb / 1024; rutasEjemplo = rutasPorDefecto() }
+
 export function evaluarEjemplo(equipo: Equipo | null): Evaluacion {
   const r = catalogo.reglas
   const ram = equipo ? equipo.ramTotalMb / 1024 : 0
   const paraIa = equipo ? Math.max(0, ram - Math.max(r.reservaMinimaGb, ram * r.reservaProporcion) - r.memoriaJuegoGb) : null
-  const disco = equipo ? equipo.discoLibreMb / 1024 : null
+  const disco = discoLibreIaGb
   const perfiles: PerfilEvaluado[] = catalogo.perfiles.map((p) => {
     const descargaGb = descargaDe(p)
+    const necesitaDiscoGb = descargaGb * r.margenDisco
     return {
       ...p,
       descargaGb,
       cabeEnMemoria: paraIa === null || p.memoriaGb <= paraIa,
-      cabeEnDisco: disco === null || descargaGb * r.margenDisco <= disco,
+      cabeEnDisco: necesitaDiscoGb <= disco,
+      necesitaDiscoGb,
     }
   })
   const masLigero = perfiles.find((p) => !p.experimental)!.id
-  if (paraIa === null) return { memoriaParaIaGb: null, perfiles, maximoSeguro: null, recomendado: masLigero, equipoInsuficiente: false }
+  if (paraIa === null) return { memoriaParaIaGb: null, discoLibreGb: disco, perfiles, maximoSeguro: null, recomendado: masLigero, equipoInsuficiente: false }
   const caben = perfiles.filter((p) => p.cabeEnMemoria && p.cabeEnDisco && !p.experimental)
   const ultimo = caben.at(-1)
   let recomendado = ultimo?.id ?? masLigero
   if (ultimo && caben.length > 1 && paraIa - ultimo.memoriaGb < r.margenComodoGb) recomendado = caben.at(-2)!.id
-  return { memoriaParaIaGb: paraIa, perfiles, maximoSeguro: ultimo?.id ?? null, recomendado, equipoInsuficiente: !ultimo }
+  return { memoriaParaIaGb: paraIa, discoLibreGb: disco, perfiles, maximoSeguro: ultimo?.id ?? null, recomendado, equipoInsuficiente: !ultimo }
 }
 
 let guardada = configInicial()
@@ -67,7 +80,7 @@ async function simular(total: number, pasos: number, aviso: (hecho: number) => v
 }
 
 export const ejemplo: Api = {
-  rutas: async () => ({ datos: '~/.local/share/tarkor', ia: '~/.local/share/tarkor/ia', registros: '~/.local/state/tarkor/registros' }),
+  rutas: async () => ({ ...rutasEjemplo }),
   cargarConfig: async () => structuredClone(guardada),
   guardarConfig: async (c) => { guardada = structuredClone(c) },
   analizarEquipo: async () => equipoEjemplo,
@@ -100,6 +113,13 @@ export const ejemplo: Api = {
     return modelos
   },
   cancelarDescargas: async () => { cancelado = true },
+  elegirCarpeta: async () => '/mnt/tarjeta-sd',
+  cambiarCarpetaIa: async (destino) => {
+    await pausa(60)
+    discoLibreIaGb = DISCO_CARPETA_ELEGIDA_GB
+    rutasEjemplo = { ...rutasEjemplo, ia: `${destino}/Tarkor IA` }
+    return { ...rutasEjemplo }
+  },
   comprobar: async (id) => {
     await pausa(150)
     if (['basedatos', 'juego', 'mundo'].includes(id)) return { resultado: 'omitida', motivo: 'Llega con el juego empaquetado (fase 4).' }

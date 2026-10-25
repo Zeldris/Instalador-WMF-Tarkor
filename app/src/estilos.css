@@ -103,6 +103,14 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
 .tarjeta.sel { border-color: var(--accent-400); background: color-mix(in srgb, var(--accent-500) 12%, var(--wood-900)); box-shadow: 0 0 0 1px var(--accent-400) inset; }
 .tarjeta:disabled { cursor: not-allowed; opacity: .5; }
 .tarjeta .nombre { font-family: var(--serif); font-weight: 700; font-size: 18px; letter-spacing: .04em; }
+.tarjeta-caja { display: flex; flex-direction: column; gap: 8px; }
+.tarjeta-caja .tarjeta { flex: 1; }
+.tarjeta-caja .aviso { display: flex; flex-direction: column; gap: 8px; }
+.espacio { margin: 0; display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; }
+.espacio.sin { color: var(--danger-400); }
+.enlace { font: inherit; font-size: 13px; background: none; border: 0; padding: 0; color: var(--accent-300); text-decoration: underline; cursor: pointer; }
+.enlace:disabled { opacity: .5; cursor: wait; }
+.carpeta .fila { gap: 8px; }
 .etiquetas { display: flex; gap: 6px; flex-wrap: wrap; min-height: 22px; }
 .etiqueta { font-size: 11px; font-weight: 600; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; border: 1px solid; }
 .etiqueta.rec { color: var(--accent-300); border-color: var(--accent-500); }
