@@ -66,6 +66,8 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 
 Dos líneas cada una como mucho; el detalle está en el commit y la más antigua sale cuando hay más de 5.
 
+- ~~`INS-49` · Reparar~~ (2026-10-25): suma de cada archivo del motor y de cada capa de los modelos; reinstala o
+  vuelve a pedir solo lo dañado, desde Ajustes y desde la comprobación.
 - ~~`INS-48` · Carpeta de la IA elegible y movible~~ (2026-10-25): espacio necesario frente a libre en cada
   tarjeta, «Cambiar carpeta» en el paso 4 y «Mover a otra carpeta» en Ajustes.
 - ~~`INS-14` · Perfiles por encima del máximo seguro~~ (2026-10-25): se pueden elegir con aviso y confirmación
@@ -74,9 +76,3 @@ Dos líneas cada una como mucho; el detalle está en el commit y la más antigua
   se queda el local; dos reglas nuevas en `REVIEW.md`.
 - ~~`FLU-3` · CI en local~~ (2026-10-22): `tools/qa/ci-local.py` corre los jobs de Ubuntu de `comprobar.yml` y
   apunta el resultado en [`ci-local.md`](ci-local.md) mientras la CI de GitHub está agotada.
-- ~~`FLU-1` · flujo de trabajo y skills de Tarkor~~ (2026-10-21): `CLAUDE.md`, `REVIEW.md`, bitácora,
-  ganchos de sesión, pre-push y de antes de `main`, `tools/qa` con sus tests (job `qa` de la CI) y las
-  skills con notas para el instalador; [retro](retro-2026-10-21-flujo.md) aplicada.
-- ~~`INS-1`…`INS-6`, `INS-3b`, `INS-13`, `INS-21`…`INS-27` · renumeradas~~ (2026-10-21): las tareas
-  ya hechas del plan llevan ahora su identificador `INS-n` (antes 0.1, 2.1…), para que la bitácora y
-  el pre-push las sigan.
