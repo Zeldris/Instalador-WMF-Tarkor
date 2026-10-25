@@ -261,11 +261,17 @@ export function CopiarInforme() {
   const [copiado, setCopiado] = useState(false)
   const [ocupado, setOcupado] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [cargando, setCargando] = useState(false)
+  // El informe cambia (motor parado, memoria): se pide de nuevo cada vez, y mientras llega se ve «cargando».
   const obtener = async (): Promise<string> => {
-    if (texto !== null) return texto
-    const x = await api.informe()
-    setTexto(x)
-    return x
+    setCargando(true)
+    try {
+      const x = await api.informe()
+      setTexto(x)
+      return x
+    } finally {
+      setCargando(false)
+    }
   }
   const copiar = async () => {
     setOcupado(true)
@@ -291,7 +297,8 @@ export function CopiarInforme() {
   const detalles = async () => {
     if (visible) { setVisible(false); return }
     setError(null)
-    try { await obtener(); setVisible(true) } catch { setError(tx.informe.errorInforme) }
+    setVisible(true)
+    try { await obtener() } catch { setVisible(false); setError(tx.informe.errorInforme) }
   }
   return (
     <div>
@@ -301,7 +308,8 @@ export function CopiarInforme() {
         {copiado && <span className="peq tenue" role="status">{tx.informe.copiado}</span>}
       </div>
       {error && <div className="error" role="alert">{error}</div>}
-      {visible && texto !== null && <pre className="peq" tabIndex={0} aria-label={tx.informe.copiar} style={{ whiteSpace: 'pre-wrap', userSelect: 'text', maxHeight: 240, overflow: 'auto' }}>{texto}</pre>}
+      {cargando && <p className="peq tenue" role="status">{tx.informe.cargando}</p>}
+      {visible && !cargando && texto !== null && <pre className="peq" tabIndex={0} aria-label={tx.informe.copiar} style={{ whiteSpace: 'pre-wrap', userSelect: 'text', maxHeight: 240, overflow: 'auto' }}>{texto}</pre>}
     </div>
   )
 }

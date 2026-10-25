@@ -119,7 +119,8 @@ Ver [`06`](06-inventario-exclusiones.md).
 Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md).
 
 - [ ] **INS-41** Integrar el build del juego (frontend + backend en bytecode + plantilla) en la app de
-  Tauri.
+  Tauri. Pendiente: pantalla del motor detenido: variante "El motor del juego se ha detenido" (docs/11), cuando
+  `MotorDetenido` diga qué proceso es.
 - [ ] **INS-42** Asistente real de punta a punta: descargas y comprobaciones de verdad; calentar el
   narrador al arrancar. Incluye la autopausa al perder la red con reanudación sola y la velocidad
   de la narración de prueba (ronda de diseño del 2026-10-25).

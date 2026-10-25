@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import App from './App'
 import { perfilMasLigero } from './tipos'
 import { catalogo } from './catalogo'
-import { ejemplo, configInicial, fijarDiscoLibreIa, fijarErrorCambioPerfil, fijarErrorCarpetaIa, fijarModelosDanados, fijarUsoIa, reiniciarCarpetaIa, reiniciarModelos, emitirMotorDetenido, fijarErrorCopiar, fijarErrorReintento, fijarMotorDetenido, oyentesMotor, reiniciarMotorDetenido, textoCopiado, TEXTO_INFORME } from './ejemplo'
+import { ejemplo, configInicial, fijarDiscoLibreIa, fijarErrorCambioPerfil, fijarRetardoCambioPerfil, fijarErrorCarpetaIa, fijarModelosDanados, fijarUsoIa, reiniciarCarpetaIa, reiniciarModelos, emitirMotorDetenido, fijarErrorCopiar, fijarErrorReintento, fijarMotorDetenido, oyentesMotor, reiniciarMotorDetenido, textoCopiado, TEXTO_INFORME } from './ejemplo'
 
 afterEach(async () => {
   cleanup()
@@ -327,6 +327,62 @@ describe('asistente de primer arranque', () => {
       fireEvent.click(await boton('Cambiar a un perfil más ligero'))
       expect((await boton(/^Ligero/)).getAttribute('aria-pressed')).toBe('true')
     })
+
+    it('un aviso en el asistente: Reintentar con éxito sigue en el asistente, y Volver de Ajustes (desde «más ligero») también', async () => {
+      await hastaElPerfil()
+      emitirMotorDetenido(aviso)
+      fireEvent.click(await boton('Reintentar'))
+      await waitFor(() => expect(screen.queryByText('El motor de IA se ha detenido')).toBeNull())
+      expect(await boton(/^Equilibrado/)).toBeTruthy()
+      emitirMotorDetenido(aviso)
+      fireEvent.click(await boton('Cambiar a un perfil más ligero'))
+      fireEvent.click(await boton('Volver'))
+      expect(await boton(/^Equilibrado/)).toBeTruthy()
+      expect(screen.queryByRole('button', { name: /Ajustes/ })).toBeNull()
+    }, 30000)
+
+    it('un aviso durante un cambio de perfil espera: Ajustes sigue y la pantalla sale al acabar', async () => {
+      await conAsistenteHecho()
+      render(<App />)
+      fireEvent.click(await boton(/Ajustes/))
+      fijarRetardoCambioPerfil(300)
+      fireEvent.click(await boton(/^Ligero/))
+      fireEvent.click(await boton(/^Cambiar/))
+      await boton('Pausar')
+      emitirMotorDetenido(aviso)
+      await new Promise((ok) => setTimeout(ok, 50))
+      expect(screen.queryByText('El motor de IA se ha detenido')).toBeNull()
+      expect(screen.getByRole('button', { name: 'Pausar' })).toBeTruthy()
+      expect(await screen.findByText('El motor de IA se ha detenido', {}, { timeout: 10000 })).toBeTruthy()
+    }, 30000)
+
+    it('un aviso durante un cambio que ya no sigue en pie no sale al acabar', async () => {
+      await conAsistenteHecho()
+      render(<App />)
+      fireEvent.click(await boton(/Ajustes/))
+      fijarRetardoCambioPerfil(300)
+      fireEvent.click(await boton(/^Ligero/))
+      fireEvent.click(await boton(/^Cambiar/))
+      await boton('Pausar')
+      emitirMotorDetenido(aviso)
+      fijarMotorDetenido(null)
+      await boton(/^Borrar modelos que ya no uso/, 5000)
+      await new Promise((ok) => setTimeout(ok, 100))
+      expect(screen.queryByText('El motor de IA se ha detenido')).toBeNull()
+    }, 30000)
+
+    it('Pausar con un error que no es de cancelación muestra el error real', async () => {
+      await conAsistenteHecho()
+      render(<App />)
+      fireEvent.click(await boton(/Ajustes/))
+      fijarRetardoCambioPerfil(300)
+      fijarErrorCambioPerfil('El motor de IA no arranca con el perfil nuevo (x).')
+      fireEvent.click(await boton(/^Ligero/))
+      fireEvent.click(await boton(/^Cambiar/))
+      fireEvent.click(await boton('Pausar'))
+      expect((await screen.findByRole('alert')).textContent).toContain('no arranca con el perfil nuevo')
+      expect(screen.queryByText(/Descarga en pausa|pausad/i)).toBeNull()
+    }, 30000)
 
     it('Copiar informe copia y confirma; si copiar falla deja el texto desplegado', async () => {
       await conAsistenteHecho()

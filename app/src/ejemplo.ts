@@ -81,7 +81,10 @@ export const fijarUsoIa = (uso: UsoIa | Error) => { usoSimulado = uso }
 let errorCambioPerfil: string | null = null
 /** Para los tests: el siguiente cambio de perfil falla con este mensaje, sin tocar el perfil guardado. */
 export const fijarErrorCambioPerfil = (mensaje: string) => { errorCambioPerfil = mensaje }
-export const reiniciarModelos = () => { errorCambioPerfil = null; sobrantes = []; usoSimulado = { porcentajeGpu: 100, memoriaMb: 5400 } }
+let retardoCambioPerfil = 0
+/** Para los tests: el cambio de perfil tarda esto (ms) antes de acabar o de fallar. */
+export const fijarRetardoCambioPerfil = (ms: number) => { retardoCambioPerfil = ms }
+export const reiniciarModelos = () => { errorCambioPerfil = null; retardoCambioPerfil = 0; sobrantes = []; usoSimulado = { porcentajeGpu: 100, memoriaMb: 5400 } }
 const modelosDe = (id: string | null) => {
   const perfil = catalogo.perfiles.find((p) => p.id === id) ?? catalogo.perfiles[0]
   return [...new Set([perfil.narrador, perfil.cronista, perfil.sugerencias, perfil.embeddings])]
@@ -182,6 +185,7 @@ export const ejemplo: Api = {
   },
   cambiarPerfil: async (perfil, progreso) => {
     cancelado = false
+    if (retardoCambioPerfil) await pausa(retardoCambioPerfil)
     if (errorCambioPerfil) throw errorCambioPerfil
     const antes = modelosDe(guardada.perfil)
     const nuevos = modelosDe(perfil)

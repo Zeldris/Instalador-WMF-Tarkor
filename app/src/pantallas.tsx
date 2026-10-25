@@ -238,7 +238,7 @@ function useCambiarPerfil(reemplazarConfig: (c: Config) => void) {
   return { cambiando, borrando, estado, error, sobrantes, cambiar, pausar, borrar }
 }
 
-export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpeta, actualizar, reemplazarConfig, reanalizar, volver }: {
+export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpeta, actualizar, reemplazarConfig, reanalizar, alCambiar, volver }: {
   /** Perfil ya elegido al abrir (desde «Cambiar a un perfil más ligero»). */
   perfilInicial?: PerfilId
   config: Config
@@ -249,6 +249,8 @@ export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpe
   /** Sustituye el estado entero por el `Config` que ya guardó el núcleo (si no, un guardado posterior volvería al perfil viejo). */
   reemplazarConfig: (c: Config) => void
   reanalizar: () => Promise<void>
+  /** Avisa a la app de que está (o ya no) cambiando de perfil: mientras, no se tapa Ajustes con la pantalla del motor. */
+  alCambiar?: (cambiando: boolean) => void
   volver: () => void
 }) {
   const t = tx.ajustes
@@ -256,6 +258,8 @@ export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpe
   const [confirmado, setConfirmado] = useState(false)
   const carpeta = useMoverCarpeta(cambiarCarpeta)
   const cambio = useCambiarPerfil(reemplazarConfig)
+  useEffect(() => { alCambiar?.(cambio.cambiando) }, [alCambiar, cambio.cambiando])
+  useEffect(() => () => alCambiar?.(false), [alCambiar])
   const actual = evaluacion.perfiles.find((x) => x.id === (config.perfil ?? evaluacion.recomendado))!
   const nuevo = evaluacion.perfiles.find((x) => x.id === elegido)!
   const extra = Math.max(0, nuevo.descargaGb - actual.descargaGb)

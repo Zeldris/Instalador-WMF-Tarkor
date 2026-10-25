@@ -20,15 +20,37 @@ export default function App() {
   const [aviso, setAviso] = useState<MotorDetenido | null>(null)
   const [perfilAjustes, setPerfilAjustes] = useState<PerfilId | undefined>()
   const ultima = useRef<Config | null>(null)
+  // Ajustes está cambiando de perfil: el aviso espera (si no, Ajustes se desmonta y pierde progreso, Pausar y error).
+  const [cambiando, setCambiando] = useState(false)
+  // Vista en la que estaba la app cuando llegó el aviso, y a dónde lleva «Volver» de Ajustes.
+  const vistaRef = useRef<Vista>('asistente')
+  vistaRef.current = vista
+  const antesDelAviso = useRef<Vista | null>(null)
+  const [volverA, setVolverA] = useState<Vista>('juego')
+  const ponerAviso = useCallback((a: MotorDetenido) => {
+    if (antesDelAviso.current === null) antesDelAviso.current = vistaRef.current
+    setAviso(a)
+  }, [])
 
   // La pantalla del motor detenido sale con el evento y, al montar, si el aviso se emitió antes de escuchar.
   useEffect(() => {
     let vivo = true
     let quitar: (() => void) | null = null
-    void api.alMotorDetenido((a) => setAviso(a)).then((f) => { if (vivo) quitar = f; else f() })
-    void api.motorDetenido().then((a) => { if (vivo && a) setAviso(a) }, () => {})
+    api.alMotorDetenido((a) => ponerAviso(a)).then((f) => { if (vivo) quitar = f; else f() }).catch(() => {})
     return () => { vivo = false; quitar?.() }
-  }, [])
+  }, [ponerAviso])
+
+  // Al montar (aviso emitido antes de escuchar) y al acabar un cambio de perfil se lee el aviso: si el motor ya no está parado, no se muestra.
+  useEffect(() => {
+    if (cambiando) return
+    let vivo = true
+    void api.motorDetenido().then((a) => {
+      if (!vivo) return
+      if (a) ponerAviso(a)
+      else { antesDelAviso.current = null; setAviso(null) }
+    }, () => {})
+    return () => { vivo = false }
+  }, [cambiando, ponerAviso])
 
   useEffect(() => {
     void (async () => {
@@ -94,17 +116,22 @@ export default function App() {
 
   const avisoError = error && <div className="error" role="alert" style={{ position: 'fixed', bottom: 16, left: 16, right: 16 }}>{error}</div>
 
-  if (aviso) {
+  if (aviso && !cambiando) {
+    const salir = () => { antesDelAviso.current = null; setAviso(null) }
     return <>{avisoError}<PantallaMotorDetenido aviso={aviso}
       masLigero={evaluacion ? perfilMasLigero(catalogo.perfiles, config.perfil) : null}
-      reintentado={() => setAviso(null)}
-      irAAjustes={(p) => { setPerfilAjustes(p); setAviso(null); setVista('ajustes') }} /></>
+      reintentado={salir}
+      irAAjustes={(p) => {
+        const antes = antesDelAviso.current ?? vista
+        if (antes !== 'ajustes') setVolverA(antes)
+        setPerfilAjustes(p); salir(); setVista('ajustes')
+      }} /></>
   }
   if (vista === 'juego') {
     return <>{avisoError}<Juego abrirAjustes={() => setVista('ajustes')} repetir={() => { setVista('asistente'); actualizar({ ...configInicial(), carpetaIa: config.carpetaIa, pasoAsistente: 1 }); setEvaluacion(null) }} /></>
   }
   if (vista === 'ajustes' && evaluacion) {
-    return <>{avisoError}<Ajustes perfilInicial={perfilAjustes} config={config} evaluacion={evaluacion} rutas={rutas} cambiarCarpeta={cambiarCarpeta} actualizar={actualizar} reemplazarConfig={reemplazarConfig} reanalizar={analizar} volver={() => { setPerfilAjustes(undefined); setVista('juego') }} /></>
+    return <>{avisoError}<Ajustes perfilInicial={perfilAjustes} config={config} evaluacion={evaluacion} rutas={rutas} cambiarCarpeta={cambiarCarpeta} actualizar={actualizar} reemplazarConfig={reemplazarConfig} reanalizar={analizar} alCambiar={setCambiando} volver={() => { setPerfilAjustes(undefined); setVista(volverA); setVolverA('juego') }} /></>
   }
 
   // Sin evaluación no se puede pasar del paso 3.
