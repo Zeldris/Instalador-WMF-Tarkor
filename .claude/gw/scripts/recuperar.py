@@ -5,7 +5,7 @@
   recuperar.py --estado         what the SessionStart hook (clear|compact) puts back into the context: the log's
                                 state (with logRows, the current branch's row; else the log's first section, ~25
                                 lines), `git status --short` (15 lines at most), the last 5 commits, the compactions
-                                in this session (WMF P10: compare them with the task's budget) and how to search the
+                                in this session and since the last merge from origin/main (WMF P10: compare them with the task's budget) and how to search the
                                 transcript for a detail.
   recuperar.py --buscar TEXT    the transcript fragments (main conversation: user, Claude, tool calls and results)
                                 matching TEXT (case-insensitive regex; plain text if it is not a valid regex), newest
@@ -19,6 +19,7 @@ Project root: config.find_root (the script's own repo when it holds .claude/gw.j
 first). Python 3.8+ standard library only.
 """
 import argparse
+import datetime
 import json
 import os
 import re
@@ -97,10 +98,22 @@ def entries(path):
                 yield entry
 
 
-def count_compactions(path):
-    """Compaction boundaries in the transcript; if the format has none, compaction summaries instead."""
+def moment(stamp):
+    """An ISO-8601 time (`Z` or an offset) as an aware datetime; None if it does not parse."""
+    try:
+        return datetime.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except (AttributeError, ValueError):
+        return None
+
+
+def count_compactions(path, since=None):
+    """Compaction boundaries in the transcript; if the format has none, compaction summaries instead. With `since`
+    (an aware datetime), only those from then on; one without a readable time counts."""
     boundaries = summaries = 0
     for entry in entries(path):
+        when = moment(entry.get("timestamp")) if since else None
+        if when and when.tzinfo and when < since:
+            continue
         if entry.get("subtype") == "compact_boundary" or entry.get("type") == "compact_boundary":
             boundaries += 1
         elif entry.get("isCompactSummary"):
@@ -229,6 +242,14 @@ def log_state(root, branch):
     return out
 
 
+def task_start(root):
+    """Where the current task began: the merge base with origin/main (the last time the branch took main, which
+    the flow does at the start of each task) and its commit time. None without origin/main or a readable time."""
+    base = git(root, "merge-base", "HEAD", "origin/main")
+    start = moment(git(root, "log", "-1", "--format=%cI", base)) if base else None
+    return (base[:7], start) if start else None
+
+
 def state(root, transcript):
     branch = git(root, "rev-parse", "--abbrev-ref", "HEAD") or "?"
     print(f"State after compaction or /clear (galivelop-workflow), branch {branch}:")
@@ -253,7 +274,14 @@ def state(root, transcript):
               f"the session was opened outside the repo; restart it from the repo: cd {root} && claude")
     if path:
         n = count_compactions(path)
-        print(f"- Compactions in this session: {n} (compare with the task's compaction budget in the log)")
+        task = task_start(root)
+        if task:
+            sha, start = task
+            print(f"- Compactions in this session: {n}; since the last merge from origin/main ({sha}, "
+                  f"{start.astimezone(datetime.timezone.utc):%Y-%m-%d %H:%M} UTC): {count_compactions(path, start)} (compare these with the task's "
+                  f"compaction budget in the log)")
+        else:
+            print(f"- Compactions in this session: {n} (compare with the task's compaction budget in the log)")
     else:
         print("- Compactions in this session: unknown (no session transcript found)")
     session = f" --sesion {path}" if path else ""
