@@ -173,6 +173,31 @@ describe('asistente de primer arranque', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   }, 20000)
 
+  it('Reintentar vuelve a comprobar aunque falle otra vez el mismo paso', async () => {
+    await hastaElPerfil()
+    fireEvent.click(await boton(/^Descargar/))
+    fijarModelosDanados(true)
+    fireEvent.click(await boton('Comprobar la instalación', 10000))
+    const fallo = async () => expect((await screen.findByRole('alert', {}, { timeout: 3000 })).textContent).toMatch(/^Faltan modelos/)
+    await fallo()
+    fireEvent.click(await boton('Reintentar'))
+    await fallo()
+    fireEvent.click(await boton('Reintentar'))
+    await fallo()
+  }, 20000)
+
+  it('una reparación se puede cancelar', async () => {
+    await hastaElPerfil()
+    fireEvent.click(await boton(/^Descargar/))
+    fijarModelosDanados(true)
+    fireEvent.click(await boton('Comprobar la instalación', 10000))
+    await screen.findByRole('alert', {}, { timeout: 3000 })
+    fireEvent.click(await boton('Reparar'))
+    fireEvent.click(await boton('Cancelar'))
+    expect(await screen.findByText(/^Reparación cancelada/, {}, { timeout: 3000 })).toBeTruthy()
+    expect(await boton('Reparar')).toHaveProperty('disabled', false)
+  }, 20000)
+
   it('en Ajustes, Reparar dice si todo estaba en orden', async () => {
     await hastaElPerfil()
     fireEvent.click(await boton(/^Descargar/))

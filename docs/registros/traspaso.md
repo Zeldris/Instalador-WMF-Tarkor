@@ -14,8 +14,8 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-25). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #6 (2026-10-25, `14f55ce`): `INS-14`, `INS-48` y `FLU-4`. La CI de GitHub no arrancó (pago); `ci-local` en verde sobre `7276a43`, Windows sin cubrir. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | ✅ 2026-10-25: `INS-49` «Reparar» cerrado, con su paso en el E2E (Ajustes → Reparar → «Todo estaba en orden») en verde sobre la app recompilada. Siguiente: llevar `INS-49` a `main` por PR (tres fases) cuando la usuaria lo confirme; si no, los leves de `INS-48`. |
-| **Tests** | 2026-10-25: núcleo `cargo test -p tarkor-nucleo` 80, asistente `vitest` 12, `tsc -b` 0, clippy 0 avisos, `cargo check` del núcleo para Windows (mingw) en verde; E2E del asistente con el Ollama falso en verde. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-10-25: llevando `INS-49` a `main` por PR (la usuaria dijo «Si»). Fase 1 hecha: arreglados los graves y medios de la revisión (reparar ya no deja sin motor si falla la reinstalación, rearranca el motor tras un error, cancelar y progreso, capas sumadas por nombre en `blobs/`, nombres de modelo que salían de la carpeta, Reparar y Mover a la vez, enlaces del motor, Reintentar atascado en la comprobación). Siguiente: fase 2 (`opt-tokens` y `retro`, presentadas a la usuaria) y fase 3. |
+| **Tests** | 2026-10-25: núcleo `cargo test -p tarkor-nucleo` 87, asistente `vitest` 14, `tsc -b` 0, clippy 0 avisos, `cargo check` del núcleo para Windows (mingw) en verde; E2E del asistente con el Ollama falso en verde. |
 
 ## Dónde está todo (para saber qué sigue)
 
@@ -37,7 +37,13 @@ cada commit.**
    ya descargado en Ajustes; no se impide mover la carpeta con una descarga en marcha (el asistente hoy no lo
    permite); `Estado::ia()` lee `config.json` en cada llamada; el aviso de restos del origen solo va a stderr;
    con poco disco el paso 3 dice «equipo insuficiente».
-4. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
+4. Pendientes leves de la revisión de `INS-49` (no vuelven a revisarse en su PR): con un `.completo` vacío (lo
+   instalado antes de `INS-49`) el primer Reparar vuelve a bajar el motor aunque esté sano; `alTerminar` de
+   Ajustes guarda los modelos del perfil leído al empezar aunque se cambie durante la reparación; el porcentaje
+   al reponer un modelo es el de cada capa y vuelve a 0 %; `escribir_sumas` relee todo el motor tras extraerlo
+   en vez de sumar al extraer; la lista única de modelos de un perfil está copiada en cuatro sitios (conviene un
+   `modelosDe(perfil)` en `catalogo.ts`).
+5. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
 
 ## Decisiones de la usuaria que bloquean algo
 

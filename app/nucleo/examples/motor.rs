@@ -38,7 +38,7 @@ fn main() {
     let puerto = procesos::puerto_libre().unwrap();
     let mut entorno: BTreeMap<String, String> = ajustes.ollama.into_iter().collect();
     entorno.insert("OLLAMA_HOST".into(), format!("127.0.0.1:{puerto}"));
-    entorno.insert("OLLAMA_MODELS".into(), rutas.ia.join("modelos").to_string_lossy().into_owned());
+    entorno.insert("OLLAMA_MODELS".into(), tarkor_nucleo::modelos::carpeta(&rutas.ia).to_string_lossy().into_owned());
     let t = Instant::now();
     let proceso = Proceso::arrancar(Especificacion {
         nombre: "El motor de IA".into(),

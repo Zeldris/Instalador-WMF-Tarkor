@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from './api'
 import { comun, pasos, perfil as t, reparar as tr } from './textos'
@@ -177,7 +177,7 @@ function textoMotor(p: ProgresoMotor) {
 }
 
 function textoModelo(p: ProgresoModelo) {
-  if (p.estado === 'verificando') return tr.comprobandoModelo(p.modelo)
+  if (p.estado === 'verificando') return tr.comprobandoModelos(pc(p.hecho, p.total))
   return p.total > 0 && p.hecho < p.total ? tr.descargandoModelo(p.modelo, pc(p.hecho, p.total)) : tr.pidiendoModelo(p.modelo)
 }
 
@@ -186,7 +186,9 @@ export function Reparar({ alTerminar }: { alTerminar?: (r: Reparacion) => void }
   const [reparando, setReparando] = useState(false)
   const [estado, setEstado] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const cancelando = useRef(false)
   const empezar = async () => {
+    cancelando.current = false
     setReparando(true)
     setError(null)
     setEstado(tr.motor.verificando)
@@ -196,8 +198,11 @@ export function Reparar({ alTerminar }: { alTerminar?: (r: Reparacion) => void }
       setEstado(partes.length ? tr.hecho(partes) : tr.enOrden)
       alTerminar?.(r)
     } catch (e) {
-      setEstado('')
-      setError(String(e))
+      if (cancelando.current) setEstado(tr.cancelado)
+      else {
+        setEstado('')
+        setError(String(e))
+      }
     } finally {
       setReparando(false)
     }
@@ -206,6 +211,7 @@ export function Reparar({ alTerminar }: { alTerminar?: (r: Reparacion) => void }
     <div className="reparar">
       <div className="fila">
         <button type="button" className="btn" disabled={reparando} onClick={empezar}>{reparando ? tr.reparando : tr.boton}</button>
+        {reparando && <button type="button" className="btn" onClick={() => { cancelando.current = true; void api.cancelarDescargas() }}>{tr.cancelar}</button>}
         <span className="peq tenue" aria-live="polite">{estado || tr.explicacion}</span>
       </div>
       {error && <div className="error" role="alert">{error}</div>}

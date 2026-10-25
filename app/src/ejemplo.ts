@@ -123,10 +123,11 @@ export const ejemplo: Api = {
     cancelado = false
     motor({ fase: 'verificando' })
     await pausa(60)
+    if (cancelado) throw new Error('Reparación cancelada. Lo ya comprobado sigue en su sitio.')
     motor({ fase: 'listo' })
     const perfil = catalogo.perfiles.find((p) => p.id === guardada.perfil) ?? catalogo.perfiles[0]
     const modelos = [...new Set([perfil.narrador, perfil.cronista, perfil.sugerencias, perfil.embeddings])]
-    modelos.forEach((modelo, i) => progreso({ modelo, estado: 'verificando', hecho: i, total: modelos.length }))
+    modelos.forEach((_, i) => progreso({ modelo: '', estado: 'verificando', hecho: i, total: modelos.length }))
     const capasRepuestas = modelosDanados ? 1 : 0
     if (modelosDanados) {
       const total = 1024 ** 3

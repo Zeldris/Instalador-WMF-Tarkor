@@ -29,6 +29,27 @@ struct Estado {
     motor: Mutex<Option<Proceso>>,
     ollama_externo: Option<String>,
     cancelar: Arc<AtomicBool>,
+    /// «Reparar» o «Mover» en marcha: los dos paran el motor y tocan la carpeta de la IA, así que
+    /// no pueden ir a la vez.
+    ocupado: AtomicBool,
+}
+
+/// Marca `Estado::ocupado` mientras vive; al soltarse (también por un error), la quita.
+struct Ocupado<'a>(&'a AtomicBool);
+
+impl<'a> Ocupado<'a> {
+    fn tomar(bandera: &'a AtomicBool) -> Res<Self> {
+        if bandera.swap(true, Ordering::SeqCst) {
+            return Err("Ya hay una reparación o un cambio de carpeta en marcha; espera a que termine.".into());
+        }
+        Ok(Ocupado(bandera))
+    }
+}
+
+impl Drop for Ocupado<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
 }
 
 impl Estado {
@@ -171,7 +192,7 @@ async fn arrancar_motor(app: &tauri::AppHandle) -> Res<()> {
     let puerto = procesos::puerto_libre().map_err(|e| e.to_string())?;
     let mut entorno: BTreeMap<String, String> = ajustes.ollama.into_iter().collect();
     entorno.insert("OLLAMA_HOST".into(), format!("127.0.0.1:{puerto}"));
-    entorno.insert("OLLAMA_MODELS".into(), ia.join("modelos").to_string_lossy().into_owned());
+    entorno.insert("OLLAMA_MODELS".into(), modelos::carpeta(&ia).to_string_lossy().into_owned());
     let espec = Especificacion {
         nombre: "El motor de IA".into(),
         programa: ejecutable,
@@ -210,6 +231,7 @@ async fn cambiar_carpeta_ia(app: tauri::AppHandle, destino: String) -> Res<Rutas
     if nueva == actual {
         return Ok(Rutas { ia: actual, ..estado.rutas.clone() });
     }
+    let _ocupado = Ocupado::tomar(&estado.ocupado)?;
     let parado = estado.motor.lock().unwrap().take();
     let en_marcha = parado.is_some();
     if let Some(mut p) = parado {
@@ -296,12 +318,14 @@ struct Reparacion {
 }
 
 /// «Reparar» (`INS-49`, docs/11): para el motor, comprueba la suma de cada archivo suyo y lo
-/// reinstala si hace falta; comprueba las capas de los modelos del perfil y borra las dañadas;
-/// arranca el motor y pide todos los modelos con `/api/pull`, que solo baja lo que falta. Con un
+/// reinstala si hace falta; comprueba las capas de los modelos y borra las dañadas; arranca el
+/// motor y pide todos los modelos del perfil con `/api/pull`, que solo baja lo que falta. Con un
 /// Ollama externo solo se pide de nuevo cada modelo: ni su motor ni su carpeta son de la app.
+/// Si falla después de parar el motor, lo vuelve a arrancar antes de devolver el error.
 #[tauri::command]
 async fn reparar(app: tauri::AppHandle, canal_motor: Channel<motor::Progreso>, canal: Channel<ProgresoModelo>) -> Res<Reparacion> {
     let estado = app.state::<Estado>();
+    let _ocupado = Ocupado::tomar(&estado.ocupado)?;
     estado.cancelar.store(false, Ordering::Relaxed);
     let config = estado.config();
     let perfil = estado.perfil(&config)?.clone();
@@ -314,22 +338,24 @@ async fn reparar(app: tauri::AppHandle, canal_motor: Channel<motor::Progreso>, c
         }
         let (ia, m, cancelar, lista) = (config.ia_efectiva(&estado.rutas), estado.catalogo.motor.clone(), estado.cancelar.clone(), modelos.clone());
         let canal_modelos = canal.clone();
-        (motor_reinstalado, capas_repuestas) = tauri::async_runtime::spawn_blocking(move || -> Res<(bool, usize)> {
+        let comprobado = tauri::async_runtime::spawn_blocking(move || -> Res<(bool, usize)> {
             let reinstalado = motor::reparar(&ia, &m, &cancelar, &mut |p| {
                 let _ = canal_motor.send(p);
             })
             .map_err(|e| e.to_string())?;
-            let mut capas = 0;
-            for (i, modelo) in lista.iter().enumerate() {
-                let _ = canal_modelos.send(ProgresoModelo { modelo: modelo.clone(), estado: "verificando".into(), hecho: i as u64, total: lista.len() as u64 });
-                capas += modelos::borrar_capas_danadas(&ia.join("modelos"), modelo)
-                    .map_err(|e| format!("No se pudieron comprobar los archivos de {modelo}: {e}"))?;
-            }
+            let capas = modelos::reparar(&modelos::carpeta(&ia), &lista, &cancelar, &mut |hecho, total| {
+                let _ = canal_modelos.send(ProgresoModelo { modelo: String::new(), estado: "verificando".into(), hecho, total });
+            })
+            .map_err(|e| e.to_string())?;
             Ok((reinstalado, capas))
         })
         .await
-        .map_err(|e| e.to_string())??;
-        arrancar_motor(&app).await?;
+        .map_err(|e| e.to_string())
+        .and_then(|r| r);
+        // Con lo que haya (el motor de antes si no se pudo reponer), el motor vuelve a arrancar.
+        let arrancado = arrancar_motor(&app).await;
+        (motor_reinstalado, capas_repuestas) = comprobado?;
+        arrancado?;
     }
     let cliente = estado.cliente()?;
     let cancelar = estado.cancelar.clone();
@@ -421,6 +447,7 @@ pub fn run() {
             // Para pruebas y desarrollo: usar un Ollama ya en marcha en vez de instalar uno.
             ollama_externo: std::env::var("TARKOR_OLLAMA_URL").ok(),
             cancelar: Arc::new(AtomicBool::new(false)),
+            ocupado: AtomicBool::new(false),
         })
         .invoke_handler(tauri::generate_handler![
             rutas,
