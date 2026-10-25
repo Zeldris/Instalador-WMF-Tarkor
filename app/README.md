@@ -60,6 +60,21 @@ Sin `TARKOR_OLLAMA_URL` la app instala y arranca el motor real (1,4 GB). En una 
 el registro de modelos, `E2E_ESPERA_ERROR_RED=1` comprueba que el error se explica y se puede
 reintentar.
 
+### Ajustes → Rendimiento de la IA y motor detenido (`INS-43`)
+
+`e2e/rendimiento.e2e.mjs` usa el motor **propio** de la app, no uno externo (con `TARKOR_OLLAMA_URL` no hay
+reinicio automático, ni modelos sobrantes, ni pantalla de motor detenido): prepara una carpeta de datos nueva
+con un `bin/ollama` que es `e2e/ollama-falso.mjs serve`, acaba el asistente con el perfil Mínimo y comprueba
+dónde corre la IA, el cambio de perfil con su progreso, el borrado de sobrantes, el informe sin la carpeta
+personal, dos caídas del motor y «Reintentar». `HOME` debe acabar en un nombre de usuario de 4 letras o más
+(con él comprueba que el informe no lo cuenta) y `TARKOR_OLLAMA_URL` no debe estar puesta. Usa el binario
+que se acaba de compilar (`npx tauri build --no-bundle` → `target/release/tarkor`) o el instalado.
+
+```sh
+export HOME=$(mktemp -d)/lucianita TARKOR_DATOS=$(mktemp -d); mkdir -p $HOME; unset TARKOR_OLLAMA_URL
+xvfb-run -a sh -c 'tauri-driver & D=$!; trap "kill $D" EXIT; sleep 2; node e2e/rendimiento.e2e.mjs target/release/tarkor capturas'
+```
+
 ## Motor de IA sin el asistente
 
 ```sh
