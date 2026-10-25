@@ -78,7 +78,8 @@ Se pueden resolver en paralelo a la fase 0. Ver la tabla del [README](../README.
 - [ ] **INS-12** Licencia del juego (propuesta: todos los derechos reservados) y de este repo.
 - [x] **INS-13** Perfiles pequeños: se ofrecen Mínimo y Ligero con modelos Apache 2.0, avisando del
   resultado (calidad a confirmar en `INS-8`).
-- [ ] **INS-14** Perfiles por encima del máximo seguro: bloqueados o con aviso.
+- [x] **INS-14** (2026-10-25) Perfiles por encima del máximo seguro: se pueden elegir con aviso y
+  confirmación en la tarjeta, sin interruptor (ver `09` y `11`).
 - [ ] **INS-15** Confirmar licencias de modelos e imágenes.
 
 ## Fase 2 — Migración a SQLite (repo del juego) — código hecho, PR #1 sin fusionar
@@ -119,7 +120,8 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
 - [ ] **INS-41** Integrar el build del juego (frontend + backend en bytecode + plantilla) en la app de
   Tauri.
 - [ ] **INS-42** Asistente real de punta a punta: descargas y comprobaciones de verdad; calentar el
-  narrador al arrancar.
+  narrador al arrancar. Incluye la autopausa al perder la red con reanudación sola y la velocidad
+  de la narración de prueba (ronda de diseño del 2026-10-25).
 - [ ] **INS-43** Ajustes → Rendimiento de la IA (con uso de la gráfica vía `/api/ps`) y pantalla de
   motor detenido.
 - [ ] **INS-44** NSIS: castellano, instalación por usuario, desinstalador con las dos casillas.
@@ -127,6 +129,11 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
 - [ ] **INS-46** Workflow de GitHub Actions en el repo privado que publica releases con `SHA256SUMS`
   en este repo.
 - [ ] **INS-47** Pantalla "Licencias de terceros" generada en el build.
+- [ ] **INS-48** Carpeta del motor y los modelos elegible antes de descargar y movible desde Ajustes
+  (`OLLAMA_MODELS`); espacio necesario frente a libre en cada tarjeta, con la descarga bloqueada si no
+  cabe (ver `07` y `11`).
+- [ ] **INS-49** "Reparar": volver a comprobar la suma del motor y pedir de nuevo los modelos, desde
+  Ajustes y desde la comprobación final.
 
 ## Fase 5 — Prueba real
 

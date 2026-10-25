@@ -25,7 +25,7 @@ buenos.
 3. **Recomendación.** Se calcula el máximo seguro y se propone un perfil.
 4. **Elección.** El jugador elige perfil (y, opcionalmente, el uso de CPU).
 5. **Descarga** solo de los modelos que necesita ese perfil.
-6. **Prueba rápida** opcional para confirmar la velocidad real.
+6. **Velocidad real**, medida en la narración de prueba de la comprobación final.
 7. **Cambiarlo después** desde Ajustes → Rendimiento de la IA, repitiendo la detección.
 
 Si el jugador elige "a mano", se le muestran los mismos perfiles sin marcar ningún máximo, con
@@ -94,7 +94,9 @@ si hay GPU dedicada con VRAM fiable:
 máximo_seguro     = el perfil más alto cuya "memoria pico IA" <= memoria_para_IA
 ```
 
-Además, un perfil deja de estar disponible si no cabe en el disco (descarga + 10 % de margen).
+Además, un perfil no se puede descargar mientras no quepa en el disco de la carpeta de modelos
+(descarga + 10 % de margen): la tarjeta se sigue viendo, con el espacio que falta y "Cambiar
+carpeta".
 
 Ejemplos:
 
@@ -124,12 +126,11 @@ Control secundario, independiente del perfil:
 - **Alto**: todos los hilos menos uno. Narración más rápida; el equipo va más cargado mientras
   narra.
 
-## Prueba rápida
+## Velocidad real
 
-Botón opcional al final de la elección: genera una narración corta de prueba y mide
-palabras/segundo. Se muestra como "Tu equipo narra a unas X palabras por segundo (una narración
-típica tardará unos Y segundos)". Si sale muy lenta (p. ej. menos de 3 palabras/s), se sugiere
-bajar de perfil. Solo se ofrece tras descargar los modelos; no bloquea nada.
+Sin botón aparte (decidido el 2026-10-25): la narración de prueba de la comprobación final (`07`)
+mide la velocidad con `eval_count / eval_duration` y la muestra como "Tu equipo narra a unas X
+palabras por segundo". Si sale muy lenta (menos de 3 palabras/s), se sugiere bajar de perfil.
 
 ## Dónde se guarda
 
@@ -157,15 +158,15 @@ Ajustes → Rendimiento de la IA:
 
 - Muestra el perfil actual, la memoria que usa y el espacio que ocupan los modelos.
 - "Volver a analizar mi equipo" (útil si se amplía la RAM o se cambia de gráfica).
+- Mover la carpeta de los modelos a otro disco, y "Reparar" (ver `11`).
 - Cambiar de perfil: si el nuevo perfil necesita modelos que no están descargados, se avisa del
   tamaño antes de descargar. Si sobran modelos, se ofrece borrarlos para liberar espacio.
 - El cambio se aplica reiniciando el motor de IA, sin cerrar la partida.
 
-## Decisiones abiertas
+## Decisiones (2026-10-25)
 
-1. **Por encima del máximo seguro:** ¿bloqueado, o permitido con aviso explícito? Propuesta:
-   bloqueado por defecto, con un interruptor "Mostrar perfiles no recomendados" que lo permite con
-   confirmación.
+1. **Por encima del máximo seguro:** se puede elegir, con aviso y confirmación en la tarjeta, sin
+   interruptor (como LM Studio). Cierra `INS-14`.
 2. **Calidad de Mínimo y Ligero:** decidido ofrecerlos avisando del resultado esperado (petición
    de Álvaro, 2026-09-28). Queda probar en partida real que los modelos elegidos son jugables.
-3. **Prueba rápida:** propuesta incluida como opcional; confirmar que se quiere.
+3. **Prueba rápida:** no hay botón aparte; la velocidad sale de la narración de prueba.

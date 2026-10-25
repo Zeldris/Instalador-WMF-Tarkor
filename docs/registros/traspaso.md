@@ -14,7 +14,7 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-25). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #5 (2026-10-22, `89bb2ee`): `FLU-2`, piloto de Galivelop-workflow v0.2.0, y `FLU-3`, CI en local. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 🚧 2026-10-25: `FLU-4` (`/gw-update` a v0.3.0) hecho; ahora, nueva ronda de contraste del diseño antes de implementar. Presupuesto de compactaciones: 3. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 🚧 2026-10-25: ronda de contraste del diseño hecha (Steam sin fuente primaria; Ollama, LM Studio, itch.io y Heroic por sus repos) y aceptada entera por la usuaria: `INS-14` cerrada (elegir por encima del máximo con aviso), carpeta de modelos elegible y movible (`INS-48`), «Reparar» (`INS-49`), autopausa por red y velocidad en la narración de prueba (en `INS-42`), actualizaciones v2 preguntando. Siguiente: implementar `INS-14` (tarjetas) e `INS-48` en `app/nucleo` y el asistente. Presupuesto de compactaciones: 3 (superado: 10; `/clear` antes de implementar). |
 | **Tests** | 2026-10-21: núcleo `cargo test -p tarkor-nucleo` 52, asistente `vitest` 5, `tsc -b` 0, clippy 0 avisos; `tools/qa/tests` 80 en verde. |
 
 ## Dónde está todo (para saber qué sigue)
