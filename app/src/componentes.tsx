@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from './api'
 import { comun, pasos, perfil as t, reparar as tr } from './textos'
+import * as tx from './textos'
 import type { Evaluacion, PerfilId, ProgresoModelo, ProgresoMotor, Reparacion, UsoCpu } from './tipos'
 import { pideConfirmar } from './tipos'
 import { fmt } from './formato'
@@ -250,5 +251,57 @@ export function DetallesTecnicos({ evaluacion }: { evaluacion: Evaluacion }) {
       </div>
       <p className="peq tenue" style={{ marginTop: 6 }}>{t.detallesPie}</p>
     </details>
+  )
+}
+
+/** «Copiar informe» y «Ver detalles» (docs/11): copia con el portapapeles de Tauri; si falla, deja el texto desplegado para copiarlo a mano. */
+export function CopiarInforme() {
+  const [texto, setTexto] = useState<string | null>(null)
+  const [visible, setVisible] = useState(false)
+  const [copiado, setCopiado] = useState(false)
+  const [ocupado, setOcupado] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const obtener = async (): Promise<string> => {
+    if (texto !== null) return texto
+    const x = await api.informe()
+    setTexto(x)
+    return x
+  }
+  const copiar = async () => {
+    setOcupado(true)
+    setError(null)
+    setCopiado(false)
+    let dado: string
+    try {
+      dado = await obtener()
+    } catch {
+      setError(tx.informe.errorInforme)
+      setOcupado(false)
+      return
+    }
+    try {
+      await api.copiar(dado)
+      setCopiado(true)
+    } catch {
+      setVisible(true)
+      setError(tx.informe.errorCopiar)
+    }
+    setOcupado(false)
+  }
+  const detalles = async () => {
+    if (visible) { setVisible(false); return }
+    setError(null)
+    try { await obtener(); setVisible(true) } catch { setError(tx.informe.errorInforme) }
+  }
+  return (
+    <div>
+      <div className="fila">
+        <button type="button" className="btn" disabled={ocupado} onClick={() => void copiar()}>{tx.informe.copiar}</button>
+        <button type="button" className="btn" aria-expanded={visible} onClick={() => void detalles()}>{visible ? tx.informe.ocultarDetalles : tx.informe.verDetalles}</button>
+        {copiado && <span className="peq tenue" role="status">{tx.informe.copiado}</span>}
+      </div>
+      {error && <div className="error" role="alert">{error}</div>}
+      {visible && texto !== null && <pre className="peq" tabIndex={0} aria-label={tx.informe.copiar} style={{ whiteSpace: 'pre-wrap', userSelect: 'text', maxHeight: 240, overflow: 'auto' }}>{texto}</pre>}
+    </div>
   )
 }

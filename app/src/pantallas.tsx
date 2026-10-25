@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { api } from './api'
-import { CarpetaIa, ControlUsoCpu, DetallesTecnicos, Marco, Medidor, Pagina, Reparar, Tarjetas, textoModelo, useMoverCarpeta } from './componentes'
+import { CarpetaIa, CopiarInforme, ControlUsoCpu, DetallesTecnicos, Marco, Medidor, Pagina, Reparar, Tarjetas, textoModelo, useMoverCarpeta } from './componentes'
 import * as tx from './textos'
 import type { Config, Equipo, Evaluacion, PerfilId, Rutas, Sobrante, UsoIa } from './tipos'
 import { bloqueado } from './tipos'
@@ -238,7 +238,9 @@ function useCambiarPerfil(reemplazarConfig: (c: Config) => void) {
   return { cambiando, borrando, estado, error, sobrantes, cambiar, pausar, borrar }
 }
 
-export function Ajustes({ config, evaluacion, rutas, cambiarCarpeta, actualizar, reemplazarConfig, reanalizar, volver }: {
+export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpeta, actualizar, reemplazarConfig, reanalizar, volver }: {
+  /** Perfil ya elegido al abrir (desde «Cambiar a un perfil más ligero»). */
+  perfilInicial?: PerfilId
   config: Config
   evaluacion: Evaluacion
   rutas: Rutas | null
@@ -250,7 +252,7 @@ export function Ajustes({ config, evaluacion, rutas, cambiarCarpeta, actualizar,
   volver: () => void
 }) {
   const t = tx.ajustes
-  const [elegido, setElegido] = useState<PerfilId>(config.perfil ?? evaluacion.recomendado)
+  const [elegido, setElegido] = useState<PerfilId>(perfilInicial ?? config.perfil ?? evaluacion.recomendado)
   const [confirmado, setConfirmado] = useState(false)
   const carpeta = useMoverCarpeta(cambiarCarpeta)
   const cambio = useCambiarPerfil(reemplazarConfig)
@@ -281,6 +283,7 @@ export function Ajustes({ config, evaluacion, rutas, cambiarCarpeta, actualizar,
         {rutas && <CarpetaIa ruta={rutas.ia} accion={t.moverCarpeta} moviendo={carpeta.moviendo} error={carpeta.error} onMover={carpeta.mover} />}
         <ControlUsoCpu uso={config.usoCpu} hilos={config.equipo?.hilos ?? 4} onCambiar={(usoCpu) => actualizar({ usoCpu })} />
         <Reparar alTerminar={(r) => actualizar({ modelosDescargados: r.modelos })} />
+        <CopiarInforme />
         {nuevo.descargaGb < actual.descargaGb && <p className="peq tenue">{t.liberar(nuevo.nombre, fmt(actual.descargaGb - nuevo.descargaGb))}</p>}
       </Pagina>
     </div>

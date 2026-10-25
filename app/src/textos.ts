@@ -211,6 +211,25 @@ export const ajustes = {
   },
 }
 
+export const informe = {
+  copiar: 'Copiar informe',
+  copiado: 'Copiado',
+  verDetalles: 'Ver detalles',
+  ocultarDetalles: 'Ocultar detalles',
+  cargando: 'Preparando el informe…',
+  errorCopiar: 'No se pudo copiar solo: selecciona el texto de abajo y cópialo a mano.',
+  errorInforme: 'No se pudo preparar el informe.',
+}
+
+export const motorDetenido = {
+  titulo: 'El motor de IA se ha detenido',
+  lead: 'Tu partida está guardada hasta el último turno completado.',
+  reintentar: 'Reintentar',
+  reintentando: 'Reintentando…',
+  masLigero: 'Cambiar a un perfil más ligero',
+  sinMemoria: 'Parece que se quedó sin memoria.',
+}
+
 export const errores = {
   guardar: 'No se pudo guardar la configuración en la carpeta de datos. Comprueba que hay espacio libre.',
 }

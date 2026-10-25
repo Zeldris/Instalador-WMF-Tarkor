@@ -1,7 +1,9 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import App from './App'
-import { ejemplo, configInicial, fijarDiscoLibreIa, fijarErrorCambioPerfil, fijarErrorCarpetaIa, fijarModelosDanados, fijarUsoIa, reiniciarCarpetaIa, reiniciarModelos } from './ejemplo'
+import { perfilMasLigero } from './tipos'
+import { catalogo } from './catalogo'
+import { ejemplo, configInicial, fijarDiscoLibreIa, fijarErrorCambioPerfil, fijarErrorCarpetaIa, fijarModelosDanados, fijarUsoIa, reiniciarCarpetaIa, reiniciarModelos, emitirMotorDetenido, fijarErrorCopiar, fijarErrorReintento, fijarMotorDetenido, oyentesMotor, reiniciarMotorDetenido, textoCopiado, TEXTO_INFORME } from './ejemplo'
 
 afterEach(async () => {
   cleanup()
@@ -9,6 +11,7 @@ afterEach(async () => {
   reiniciarCarpetaIa()
   fijarModelosDanados(false)
   reiniciarModelos()
+  reiniciarMotorDetenido()
 })
 
 const boton = (nombre: string | RegExp, timeout = 1000) => screen.findByRole('button', { name: nombre }, { timeout })
@@ -256,6 +259,91 @@ describe('asistente de primer arranque', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('sigue el perfil de antes')
     expect((await ejemplo.cargarConfig()).perfil).toBe(antes)
   }, 30000)
+
+  describe('motor detenido', () => {
+    const aviso = { motivo: 'El motor de IA se detuvo: out of memory', sinMemoria: true }
+    const conAsistenteHecho = async () => {
+      await ejemplo.guardarConfig({ ...configInicial(), consentimientoAceptado: true, permisoAnalisis: true, equipo: await ejemplo.analizarEquipo(), perfil: 'equilibrado', pasoAsistente: 7, asistenteCompletado: true })
+    }
+
+    it('perfilMasLigero elige el de memoria justo por debajo, sin experimentales, y null con el más ligero', () => {
+      const ids = catalogo.perfiles.map((p) => p.id)
+      expect(perfilMasLigero(catalogo.perfiles, 'equilibrado')).toBe('ligero')
+      expect(perfilMasLigero(catalogo.perfiles, 'ligero')).toBe('minimo')
+      expect(perfilMasLigero(catalogo.perfiles, ids[0])).toBeNull()
+      expect(perfilMasLigero(catalogo.perfiles, null)).toBeNull()
+      const mezcla = [{ id: 'a', memoriaGb: 1 }, { id: 'x', memoriaGb: 2, experimental: true }, { id: 'b', memoriaGb: 3 }] as never
+      expect(perfilMasLigero(mezcla, 'b' as never)).toBe('a')
+    })
+
+    it('al montar, si hay un aviso pendiente, sale la pantalla con el motivo', async () => {
+      await conAsistenteHecho()
+      fijarMotorDetenido(aviso)
+      render(<App />)
+      expect(await screen.findByText('El motor de IA se ha detenido')).toBeTruthy()
+      expect(screen.getByText(aviso.motivo)).toBeTruthy()
+    })
+
+    it('el evento abre la pantalla y la escucha se limpia al desmontar', async () => {
+      await conAsistenteHecho()
+      const { unmount } = render(<App />)
+      await boton(/Ajustes/, 3000)
+      expect(oyentesMotor()).toBe(1)
+      emitirMotorDetenido(aviso)
+      expect(await screen.findByText('El motor de IA se ha detenido')).toBeTruthy()
+      unmount()
+      expect(oyentesMotor()).toBe(0)
+    })
+
+    it('Reintentar con éxito vuelve a donde estaba', async () => {
+      await conAsistenteHecho()
+      fijarMotorDetenido(aviso)
+      render(<App />)
+      fireEvent.click(await boton('Reintentar'))
+      await waitFor(() => expect(screen.queryByText('El motor de IA se ha detenido')).toBeNull())
+      expect(await boton(/Ajustes/)).toBeTruthy()
+    })
+
+    it('Reintentar con fallo se queda y muestra el error real', async () => {
+      await conAsistenteHecho()
+      fijarMotorDetenido(aviso)
+      fijarErrorReintento('El motor de IA no arranca: falta memoria')
+      render(<App />)
+      fireEvent.click(await boton('Reintentar'))
+      expect((await screen.findByRole('alert')).textContent).toBe('El motor de IA no arranca: falta memoria')
+      expect(screen.getByText('El motor de IA se ha detenido')).toBeTruthy()
+      expect(await boton('Reintentar')).toHaveProperty('disabled', false)
+    })
+
+    it('«Cambiar a un perfil más ligero» lleva a Ajustes con el siguiente perfil elegido, y no sale sin falta de memoria', async () => {
+      await conAsistenteHecho()
+      fijarMotorDetenido({ ...aviso, sinMemoria: false })
+      render(<App />)
+      await screen.findByText('El motor de IA se ha detenido')
+      expect(screen.queryByRole('button', { name: 'Cambiar a un perfil más ligero' })).toBeNull()
+      cleanup()
+      fijarMotorDetenido(aviso)
+      render(<App />)
+      fireEvent.click(await boton('Cambiar a un perfil más ligero'))
+      expect((await boton(/^Ligero/)).getAttribute('aria-pressed')).toBe('true')
+    })
+
+    it('Copiar informe copia y confirma; si copiar falla deja el texto desplegado', async () => {
+      await conAsistenteHecho()
+      fijarMotorDetenido(aviso)
+      render(<App />)
+      fireEvent.click(await boton('Copiar informe'))
+      expect(await screen.findByText('Copiado')).toBeTruthy()
+      expect(textoCopiado()).toBe(TEXTO_INFORME)
+      cleanup()
+      fijarErrorCopiar('portapapeles no disponible')
+      render(<App />)
+      fireEvent.click(await boton('Copiar informe'))
+      expect((await screen.findByRole('alert')).textContent).toMatch(/cópialo a mano/)
+      expect(screen.getByText(/Tarkor \(informe de ejemplo\)/)).toBeTruthy()
+      expect(screen.queryByText('Copiado')).toBeNull()
+    })
+  })
 
   it('guarda el progreso para continuar donde se quedó', async () => {
     await hastaElPermiso()

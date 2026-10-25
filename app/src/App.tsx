@@ -2,7 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from './api'
 import { configInicial } from './ejemplo'
 import { errores } from './textos'
-import type { Config, Evaluacion, Rutas } from './tipos'
+import { catalogo } from './catalogo'
+import type { Config, Evaluacion, MotorDetenido, PerfilId, Rutas } from './tipos'
+import { perfilMasLigero } from './tipos'
+import { PantallaMotorDetenido } from './pantallaMotor'
 import { Ajustes, Bienvenida, ElegirPerfil, Juego, Listo, QueSeInstala, TuEquipo } from './pantallas'
 import { Comprobacion, Descarga } from './pantallasIa'
 
@@ -14,7 +17,18 @@ export default function App() {
   const [evaluacion, setEvaluacion] = useState<Evaluacion | null>(null)
   const [vista, setVista] = useState<Vista>('asistente')
   const [error, setError] = useState<string | null>(null)
+  const [aviso, setAviso] = useState<MotorDetenido | null>(null)
+  const [perfilAjustes, setPerfilAjustes] = useState<PerfilId | undefined>()
   const ultima = useRef<Config | null>(null)
+
+  // La pantalla del motor detenido sale con el evento y, al montar, si el aviso se emitió antes de escuchar.
+  useEffect(() => {
+    let vivo = true
+    let quitar: (() => void) | null = null
+    void api.alMotorDetenido((a) => setAviso(a)).then((f) => { if (vivo) quitar = f; else f() })
+    void api.motorDetenido().then((a) => { if (vivo && a) setAviso(a) }, () => {})
+    return () => { vivo = false; quitar?.() }
+  }, [])
 
   useEffect(() => {
     void (async () => {
@@ -78,13 +92,19 @@ export default function App() {
 
   if (!config) return null
 
-  const aviso = error && <div className="error" role="alert" style={{ position: 'fixed', bottom: 16, left: 16, right: 16 }}>{error}</div>
+  const avisoError = error && <div className="error" role="alert" style={{ position: 'fixed', bottom: 16, left: 16, right: 16 }}>{error}</div>
 
+  if (aviso) {
+    return <>{avisoError}<PantallaMotorDetenido aviso={aviso}
+      masLigero={evaluacion ? perfilMasLigero(catalogo.perfiles, config.perfil) : null}
+      reintentado={() => setAviso(null)}
+      irAAjustes={(p) => { setPerfilAjustes(p); setAviso(null); setVista('ajustes') }} /></>
+  }
   if (vista === 'juego') {
-    return <>{aviso}<Juego abrirAjustes={() => setVista('ajustes')} repetir={() => { setVista('asistente'); actualizar({ ...configInicial(), carpetaIa: config.carpetaIa, pasoAsistente: 1 }); setEvaluacion(null) }} /></>
+    return <>{avisoError}<Juego abrirAjustes={() => setVista('ajustes')} repetir={() => { setVista('asistente'); actualizar({ ...configInicial(), carpetaIa: config.carpetaIa, pasoAsistente: 1 }); setEvaluacion(null) }} /></>
   }
   if (vista === 'ajustes' && evaluacion) {
-    return <>{aviso}<Ajustes config={config} evaluacion={evaluacion} rutas={rutas} cambiarCarpeta={cambiarCarpeta} actualizar={actualizar} reemplazarConfig={reemplazarConfig} reanalizar={analizar} volver={() => setVista('juego')} /></>
+    return <>{avisoError}<Ajustes perfilInicial={perfilAjustes} config={config} evaluacion={evaluacion} rutas={rutas} cambiarCarpeta={cambiarCarpeta} actualizar={actualizar} reemplazarConfig={reemplazarConfig} reanalizar={analizar} volver={() => { setPerfilAjustes(undefined); setVista('juego') }} /></>
   }
 
   // Sin evaluación no se puede pasar del paso 3.
@@ -100,5 +120,5 @@ export default function App() {
     case 6: pantalla = <Comprobacion {...nav} />; break
     default: pantalla = <Listo config={config} evaluacion={evaluacion!} rutas={rutas} jugar={() => { actualizar({ asistenteCompletado: true }); setVista('juego') }} />
   }
-  return <>{aviso}{pantalla}</>
+  return <>{avisoError}{pantalla}</>
 }

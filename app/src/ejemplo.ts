@@ -5,7 +5,7 @@
 
 import type { Api } from './api'
 import { catalogo, descargaGb as descargaDe } from './catalogo'
-import type { Config, Equipo, Evaluacion, PerfilEvaluado, Sobrante, UsoIa } from './tipos'
+import type { Config, Equipo, Evaluacion, MotorDetenido, PerfilEvaluado, Sobrante, UsoIa } from './tipos'
 
 export const configInicial = (): Config => ({
   version: 1,
@@ -86,6 +86,25 @@ const modelosDe = (id: string | null) => {
   const perfil = catalogo.perfiles.find((p) => p.id === id) ?? catalogo.perfiles[0]
   return [...new Set([perfil.narrador, perfil.cronista, perfil.sugerencias, perfil.embeddings])]
 }
+let avisoMotor: MotorDetenido | null = null
+let errorReintento: string | null = null
+let errorCopiar: string | null = null
+let copiado: string | null = null
+const oyentes = new Set<(a: MotorDetenido) => void>()
+/** Para los tests: el aviso que devolverá `motorDetenido` (null = ninguno). */
+export const fijarMotorDetenido = (aviso: MotorDetenido | null) => { avisoMotor = aviso }
+/** Para los tests: como el evento `motor-detenido` de Rust: guarda el aviso y avisa a quien escuche. */
+export const emitirMotorDetenido = (aviso: MotorDetenido) => { avisoMotor = aviso; oyentes.forEach((f) => f(aviso)) }
+/** Para los tests: el siguiente `reintentarMotor` falla con este mensaje. */
+export const fijarErrorReintento = (mensaje: string | null) => { errorReintento = mensaje }
+/** Para los tests: `copiar` falla con este mensaje (null = funciona). */
+export const fijarErrorCopiar = (mensaje: string | null) => { errorCopiar = mensaje }
+/** Para los tests: lo último que se copió al portapapeles simulado. */
+export const textoCopiado = () => copiado
+/** Para los tests: cuántos oyentes de `motor-detenido` siguen activos. */
+export const oyentesMotor = () => oyentes.size
+export const TEXTO_INFORME = 'Tarkor (informe de ejemplo)\nSistema: Linux\nMotor: en marcha'
+export const reiniciarMotorDetenido = () => { avisoMotor = null; errorReintento = null; errorCopiar = null; copiado = null; oyentes.clear() }
 let cancelado = false
 const pausa = (ms: number) => new Promise((ok) => setTimeout(ok, ms))
 
@@ -178,6 +197,21 @@ export const ejemplo: Api = {
   },
   modelosSobrantes: async () => sobrantes.map((s) => ({ ...s })),
   borrarModelos: async (modelos) => { sobrantes = sobrantes.filter((s) => !modelos.includes(s.modelo)) },
+  informe: async () => TEXTO_INFORME,
+  motorDetenido: async () => (avisoMotor ? { ...avisoMotor } : null),
+  reintentarMotor: async () => {
+    await pausa(30)
+    if (errorReintento) throw errorReintento
+    avisoMotor = null
+  },
+  alMotorDetenido: async (cb) => {
+    oyentes.add(cb)
+    return () => { oyentes.delete(cb) }
+  },
+  copiar: async (texto) => {
+    if (errorCopiar) throw errorCopiar
+    copiado = texto
+  },
   comprobar: async (id) => {
     await pausa(150)
     if (['basedatos', 'juego', 'mundo'].includes(id)) return { resultado: 'omitida', motivo: 'Llega con el juego empaquetado (fase 4).' }
