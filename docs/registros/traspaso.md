@@ -10,12 +10,11 @@ cada commit.**
 
 | | |
 |---|---|
-| **Actualizado** | 2026-10-22 |
-| **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` y `claude/piloto-galivelop-workflow`. Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
-| **Último commit en `main`** | Fusión del PR #2 (2026-09-28, `3418c2d`): fases `INS-1`…`INS-6` del plan con pruebas de punta a punta. |
+| **Actualizado** | 2026-10-25 |
+| **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-25). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
+| **Último commit en `main`** | Fusión del PR #5 (2026-10-22, `89bb2ee`): `FLU-2`, piloto de Galivelop-workflow v0.2.0, y `FLU-3`, CI en local. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | `FLU-1` hecha (flujo y skills de Tarkor, revisión, `/opt-tokens` y retro). PR a `main`; al fusionarse, rama terminada. |
-| **Tarea en curso · `claude/piloto-galivelop-workflow`** | 🚧 `FLU-2`: piloto de Galivelop-workflow v0.2.0 aplicado y comprobado en local (2026-10-22). Fases 1 y 2 hechas ([retro](retro-2026-10-22-piloto-galivelop.md); `FLU-3` aplicado, `/clear` tras el PR). Leves pendientes: `medir.py` sin test; `tools/qa/en-app.sh` enlaza el `node_modules` del checkout principal aunque cambie `package-lock.json`. Tres fases hechas; [PR #5](https://github.com/Zeldris/Instalador-WMF-Tarkor/pull/5) abierto. Fusión confirmada por la usuaria (2026-10-22) con la CI de GitHub agotada y la local en verde. Siguiente paso: `/clear`. [Registro](piloto-galivelop-workflow.md). |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 🚧 2026-10-25: `/gw-update` y, después, nueva ronda de contraste del diseño antes de implementar. Presupuesto de compactaciones: 3. |
 | **Tests** | 2026-10-21: núcleo `cargo test -p tarkor-nucleo` 52, asistente `vitest` 5, `tsc -b` 0, clippy 0 avisos; `tools/qa/tests` 80 en verde. |
 
 ## Dónde está todo (para saber qué sigue)
