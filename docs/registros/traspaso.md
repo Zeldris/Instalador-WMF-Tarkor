@@ -14,8 +14,8 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-25). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #5 (2026-10-22, `89bb2ee`): `FLU-2`, piloto de Galivelop-workflow v0.2.0, y `FLU-3`, CI en local. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 🚧 2026-10-25: ronda de contraste del diseño hecha (Steam sin fuente primaria; Ollama, LM Studio, itch.io y Heroic por sus repos) y aceptada entera por la usuaria: `INS-14` cerrada (elegir por encima del máximo con aviso), carpeta de modelos elegible y movible (`INS-48`), «Reparar» (`INS-49`), autopausa por red y velocidad en la narración de prueba (en `INS-42`), actualizaciones v2 preguntando. Siguiente: implementar `INS-14` (tarjetas) e `INS-48` en `app/nucleo` y el asistente. Presupuesto de compactaciones: 3 (superado: 10; `/clear` antes de implementar). |
-| **Tests** | 2026-10-21: núcleo `cargo test -p tarkor-nucleo` 52, asistente `vitest` 5, `tsc -b` 0, clippy 0 avisos; `tools/qa/tests` 80 en verde. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 🚧 2026-10-25: `INS-14` (tarjetas con aviso y confirmación, sin interruptor) e `INS-48` (carpeta de la IA elegible y movible, disco necesario frente a libre) implementadas; check, E2E y `ci-local` del commit en verde. Pendiente leve: con poco disco, el paso 3 dice «equipo insuficiente» aunque falte disco y no memoria (`perfiles::evaluar` mezcla los dos en `maximo_seguro`). Siguiente: `INS-49` («Reparar») o fase 3, según elija la usuaria; antes de `main`, las tres fases. |
+| **Tests** | 2026-10-25: núcleo `cargo test -p tarkor-nucleo` 66, asistente `vitest` 9, `tsc -b` 0, clippy 0 avisos, E2E del asistente (tauri-driver) en verde. |
 
 ## Dónde está todo (para saber qué sigue)
 
@@ -43,7 +43,6 @@ cada commit.**
   [`ci-local.md`](ci-local.md) con fecha y commit (`FLU-3`). Los tests del núcleo **en Windows** no se pueden correr
   así: quedan pendientes hasta que vuelva la CI. Cuando vuelva, se re-lanza sobre `main`.
 - Firma de código en Windows (`INS-11`) y licencias (`INS-12`, `INS-15`).
-- Perfiles por encima del máximo seguro: bloqueados o con aviso (`INS-14`; propuesta en el README).
 
 ## Comandos para comprobar el estado
 
@@ -63,8 +62,10 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 
 Dos líneas cada una como mucho; el detalle está en el commit y la más antigua sale cuando hay más de 5.
 
+- ~~`INS-48` · Carpeta de la IA elegible y movible~~ (2026-10-25): espacio necesario frente a libre en cada
+  tarjeta, «Cambiar carpeta» en el paso 4 y «Mover a otra carpeta» en Ajustes.
 - ~~`INS-14` · Perfiles por encima del máximo seguro~~ (2026-10-25): se pueden elegir con aviso y confirmación
-  en la tarjeta, sin interruptor (ronda de contraste con LM Studio).
+  en la tarjeta, sin interruptor; implementado el mismo día.
 - ~~`FLU-4` · Galivelop-workflow v0.3.0~~ (2026-10-25): `/gw-update` de scripts, skills y ganchos; `comprobar.yml`
   se queda el local; dos reglas nuevas en `REVIEW.md`.
 - ~~`FLU-3` · CI en local~~ (2026-10-22): `tools/qa/ci-local.py` corre los jobs de Ubuntu de `comprobar.yml` y

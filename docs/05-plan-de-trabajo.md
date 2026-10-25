@@ -79,7 +79,8 @@ Se pueden resolver en paralelo a la fase 0. Ver la tabla del [README](../README.
 - [x] **INS-13** Perfiles pequeños: se ofrecen Mínimo y Ligero con modelos Apache 2.0, avisando del
   resultado (calidad a confirmar en `INS-8`).
 - [x] **INS-14** (2026-10-25) Perfiles por encima del máximo seguro: se pueden elegir con aviso y
-  confirmación en la tarjeta, sin interruptor (ver `09` y `11`).
+  confirmación en la tarjeta, sin interruptor (ver `09` y `11`). Implementado el mismo día en el
+  asistente y en Ajustes (`Tarjetas`, `pideConfirmar`/`bloqueado` en `app/src/tipos.ts`).
 - [ ] **INS-15** Confirmar licencias de modelos e imágenes.
 
 ## Fase 2 — Migración a SQLite (repo del juego) — código hecho, PR #1 sin fusionar
@@ -129,9 +130,13 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
 - [ ] **INS-46** Workflow de GitHub Actions en el repo privado que publica releases con `SHA256SUMS`
   en este repo.
 - [ ] **INS-47** Pantalla "Licencias de terceros" generada en el build.
-- [ ] **INS-48** Carpeta del motor y los modelos elegible antes de descargar y movible desde Ajustes
+- [x] **INS-48** (2026-10-25) Carpeta del motor y los modelos elegible antes de descargar y movible desde Ajustes
   (`OLLAMA_MODELS`); espacio necesario frente a libre en cada tarjeta, con la descarga bloqueada si no
-  cabe (ver `07` y `11`).
+  cabe (ver `07` y `11`). Hecho: `carpetaIa` en `config.json`, `nucleo/src/carpetas.rs`
+  (`espacio_libre_mb`, `mover_carpeta`: renombra o copia y borra), `perfiles::evaluar` con el disco
+  de la carpeta aparte, comando `cambiar_carpeta_ia` (`<elegida>/Tarkor IA`, para y rearranca el
+  motor) y selector nativo (`tauri-plugin-dialog` 2). Pendiente de `INS-8`: mover a la tarjeta SD de
+  la Deck y entre discos en Windows (el test de copia fallida solo corre en Unix).
 - [ ] **INS-49** "Reparar": volver a comprobar la suma del motor y pedir de nuevo los modelos, desde
   Ajustes y desde la comprobación final.
 

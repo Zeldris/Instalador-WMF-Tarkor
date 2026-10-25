@@ -133,7 +133,7 @@ export function Tarjetas({ evaluacion, seleccionado, onSeleccionar, confirmado, 
             )}
             {libre !== null && (
               <p className={`espacio peq${p.cabeEnDisco ? ' tenue' : ' sin'}`}>
-                <span>{t.espacio(fmt(p.necesitaDiscoGb), fmt(libre))}</span>
+                <span><span className="nw">{t.necesita(fmt(p.necesitaDiscoGb))}</span> · <span className="nw">{t.libres(fmt(libre))}</span></span>
                 {!p.cabeEnDisco && <button type="button" className="enlace" disabled={moviendo} onClick={onCambiarCarpeta}>{t.cambiarCarpeta}</button>}
               </p>
             )}

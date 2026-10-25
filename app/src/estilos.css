@@ -107,6 +107,7 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
 .tarjeta-caja .tarjeta { flex: 1; }
 .tarjeta-caja .aviso { display: flex; flex-direction: column; gap: 8px; }
 .espacio { margin: 0; display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; }
+.espacio .nw { white-space: nowrap; }
 .espacio.sin { color: var(--danger-400); }
 .enlace { font: inherit; font-size: 13px; background: none; border: 0; padding: 0; color: var(--accent-300); text-decoration: underline; cursor: pointer; }
 .enlace:disabled { opacity: .5; cursor: wait; }

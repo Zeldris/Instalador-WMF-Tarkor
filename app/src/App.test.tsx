@@ -75,7 +75,9 @@ describe('asistente de primer arranque', () => {
 
   it('cada tarjeta dice cuánto necesita y cuánto queda libre', async () => {
     await hastaElPerfil()
-    expect(screen.getAllByText(/Necesita .* GB · libres 180 GB/)).toHaveLength(5)
+    const lineas = [...document.querySelectorAll('.espacio')].map((n) => n.textContent)
+    expect(lineas).toHaveLength(5)
+    lineas.forEach((l) => expect(l).toMatch(/^Necesita .* GB · libres 180 GB$/))
   })
 
   it('sin disco para el perfil elegido se bloquea la descarga hasta cambiar de carpeta', async () => {
@@ -83,7 +85,7 @@ describe('asistente de primer arranque', () => {
     await hastaElPerfil()
     fireEvent.click(await boton(/^Máximo/))
     const sin = await screen.findAllByText(/libres 8 GB/)
-    expect(sin.some((n) => n.parentElement?.className.includes('sin'))).toBe(true)
+    expect(sin.some((n) => n.closest('.espacio')?.classList.contains('sin'))).toBe(true)
     expect(await boton(/^Descargar/)).toHaveProperty('disabled', true)
 
     const carpeta = document.querySelector('.carpeta') as HTMLElement
