@@ -114,4 +114,17 @@ if [ "${CLAUDECODE:-}" = "1" ] && [ "$ci" = "0" ]; then
     fi
   fi
 fi
+
+# The log's rows as this commit stages them (<= 600 characters, well formed): caught here, not at push time,
+# where fixing it means rewriting commits.
+if [ "$ci" = "0" ]; then
+  if [ -d "$root/.claude/gw/scripts" ]; then scripts="$root/.claude/gw/scripts"; else scripts="$root/scripts"; fi
+  log="$(python3 "$scripts/config.py" --root "$root" get log 2>/dev/null || true)"
+  if [ -n "$log" ] && git diff --cached --name-only | grep -qxF "$log"; then
+    tmp="$(mktemp)"; git show ":$log" >"$tmp"
+    python3 "$scripts/bitacora.py" --root "$root" check "$tmp" || {
+      rm -f "$tmp"; echo "pre-commit: fix the log rows in $log, then stage again: git add $log" >&2; exit 1; }
+    rm -f "$tmp"
+  fi
+fi
 exit 0

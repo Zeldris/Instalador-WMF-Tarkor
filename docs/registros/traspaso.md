@@ -14,7 +14,7 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-25). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #5 (2026-10-22, `89bb2ee`): `FLU-2`, piloto de Galivelop-workflow v0.2.0, y `FLU-3`, CI en local. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 🚧 2026-10-25: la usuaria confirma subir a `main` lo actual (`INS-14`, `INS-48`, `FLU-4`). Fase 1 hecha: `/code-review` con 17 hallazgos, graves y medios arreglados; los leves, en «Siguiente paso». Siguiente: fase 2 (`opt-tokens` y `retro`, presentadas a la usuaria) y fase 3; después `INS-49` o la fase 3 del plan. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 🚧 2026-10-25: la usuaria confirma subir a `main` lo actual (`INS-14`, `INS-48`, `FLU-4`). Fase 1 hecha: `/code-review` con 17 hallazgos, graves y medios arreglados; los leves, en «Siguiente paso». Fase 2: `opt-tokens` aprobada y aplicada (texto por pantalla en la e2e, bitácora en el pre-commit). Siguiente: `retro`, fase 3 y `/clear`; después `INS-49` o la fase 3 del plan. |
 | **Tests** | 2026-10-25: núcleo `cargo test -p tarkor-nucleo` 70, asistente `vitest` 10, `tsc -b` 0, clippy 0 avisos, `cargo check` del núcleo para Windows (mingw) en verde. |
 
 ## Dónde está todo (para saber qué sigue)
