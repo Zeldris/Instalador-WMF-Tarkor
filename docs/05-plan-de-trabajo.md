@@ -123,7 +123,9 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
   `MotorDetenido` diga qué proceso es.
 - [ ] **INS-42** Asistente real de punta a punta: descargas y comprobaciones de verdad; calentar el
   narrador al arrancar. Incluye la autopausa al perder la red con reanudación sola y la velocidad
-  de la narración de prueba (ronda de diseño del 2026-10-25).
+  de la narración de prueba (ronda de diseño del 2026-10-25). Si calentar el narrador o una narración fallan por
+  falta de memoria (`serve` sigue vivo y la pantalla del motor detenido no sale), ofrecer el perfil más ligero
+  (hallazgo de la revisión de `INS-43`).
 - [x] **INS-43** (2026-10-25) Ajustes → Rendimiento de la IA (con uso de la gráfica vía `/api/ps`) y pantalla de
   motor detenido. Decidido el 2026-10-25 (ver `11`): frase de dónde corre la IA y memoria real; cambiar de perfil
   descarga, reinicia el motor y ofrece borrar lo que sobra; "Copiar informe" con "Ver detalles"; un hilo de Rust
