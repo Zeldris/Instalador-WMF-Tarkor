@@ -1,7 +1,8 @@
+import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { comun, pasos, perfil as t } from './textos'
 import type { Evaluacion, PerfilId, UsoCpu } from './tipos'
-import { cabe } from './tipos'
+import { pideConfirmar } from './tipos'
 import { fmt } from './formato'
 
 export function Marco({ paso, titulo, lead, barra, children }: {
@@ -83,26 +84,27 @@ export function Medidor({ evaluacion }: { evaluacion: Evaluacion }) {
   )
 }
 
-export function Tarjetas({ evaluacion, seleccionado, onSeleccionar, mostrarNoRecomendados }: {
+export function Tarjetas({ evaluacion, seleccionado, onSeleccionar, confirmado, onConfirmar, onCambiarCarpeta, moviendo }: {
   evaluacion: Evaluacion
   seleccionado: PerfilId | null
   onSeleccionar: (id: PerfilId) => void
-  mostrarNoRecomendados: boolean
+  confirmado: boolean
+  onConfirmar: (si: boolean) => void
+  onCambiarCarpeta: () => void
+  moviendo: boolean
 }) {
   const analizado = evaluacion.memoriaParaIaGb !== null
-  const elegido = evaluacion.perfiles.find((p) => p.id === seleccionado)
+  const libre = evaluacion.discoLibreGb
   return (
-    <>
-      <div className="tarjetas">
-        {evaluacion.perfiles.map((p) => {
-          const deshabilitada = !cabe(p) && !mostrarNoRecomendados
-          return (
+    <div className="tarjetas">
+      {evaluacion.perfiles.map((p) => {
+        const sel = seleccionado === p.id
+        return (
+          <div key={p.id} className="tarjeta-caja">
             <button
-              key={p.id}
               type="button"
-              className={`tarjeta${seleccionado === p.id ? ' sel' : ''}`}
-              disabled={deshabilitada}
-              aria-pressed={seleccionado === p.id}
+              className={`tarjeta${sel ? ' sel' : ''}`}
+              aria-pressed={sel}
               onClick={() => onSeleccionar(p.id)}
             >
               <span className="nombre">{p.nombre}</span>
@@ -121,11 +123,48 @@ export function Tarjetas({ evaluacion, seleccionado, onSeleccionar, mostrarNoRec
                 <dt>{t.narracion}</dt><dd><Rombos n={p.calidad} /></dd>
               </dl>
             </button>
-          )
-        })}
+            {sel && pideConfirmar(evaluacion, p) && (
+              <div className="aviso">
+                <span>{t.aviso}</span>
+                <label className="interruptor">
+                  <input type="checkbox" checked={confirmado} onChange={(e) => onConfirmar(e.target.checked)} /> {t.confirmar}
+                </label>
+              </div>
+            )}
+            {libre !== null && (
+              <p className={`espacio peq${p.cabeEnDisco ? ' tenue' : ' sin'}`}>
+                <span>{t.espacio(fmt(p.necesitaDiscoGb), fmt(libre))}</span>
+                {!p.cabeEnDisco && <button type="button" className="enlace" disabled={moviendo} onClick={onCambiarCarpeta}>{t.cambiarCarpeta}</button>}
+              </p>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/** Estado de «elegir carpeta y mover»: «Moviendo…» y el error, para mostrarlos donde convenga. */
+export function useMoverCarpeta(cambiar: () => Promise<void>) {
+  const [moviendo, setMoviendo] = useState(false)
+  const [error, setError] = useState(false)
+  const mover = async () => {
+    setMoviendo(true)
+    setError(false)
+    try { await cambiar() } catch { setError(true) } finally { setMoviendo(false) }
+  }
+  return { moviendo, error, mover }
+}
+
+export function CarpetaIa({ ruta, accion, moviendo, error, onMover }: { ruta: string; accion: string; moviendo: boolean; error: boolean; onMover: () => void }) {
+  return (
+    <div className="carpeta">
+      <div className="fila">
+        <span className="tenue">{t.carpeta}</span> <span className="ruta">{ruta}</span>
+        <button type="button" className="enlace" disabled={moviendo} onClick={onMover}>{moviendo ? t.moviendo : accion}</button>
       </div>
-      {analizado && elegido && !cabe(elegido) && <div className="aviso" role="alert">{t.aviso}</div>}
-    </>
+      {error && <div className="error" role="alert">{t.errorCarpeta}</div>}
+    </div>
   )
 }
 

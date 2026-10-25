@@ -39,6 +39,17 @@ export default function App() {
 
   const ir = useCallback((paso: number) => actualizar({ pasoAsistente: Math.min(7, Math.max(1, paso)) }), [actualizar])
 
+  // Elegir carpeta, mover la IA, y volver a evaluar los perfiles con el disco de la carpeta nueva.
+  const cambiarCarpeta = useCallback(async () => {
+    const destino = await api.elegirCarpeta()
+    if (!destino) return
+    const nuevas = await api.cambiarCarpetaIa(destino)
+    setRutas(nuevas)
+    // Se guarda también aquí: si no, el siguiente `actualizar` pisaría la carpeta con el valor viejo.
+    actualizar({ carpetaIa: destino })
+    setEvaluacion(await api.evaluarPerfiles(ultima.current?.permisoAnalisis ? ultima.current.equipo : null))
+  }, [actualizar])
+
   const analizar = useCallback(async () => {
     const equipo = await api.analizarEquipo()
     const ev = await api.evaluarPerfiles(equipo)
@@ -60,7 +71,7 @@ export default function App() {
     return <>{aviso}<Juego abrirAjustes={() => setVista('ajustes')} repetir={() => { setVista('asistente'); actualizar({ ...configInicial(), pasoAsistente: 1 }); setEvaluacion(null) }} /></>
   }
   if (vista === 'ajustes' && evaluacion) {
-    return <>{aviso}<Ajustes config={config} evaluacion={evaluacion} actualizar={actualizar} reanalizar={analizar} volver={() => setVista('juego')} /></>
+    return <>{aviso}<Ajustes config={config} evaluacion={evaluacion} rutas={rutas} cambiarCarpeta={cambiarCarpeta} actualizar={actualizar} reanalizar={analizar} volver={() => setVista('juego')} /></>
   }
 
   // Sin evaluación no se puede pasar del paso 3.
@@ -71,7 +82,7 @@ export default function App() {
     case 1: pantalla = <Bienvenida {...nav} />; break
     case 2: pantalla = <QueSeInstala {...nav} config={config} rutas={rutas} actualizar={actualizar} />; break
     case 3: pantalla = <TuEquipo {...nav} config={config} evaluacion={evaluacion} analizar={analizar} elegirAMano={elegirAMano} />; break
-    case 4: pantalla = <ElegirPerfil {...nav} config={config} evaluacion={evaluacion!} actualizar={actualizar} />; break
+    case 4: pantalla = <ElegirPerfil {...nav} config={config} evaluacion={evaluacion!} rutas={rutas} cambiarCarpeta={cambiarCarpeta} actualizar={actualizar} />; break
     case 5: pantalla = <Descarga {...nav} config={config} evaluacion={evaluacion!} actualizar={actualizar} />; break
     case 6: pantalla = <Comprobacion {...nav} />; break
     default: pantalla = <Listo config={config} evaluacion={evaluacion!} rutas={rutas} jugar={() => { actualizar({ asistenteCompletado: true }); setVista('juego') }} />
