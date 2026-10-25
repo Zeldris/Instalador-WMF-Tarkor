@@ -12,7 +12,10 @@
 #   - Merge: mcp__github__merge_pull_request, mcp__github__enable_pr_auto_merge, and in Bash `gh pr merge` (also
 #     `gh -R o/r pr merge`, inside `bash -c`/`eval`, after `xargs`) and `gh api` PUT on repos/<o>/<r>/pulls/<n>/merge
 #     (-R/--repo and GH_REPO= name the repo). Same mark rule on the PR head, plus CI green: every check-run completed with success/neutral/skipped and every
-#     commit status success (a commit with no CI reported at all is not green).
+#     commit status success (a commit with no CI reported at all is not green). Local patch (Instalador-WMF-Tarkor,
+#     2026-10-25): when every failing check-run says GitHub did not start it (billing, spending limit) and no status
+#     failed, a green line of docs/registros/ci-local.md (tools/qa/ci-local.py --apuntar) on the PR head, naming the
+#     head or an ancestor with only content after it, stands in for CI.
 #   - Anything else (other tools, update_pull_request_branch, other bases, Bash that only mentions `gh pr`) exits 0
 #     silently. pushToProtected does not matter: a PR is another way into the protected branch.
 #   - A PR that is already closed or merged: blocked with that fact (and `gh pr view`), no config is asked of its branch;
@@ -40,6 +43,9 @@ NAME = "revision-antes-de-main"
 GIT_ENV = {k: v for k, v in os.environ.items() if k not in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")}
 GIT_ENV["GIT_TERMINAL_PROMPT"] = "0"
 GREEN_RUNS = ("success", "neutral", "skipped")
+NOT_STARTED = ("job was not started because recent account payments have failed", "spending limit needs to be increased")
+CI_LOCAL = "docs/registros/ci-local.md"  # written by tools/qa/ci-local.py --apuntar while GitHub CI cannot run
+LOCAL_GREEN = re.compile(r"`([0-9a-f]{7,40})` · en verde")
 
 
 class Blocked(Exception):
@@ -403,11 +409,34 @@ def ci_problems(repo, sha):
         page += 1
     statuses = api(f"repos/{repo}/commits/{sha}/status?per_page=100")["statuses"]
     if not runs and not statuses:
-        return ["no CI has reported on this commit yet"]
-    bad = [f"{c.get('name', '?')}: {c.get('conclusion') or c.get('status')}" for c in runs
-           if c.get("status") != "completed" or c.get("conclusion") not in GREEN_RUNS]
-    bad += [f"{s.get('context', '?')}: {s.get('state')}" for s in statuses if s.get("state") != "success"]
-    return bad
+        return ["no CI has reported on this commit yet"], False
+    bad_runs = [c for c in runs if c.get("status") != "completed" or c.get("conclusion") not in GREEN_RUNS]
+    bad_statuses = [s for s in statuses if s.get("state") != "success"]
+    bad = [f"{c.get('name', '?')}: {c.get('conclusion') or c.get('status')}" for c in bad_runs]
+    bad += [f"{s.get('context', '?')}: {s.get('state')}" for s in bad_statuses]
+    unstarted = bool(bad_runs) and not bad_statuses and all(not_started(repo, c) for c in bad_runs)
+    return bad, unstarted
+
+
+def not_started(repo, run_):
+    """GitHub refused to start the job (billing, spending limit): it failed without running anything."""
+    if run_.get("conclusion") != "failure" or "id" not in run_:
+        return False
+    notes = api(f"repos/{repo}/check-runs/{run_['id']}/annotations")
+    return any(m in str(n.get("message", "")) for n in notes for m in NOT_STARTED)
+
+
+def ci_local_green(root, scripts, head, policy):
+    """The newest commit that ci-local.md (as the PR head has it) records green, if it is the head or an ancestor with
+    only content after it; else None."""
+    text = git(root, "show", f"{head}:{CI_LOCAL}").stdout
+    for short in reversed(LOCAL_GREEN.findall(text)):
+        r = git(root, "rev-parse", "-q", "--verify", short + "^{commit}")
+        sha = r.stdout.strip()
+        if r.returncode == 0 and git(root, "merge-base", "--is-ancestor", sha, head).returncode == 0 \
+                and not es_codigo(root, scripts, sha, head, policy):
+            return sha
+    return None
 
 
 # ---- the rules ---------------------------------------------------------------------------------------------------
@@ -557,11 +586,18 @@ def handle(action, cfg, root, scripts):
     if action["kind"] != "merge":
         return
     try:
-        bad = ci_problems(repo, info["sha"])
+        bad, unstarted = ci_problems(repo, info["sha"])
     except (ApiError, KeyError, TypeError, ValueError) as exc:
         block(f"Blocked: could not verify CI of PR #{number} ({info['sha'][:12]}): {exc}",
               f"check CI in the PR ({info['url']}); once it is all green, authenticate (gh auth login, or export "
               "GITHUB_TOKEN) and retry the merge")
+    if bad and unstarted:
+        policy = tip if tip and config_at(root, tip) is not None else info["sha"]
+        if ci_local_green(root, scripts, info["sha"], policy):
+            return
+        block(f"Blocked: GitHub did not start the CI of PR #{number} ({info['sha'][:12]}: billing or spending limit), "
+              f"and {CI_LOCAL} on it records no green run of that commit or of an ancestor with only content after it.",
+              "run the CI locally, push its record and retry the merge: python3 tools/qa/ci-local.py --apuntar && git push")
     if bad:
         block(f"Blocked: CI of PR #{number} ({info['sha'][:12]}) is not green: {'; '.join(bad)}",
               f"wait until every check passes ({info['url']}), fix what failed if needed, then retry the merge")
