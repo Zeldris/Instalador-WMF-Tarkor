@@ -14,7 +14,7 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-25). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #7 (2026-10-25, `8566d48`): `INS-49`, con la confirmación de la usuaria. La CI de GitHub no arrancó (pago); `ci-local` en verde sobre `04a37c6`, Windows sin cubrir. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-10-25: `INS-43` (Ajustes → Rendimiento de la IA y motor detenido). Decisiones en `docs/11`. Trozos 1 (Rust), 2 (frontal) y 3 (E2E: `app/e2e/rendimiento.e2e.mjs`, se lanza como dice `app/README.md`) hechos y revisados los dos primeros; siguen cerrar INS-43 en el plan y las fases antes de main. Presupuesto: 1 compactación (la sesión lleva 19). Siguiente: cerrar INS-43 en el plan y las fases antes de main. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-10-25: `INS-43` cerrada (Rust, frontal y E2E `app/e2e/rendimiento.e2e.mjs`, revisados). Presupuesto: 1 compactación (la sesión lleva 19). Siguiente: las tres fases antes de main, si la usuaria lo confirma. |
 | **Tests** | 2026-10-25: núcleo `cargo test -p tarkor-nucleo` 104, asistente `vitest` 27, `tsc -b` 0, clippy 0 avisos, `cargo check` del núcleo para Windows (mingw) en verde; E2E del asistente con el Ollama falso en verde. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -37,7 +37,7 @@ cada commit.**
    ya descargado en Ajustes; no se impide mover la carpeta con una descarga en marcha (el asistente hoy no lo
    permite); `Estado::ia()` lee `config.json` en cada llamada; el aviso de restos del origen solo va a stderr;
    con poco disco el paso 3 dice «equipo insuficiente».
-4. Pendientes leves de la revisión de `INS-43`: `cliente()` espera al Mutex del motor durante el reinicio automático (hasta 30 s): conviene guardar la URL aparte; `cambiar_perfil` pone `cancelar` a false y puede deshacer una pausa de otra descarga; `cambiar_perfil` con el motor caído lo arranca primero con el perfil viejo, y si eso falla no prueba el nuevo; no hay test de la pausa de `cambiar_perfil`; los arreglos de `cambiar_perfil`, `reintentar_motor` y `estado_motor` no tienen test (los cubre el E2E del trozo 3); sin test: desmontar antes de que `listen` resuelva, Borrar desactivado mientras borra, Volver desactivado durante el cambio.
+4. Pendientes leves de la revisión de `INS-43`: `cliente()` espera al Mutex del motor durante el reinicio automático (hasta 30 s): conviene guardar la URL aparte; `cambiar_perfil` pone `cancelar` a false y puede deshacer una pausa de otra descarga; `cambiar_perfil` con el motor caído lo arranca primero con el perfil viejo, y si eso falla no prueba el nuevo; no hay test de la pausa de `cambiar_perfil`; los arreglos de `cambiar_perfil`, `reintentar_motor` y `estado_motor` no tienen test (los cubre el E2E del trozo 3); sin test: desmontar antes de que `listen` resuelva, Borrar desactivado mientras borra, Volver desactivado durante el cambio; la lectura de `motor_detenido()` al montar o al acabar un cambio puede borrar un aviso que llegue mientras tanto (conviene un contador de avisos); sin test de que `CopiarInforme` pida el informe cada vez; «Copiar» oculta el texto desplegado mientras carga.
 5. Pendientes leves de la revisión de `INS-49` (no vuelven a revisarse en su PR): con un `.completo` vacío (lo
    instalado antes de `INS-49`) el primer Reparar vuelve a bajar el motor aunque esté sano; `alTerminar` de
    Ajustes guarda los modelos del perfil leído al empezar aunque se cambie durante la reparación; el porcentaje
@@ -73,6 +73,8 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 
 Dos líneas cada una como mucho; el detalle está en el commit y la más antigua sale cuando hay más de 5.
 
+- ~~`INS-43` · Rendimiento de la IA y motor detenido~~ (2026-10-25): dónde corre la IA, cambiar de perfil con
+  borrado de sobrantes, «Copiar informe» y pantalla del motor detenido con vigilancia en Rust.
 - ~~`INS-49` · Reparar~~ (2026-10-25): suma de cada archivo del motor y de cada capa de los modelos; reinstala o
   vuelve a pedir solo lo dañado, desde Ajustes y desde la comprobación.
 - ~~`INS-48` · Carpeta de la IA elegible y movible~~ (2026-10-25): espacio necesario frente a libre en cada
@@ -81,5 +83,3 @@ Dos líneas cada una como mucho; el detalle está en el commit y la más antigua
   en la tarjeta, sin interruptor; implementado el mismo día.
 - ~~`FLU-4` · Galivelop-workflow v0.3.0~~ (2026-10-25): `/gw-update` de scripts, skills y ganchos; `comprobar.yml`
   se queda el local; dos reglas nuevas en `REVIEW.md`.
-- ~~`FLU-3` · CI en local~~ (2026-10-22): `tools/qa/ci-local.py` corre los jobs de Ubuntu de `comprobar.yml` y
-  apunta el resultado en [`ci-local.md`](ci-local.md) mientras la CI de GitHub está agotada.
