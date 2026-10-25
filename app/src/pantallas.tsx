@@ -261,16 +261,17 @@ export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpe
   useEffect(() => { alCambiar?.(cambio.cambiando) }, [alCambiar, cambio.cambiando])
   useEffect(() => () => alCambiar?.(false), [alCambiar])
   const actual = evaluacion.perfiles.find((x) => x.id === (config.perfil ?? evaluacion.recomendado))!
-  const nuevo = evaluacion.perfiles.find((x) => x.id === elegido)!
-  const extra = Math.max(0, nuevo.descargaGb - actual.descargaGb)
+  // Un id que no está en la evaluación (un perfil que ya no existe) no deja nada preseleccionado.
+  const nuevo = evaluacion.perfiles.find((x) => x.id === elegido)
+  const extra = nuevo ? Math.max(0, nuevo.descargaGb - actual.descargaGb) : 0
   return (
     <div className="ventana">
       <Pagina sola titulo={t.titulo} lead={t.actual(actual.nombre, fmt(actual.memoriaGb), fmt(actual.descargaGb))}
         barra={<><button type="button" className="btn" disabled={cambio.cambiando} onClick={volver}>{t.volver}</button>
           <button type="button" className="btn" disabled={cambio.cambiando} onClick={reanalizar}>{t.reanalizar}</button><span className="hueco" />
           {cambio.cambiando && <button type="button" className="btn" onClick={cambio.pausar}>{t.pausar}</button>}
-          <button type="button" className="btn pri" disabled={cambio.cambiando || nuevo.id === actual.id || bloqueado(evaluacion, nuevo, confirmado)} onClick={() => void cambio.cambiar(nuevo.id)}>
-            {nuevo.id === actual.id ? t.actualBoton : extra > 0 ? t.cambiarDescargar(fmt(extra)) : t.cambiar}
+          <button type="button" className="btn pri" disabled={cambio.cambiando || !nuevo || nuevo.id === actual.id || bloqueado(evaluacion, nuevo, confirmado)} onClick={() => nuevo && void cambio.cambiar(nuevo.id)}>
+            {nuevo?.id === actual.id ? t.actualBoton : extra > 0 ? t.cambiarDescargar(fmt(extra)) : t.cambiar}
           </button></>}>
         <DondeCorre />
         <Medidor evaluacion={evaluacion} />
@@ -284,11 +285,11 @@ export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpe
         <Tarjetas evaluacion={evaluacion} seleccionado={elegido} confirmado={confirmado} onConfirmar={setConfirmado}
           onCambiarCarpeta={carpeta.mover} moviendo={carpeta.moviendo}
           onSeleccionar={(id) => { setConfirmado(false); setElegido(id) }} />
-        {rutas && <CarpetaIa ruta={rutas.ia} accion={t.moverCarpeta} moviendo={carpeta.moviendo} error={carpeta.error} onMover={carpeta.mover} />}
-        <ControlUsoCpu uso={config.usoCpu} hilos={config.equipo?.hilos ?? 4} onCambiar={(usoCpu) => actualizar({ usoCpu })} />
-        <Reparar alTerminar={(r) => actualizar({ modelosDescargados: r.modelos })} />
+        {rutas && <CarpetaIa ruta={rutas.ia} accion={t.moverCarpeta} moviendo={carpeta.moviendo} error={carpeta.error} onMover={carpeta.mover} desactivado={cambio.cambiando} />}
+        <ControlUsoCpu uso={config.usoCpu} hilos={config.equipo?.hilos ?? 4} onCambiar={(usoCpu) => actualizar({ usoCpu })} desactivado={cambio.cambiando} />
+        <Reparar alTerminar={(r) => actualizar({ modelosDescargados: r.modelos })} desactivado={cambio.cambiando} />
         <CopiarInforme />
-        {nuevo.descargaGb < actual.descargaGb && <p className="peq tenue">{t.liberar(nuevo.nombre, fmt(actual.descargaGb - nuevo.descargaGb))}</p>}
+        {nuevo && nuevo.descargaGb < actual.descargaGb && <p className="peq tenue">{t.liberar(nuevo.nombre, fmt(actual.descargaGb - nuevo.descargaGb))}</p>}
       </Pagina>
     </div>
   )

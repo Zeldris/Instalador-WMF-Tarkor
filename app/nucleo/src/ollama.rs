@@ -112,30 +112,48 @@ pub fn sobrantes(hay: Vec<(String, u64)>, del_perfil: &[&str]) -> Vec<(String, u
         .collect()
 }
 
+/// Tiempo máximo de espera de lectura de las peticiones cortas (`/api/ps`, `/api/tags`...): un Ollama
+/// que acepta la conexión y no contesta no deja colgado al sondeo.
+const ESPERA_LECTURA: Duration = Duration::from_secs(10);
+
 pub struct Cliente {
     base: String,
+    /// Peticiones cortas, con tiempo de espera de lectura.
     agente: ureq::Agent,
+    /// Descargas en streaming (`/api/pull`) y generación (`/api/generate`, que puede tardar en
+    /// cargar el modelo): sin tiempo de espera de lectura.
+    agente_largo: ureq::Agent,
+}
+
+/// Un fallo de `ureq`; el de tiempo de espera lo dice con esas palabras.
+fn sin_conexion(e: ureq::Error) -> Error {
+    match e {
+        ureq::Error::Timeout(_) => Error::SinConexion("tiempo de espera agotado: el motor aceptó la conexión pero no respondió".into()),
+        e => Error::SinConexion(e.to_string()),
+    }
 }
 
 impl Cliente {
     pub fn new(base: impl Into<String>) -> Cliente {
-        let agente = ureq::Agent::config_builder()
-            .proxy(None)
-            .http_status_as_error(false)
-            .timeout_connect(Some(Duration::from_secs(3)))
-            .build()
-            .into();
-        Cliente { base: base.into().trim_end_matches('/').to_string(), agente }
+        Cliente::con_espera(base, ESPERA_LECTURA)
+    }
+
+    /// Como `new`, con otro tiempo de espera de lectura para las peticiones cortas.
+    pub fn con_espera(base: impl Into<String>, espera: Duration) -> Cliente {
+        let base_config = || ureq::Agent::config_builder().proxy(None).http_status_as_error(false).timeout_connect(Some(Duration::from_secs(3)));
+        let agente = base_config().timeout_recv_response(Some(espera)).timeout_recv_body(Some(espera)).build().into();
+        let agente_largo = base_config().build().into();
+        Cliente { base: base.into().trim_end_matches('/').to_string(), agente, agente_largo }
     }
 
     fn get(&self, ruta: &str) -> Result<Value, Error> {
-        let mut r = self.agente.get(format!("{}{ruta}", self.base)).call().map_err(|e| Error::SinConexion(e.to_string()))?;
-        leer_json(r.status().as_u16(), r.body_mut().read_to_string().map_err(|e| Error::SinConexion(e.to_string()))?)
+        let mut r = self.agente.get(format!("{}{ruta}", self.base)).call().map_err(sin_conexion)?;
+        leer_json(r.status().as_u16(), r.body_mut().read_to_string().map_err(sin_conexion)?)
     }
 
     fn post(&self, ruta: &str, cuerpo: Value) -> Result<Value, Error> {
-        let mut r = self.agente.post(format!("{}{ruta}", self.base)).send_json(cuerpo).map_err(|e| Error::SinConexion(e.to_string()))?;
-        leer_json(r.status().as_u16(), r.body_mut().read_to_string().map_err(|e| Error::SinConexion(e.to_string()))?)
+        let mut r = self.agente_largo.post(format!("{}{ruta}", self.base)).send_json(cuerpo).map_err(sin_conexion)?;
+        leer_json(r.status().as_u16(), r.body_mut().read_to_string().map_err(sin_conexion)?)
     }
 
     pub fn version(&self) -> Result<String, Error> {
@@ -162,10 +180,10 @@ impl Cliente {
     /// Descarga un modelo. Ollama reanuda solo lo que falte si se corta.
     pub fn descargar_modelo(&self, modelo: &str, cancelar: &AtomicBool, progreso: &mut dyn FnMut(ProgresoModelo)) -> Result<(), Error> {
         let r = self
-            .agente
+            .agente_largo
             .post(format!("{}/api/pull", self.base))
             .send_json(json!({ "model": modelo, "stream": true }))
-            .map_err(|e| Error::SinConexion(e.to_string()))?;
+            .map_err(sin_conexion)?;
         let estado_http = r.status().as_u16();
         let lector = BufReader::new(r.into_body().into_reader());
         // Ollama informa por capas (digest); el progreso del modelo es la suma de todas.
@@ -206,7 +224,7 @@ impl Cliente {
             .delete(format!("{}/api/delete", self.base))
             .force_send_body()
             .send_json(json!({ "model": modelo }))
-            .map_err(|e| Error::SinConexion(e.to_string()))?;
+            .map_err(sin_conexion)?;
         let st = r.status().as_u16();
         if st >= 400 {
             let texto = r.body_mut().read_to_string().unwrap_or_default();
@@ -449,5 +467,25 @@ mod tests {
     fn sin_motor_es_sin_conexion() {
         let c = Cliente::new(format!("http://127.0.0.1:{}", crate::procesos::puerto_libre().unwrap()));
         assert!(matches!(c.version(), Err(Error::SinConexion(_))));
+    }
+
+    #[test]
+    fn un_motor_que_no_responde_falla_por_tiempo() {
+        let l = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let c = Cliente::con_espera(format!("http://127.0.0.1:{}", l.local_addr().unwrap().port()), Duration::from_millis(300));
+        // Acepta la conexión y no contesta; se guarda para que no se cierre.
+        let aceptador = thread::spawn(move || {
+            let s = l.accept().unwrap();
+            thread::sleep(Duration::from_secs(3));
+            drop(s);
+        });
+        let inicio = std::time::Instant::now();
+        let e = c.cargados().unwrap_err();
+        assert!(inicio.elapsed() < Duration::from_secs(2), "tardó {:?}", inicio.elapsed());
+        match e {
+            Error::SinConexion(m) => assert!(m.contains("tiempo de espera"), "{m}"),
+            otro => panic!("error inesperado: {otro:?}"),
+        }
+        drop(aceptador);
     }
 }

@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import App from './App'
 import { perfilMasLigero } from './tipos'
 import { catalogo } from './catalogo'
-import { ejemplo, configInicial, fijarDiscoLibreIa, fijarErrorCambioPerfil, fijarRetardoCambioPerfil, fijarErrorCarpetaIa, fijarModelosDanados, fijarUsoIa, reiniciarCarpetaIa, reiniciarModelos, emitirMotorDetenido, fijarErrorCopiar, fijarErrorReintento, fijarMotorDetenido, oyentesMotor, reiniciarMotorDetenido, textoCopiado, TEXTO_INFORME } from './ejemplo'
+import { Ajustes } from './pantallas'
+import { ejemplo, configInicial, evaluarEjemplo, equipoEjemplo, fijarDiscoLibreIa, fijarErrorCambioPerfil, fijarRetardoCambioPerfil, fijarErrorCarpetaIa, fijarModelosDanados, fijarUsoIa, reiniciarCarpetaIa, reiniciarModelos, emitirMotorDetenido, fijarErrorCopiar, fijarErrorReintento, fijarMotorDetenido, oyentesMotor, reiniciarMotorDetenido, textoCopiado, TEXTO_INFORME } from './ejemplo'
 
 afterEach(async () => {
   cleanup()
@@ -248,6 +249,29 @@ describe('asistente de primer arranque', () => {
     await waitFor(async () => expect((await ejemplo.cargarConfig()).usoCpu).toBe('alto'))
     expect((await ejemplo.cargarConfig()).perfil).toBe('ligero')
     expect(screen.getByText(/^Perfil actual: Ligero/)).toBeTruthy()
+  }, 30000)
+
+  it('en Ajustes, un perfil inicial que no está en la evaluación no rompe la pantalla ni preselecciona nada', async () => {
+    const evaluacion = evaluarEjemplo(equipoEjemplo)
+    render(<Ajustes perfilInicial={'no-existe' as never} config={configInicial()} evaluacion={evaluacion} rutas={null} cambiarCarpeta={async () => {}}
+      actualizar={() => {}} reemplazarConfig={() => {}} reanalizar={async () => {}} volver={() => {}} />)
+    expect(await boton('Reparar')).toBeTruthy()
+    expect(screen.getAllByRole('button').filter((b) => b.getAttribute('aria-pressed') === 'true' && /Ligero|Equilibrado|Alto|Mínimo/.test(b.textContent ?? ''))).toHaveLength(0)
+    expect(screen.getByRole('button', { name: /^Cambiar/ })).toHaveProperty('disabled', true)
+  })
+
+  it('durante un cambio de perfil, el control de CPU, Reparar y la carpeta están desactivados', async () => {
+    await hastaAjustes()
+    fijarRetardoCambioPerfil(300)
+    fireEvent.click(await boton(/^Ligero/))
+    fireEvent.click(await boton(/^Cambiar/))
+    await boton('Pausar')
+    expect(screen.getByRole('button', { name: 'Alto' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Moderado' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Reparar' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: /Mover/ })).toHaveProperty('disabled', true)
+    await boton(/^Borrar modelos que ya no uso/, 5000)
+    expect(screen.getByRole('button', { name: 'Alto' })).toHaveProperty('disabled', false)
   }, 30000)
 
   it('si cambiar de perfil falla, muestra el error y sigue el perfil de antes', async () => {

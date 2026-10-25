@@ -159,12 +159,12 @@ export function useMoverCarpeta(cambiar: () => Promise<void>) {
   return { moviendo, error, mover }
 }
 
-export function CarpetaIa({ ruta, accion, moviendo, error, onMover }: { ruta: string; accion: string; moviendo: boolean; error: string | null; onMover: () => void }) {
+export function CarpetaIa({ ruta, accion, moviendo, error, onMover, desactivado = false }: { ruta: string; accion: string; moviendo: boolean; error: string | null; onMover: () => void; desactivado?: boolean }) {
   return (
     <div className="carpeta">
       <div className="fila">
         <span className="tenue">{t.carpeta}</span> <span className="ruta">{ruta}</span>
-        <button type="button" className="enlace" disabled={moviendo} onClick={onMover}>{moviendo ? t.moviendo : accion}</button>
+        <button type="button" className="enlace" disabled={moviendo || desactivado} onClick={onMover}>{moviendo ? t.moviendo : accion}</button>
       </div>
       {error && <div className="error" role="alert">{error}</div>}
     </div>
@@ -183,7 +183,7 @@ export function textoModelo(p: ProgresoModelo) {
 }
 
 /** «Reparar» (`INS-49`): el botón, lo que está haciendo y cómo acabó. `alTerminar` solo se llama si salió bien. */
-export function Reparar({ alTerminar }: { alTerminar?: (r: Reparacion) => void }) {
+export function Reparar({ alTerminar, desactivado = false }: { alTerminar?: (r: Reparacion) => void; desactivado?: boolean }) {
   const [reparando, setReparando] = useState(false)
   const [estado, setEstado] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -211,7 +211,7 @@ export function Reparar({ alTerminar }: { alTerminar?: (r: Reparacion) => void }
   return (
     <div className="reparar">
       <div className="fila">
-        <button type="button" className="btn" disabled={reparando} onClick={empezar}>{reparando ? tr.reparando : tr.boton}</button>
+        <button type="button" className="btn" disabled={reparando || desactivado} onClick={empezar}>{reparando ? tr.reparando : tr.boton}</button>
         {reparando && <button type="button" className="btn" onClick={() => { cancelando.current = true; void api.cancelarDescargas() }}>{tr.cancelar}</button>}
         <span className="peq tenue" aria-live="polite">{estado || tr.explicacion}</span>
       </div>
@@ -220,15 +220,15 @@ export function Reparar({ alTerminar }: { alTerminar?: (r: Reparacion) => void }
   )
 }
 
-export function ControlUsoCpu({ uso, hilos, onCambiar }: { uso: UsoCpu; hilos: number; onCambiar: (u: UsoCpu) => void }) {
+export function ControlUsoCpu({ uso, hilos, onCambiar, desactivado = false }: { uso: UsoCpu; hilos: number; onCambiar: (u: UsoCpu) => void; desactivado?: boolean }) {
   const moderado = Math.max(1, Math.floor(hilos / 2))
   const alto = Math.max(1, hilos - 1)
   return (
     <div className="fila">
       <span>{t.usoCpu}</span>
       <div className="seg" role="group" aria-label={t.usoCpu}>
-        <button type="button" aria-pressed={uso === 'moderado'} onClick={() => onCambiar('moderado')}>{t.moderado}</button>
-        <button type="button" aria-pressed={uso === 'alto'} onClick={() => onCambiar('alto')}>{t.alto}</button>
+        <button type="button" aria-pressed={uso === 'moderado'} disabled={desactivado} onClick={() => onCambiar('moderado')}>{t.moderado}</button>
+        <button type="button" aria-pressed={uso === 'alto'} disabled={desactivado} onClick={() => onCambiar('alto')}>{t.alto}</button>
       </div>
       <span className="peq tenue">{uso === 'moderado' ? t.usoModerado(moderado, hilos) : t.usoAlto(alto, hilos)}</span>
     </div>

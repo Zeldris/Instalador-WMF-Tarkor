@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from './api'
 import { configInicial } from './ejemplo'
 import { errores } from './textos'
-import { catalogo } from './catalogo'
 import type { Config, Evaluacion, MotorDetenido, PerfilId, Rutas } from './tipos'
 import { perfilMasLigero } from './tipos'
 import { PantallaMotorDetenido } from './pantallaMotor'
@@ -119,7 +118,7 @@ export default function App() {
   if (aviso && !cambiando) {
     const salir = () => { antesDelAviso.current = null; setAviso(null) }
     return <>{avisoError}<PantallaMotorDetenido aviso={aviso}
-      masLigero={evaluacion ? perfilMasLigero(catalogo.perfiles, config.perfil) : null}
+      masLigero={evaluacion ? perfilMasLigero(evaluacion.perfiles, config.perfil) : null}
       reintentado={salir}
       irAAjustes={(p) => {
         const antes = antesDelAviso.current ?? vista

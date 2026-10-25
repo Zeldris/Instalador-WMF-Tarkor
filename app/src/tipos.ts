@@ -142,10 +142,10 @@ export const pideConfirmar = (e: Evaluacion, p: PerfilEvaluado) => e.memoriaPara
 /** Hay que impedir la descarga: no cabe en disco o falta la confirmación. */
 export const bloqueado = (e: Evaluacion, p: PerfilEvaluado, confirmado: boolean) => !p.cabeEnDisco || (pideConfirmar(e, p) && !confirmado)
 
-/** El perfil de menos memoria justo por debajo del actual (por `memoriaGb`, sin experimentales); null si ya es el más ligero. */
-export function perfilMasLigero(perfiles: { id: PerfilId; memoriaGb: number; experimental?: boolean }[], actual: PerfilId | null): PerfilId | null {
+/** El perfil de menos memoria justo por debajo del actual (por `memoriaGb`, sin experimentales ni los que no caben en disco); null si ya es el más ligero. */
+export function perfilMasLigero(perfiles: { id: PerfilId; memoriaGb: number; experimental?: boolean; cabeEnDisco?: boolean }[], actual: PerfilId | null): PerfilId | null {
   const ref = perfiles.find((p) => p.id === actual)
   if (!ref) return null
-  const menores = perfiles.filter((p) => !p.experimental && p.memoriaGb < ref.memoriaGb).sort((a, b) => b.memoriaGb - a.memoriaGb)
+  const menores = perfiles.filter((p) => !p.experimental && p.cabeEnDisco !== false && p.memoriaGb < ref.memoriaGb).sort((a, b) => b.memoriaGb - a.memoriaGb)
   return menores[0]?.id ?? null
 }
