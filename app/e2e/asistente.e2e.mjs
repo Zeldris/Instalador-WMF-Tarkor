@@ -156,6 +156,11 @@ async function recorrido() {
   await pulsar('Ajustes')
   await buscar(titulo('Rendimiento de la IA'))
   await captura('ajustes')
+  // Con TARKOR_OLLAMA_URL (el Ollama falso) Reparar solo vuelve a pedir los modelos.
+  await pulsar('Reparar')
+  const reparado = await texto(conTexto('Todo estaba en orden'), 120000)
+  comprobar(reparado.startsWith('Todo estaba en orden'), `Reparar en Ajustes: "${reparado}"`)
+  await captura('reparar')
   await cerrar()
 
   console.log('Segundo arranque')
