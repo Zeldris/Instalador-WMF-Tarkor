@@ -164,15 +164,22 @@ impl Proceso {
         }
         self.hijo = Some(hijo);
 
-        if !esperar_http(e.puerto, &e.ruta_salud, e.espera_arranque) {
-            let motivo = match self.hijo.as_mut().and_then(|h| h.try_wait().ok().flatten()) {
-                Some(st) => format!("{} se cerró al arrancar ({st})", e.nombre),
-                None => format!("{} no respondió en {} s", e.nombre, e.espera_arranque.as_secs()),
-            };
-            self.parar();
-            return Err(io::Error::other(motivo));
-        }
-        Ok(())
+        // Un proceso que se cierra al arrancar da el error en cuanto se cierra, no al acabar la espera.
+        let fin = Instant::now() + e.espera_arranque;
+        let motivo = loop {
+            if get_ok(e.puerto, &e.ruta_salud) {
+                return Ok(());
+            }
+            if let Some(st) = self.hijo.as_mut().and_then(|h| h.try_wait().ok().flatten()) {
+                break format!("{} se cerró al arrancar ({st})", e.nombre);
+            }
+            if Instant::now() >= fin {
+                break format!("{} no respondió en {} s", e.nombre, e.espera_arranque.as_secs());
+            }
+            std::thread::sleep(Duration::from_millis(150));
+        };
+        self.parar();
+        Err(io::Error::other(motivo))
     }
 
     pub fn url(&self) -> String {
@@ -345,6 +352,18 @@ mod tests {
         // La salida del proceso queda en su registro.
         let log = fs::read_to_string(dir.path().join("registros/prueba.log")).unwrap();
         assert!(log.contains("arrancando"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn si_se_cierra_al_arrancar_no_agota_la_espera() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut e = espec(dir.path(), "exit 1", puerto_libre().unwrap());
+        e.espera_arranque = Duration::from_secs(30);
+        let inicio = Instant::now();
+        let err = Proceso::arrancar(e).err().unwrap();
+        assert!(err.to_string().contains("se cerró al arrancar"), "{err}");
+        assert!(inicio.elapsed() < Duration::from_secs(5), "tardó {:?}", inicio.elapsed());
     }
 
     #[cfg(unix)]
