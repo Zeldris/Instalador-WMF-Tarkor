@@ -1,13 +1,19 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import App from './App'
-import { ejemplo, configInicial, fijarDiscoLibreIa, fijarErrorCarpetaIa, fijarModelosDanados, reiniciarCarpetaIa } from './ejemplo'
+import { perfilDe, perfilMasLigero } from './tipos'
+import { catalogo } from './catalogo'
+import { Ajustes, ElegirPerfil, Listo } from './pantallas'
+import { Descarga } from './pantallasIa'
+import { ejemplo, configInicial, evaluarEjemplo, equipoEjemplo, fijarDiscoLibreIa, fijarErrorCambioPerfil, fijarRetardoCambioPerfil, fijarErrorCarpetaIa, fijarModelosDanados, fijarUsoIa, reiniciarCarpetaIa, reiniciarModelos, emitirMotorDetenido, fijarErrorCopiar, fijarErrorReintento, fijarMotorDetenido, oyentesMotor, reiniciarMotorDetenido, textoCopiado, TEXTO_INFORME } from './ejemplo'
 
 afterEach(async () => {
   cleanup()
   await ejemplo.guardarConfig(configInicial())
   reiniciarCarpetaIa()
   fijarModelosDanados(false)
+  reiniciarModelos()
+  reiniciarMotorDetenido()
 })
 
 const boton = (nombre: string | RegExp, timeout = 1000) => screen.findByRole('button', { name: nombre }, { timeout })
@@ -209,6 +215,263 @@ describe('asistente de primer arranque', () => {
     fireEvent.click(await boton('Reparar'))
     expect(await screen.findByText(/^Todo estaba en orden/, {}, { timeout: 3000 })).toBeTruthy()
   }, 20000)
+
+  async function hastaAjustes() {
+    await hastaElPerfil()
+    fireEvent.click(await boton(/^Descargar/))
+    fireEvent.click(await boton('Comprobar la instalación', 10000))
+    await screen.findByText(/palabras por segundo/, {}, { timeout: 5000 })
+    fireEvent.click(await boton('Continuar'))
+    fireEvent.click(await boton('Jugar'))
+    fireEvent.click(await boton(/Ajustes/))
+  }
+
+  it('en Ajustes dice dónde corre la IA, y si no responde la pantalla sigue', async () => {
+    await hastaAjustes()
+    expect(await screen.findByText(/La IA usa la gráfica al 100 %/)).toBeTruthy()
+    cleanup()
+    fijarUsoIa(new Error('El motor no está en marcha'))
+    render(<App />)
+    fireEvent.click(await boton(/Ajustes/))
+    expect(await boton('Reparar')).toBeTruthy()
+    expect(screen.queryByText(/La IA/)).toBeNull()
+  }, 30000)
+
+  it('cambiar de perfil adopta el Config devuelto, ofrece borrar lo que sobra y lo borra', async () => {
+    await hastaAjustes()
+    fireEvent.click(await boton(/^Ligero/))
+    fireEvent.click(await boton(/^Cambiar/))
+    fireEvent.click(await boton(/^Borrar modelos que ya no uso/, 5000))
+    await waitFor(() => expect(screen.queryByRole('button', { name: /^Borrar modelos que ya no uso/ })).toBeNull())
+    expect((await ejemplo.cargarConfig()).perfil).toBe('ligero')
+    expect(await ejemplo.modelosSobrantes()).toEqual([])
+    // Un guardado posterior no puede devolver el perfil viejo: sin `reemplazarConfig`, `actualizar` lo pisaba.
+    fireEvent.click(screen.getByRole('button', { name: 'Alto' }))
+    await waitFor(async () => expect((await ejemplo.cargarConfig()).usoCpu).toBe('alto'))
+    expect((await ejemplo.cargarConfig()).perfil).toBe('ligero')
+    expect(screen.getByText(/^Perfil actual: Ligero/)).toBeTruthy()
+  }, 30000)
+
+  it('en Ajustes, un perfil inicial que no está en la evaluación no rompe la pantalla ni preselecciona nada', async () => {
+    const evaluacion = evaluarEjemplo(equipoEjemplo)
+    render(<Ajustes perfilInicial={'no-existe' as never} config={configInicial()} evaluacion={evaluacion} rutas={null} cambiarCarpeta={async () => {}}
+      actualizar={() => {}} reemplazarConfig={() => {}} reanalizar={async () => {}} volver={() => {}} />)
+    expect(await boton('Reparar')).toBeTruthy()
+    expect(screen.getAllByRole('button').filter((b) => b.getAttribute('aria-pressed') === 'true' && /Ligero|Equilibrado|Alto|Mínimo/.test(b.textContent ?? ''))).toHaveLength(0)
+    expect(screen.getByRole('button', { name: /^Cambiar/ })).toHaveProperty('disabled', true)
+  })
+
+  it('en Ajustes, un perfil guardado que ya no está en la evaluación cuenta como el recomendado', async () => {
+    const evaluacion = evaluarEjemplo(equipoEjemplo)
+    const recomendado = evaluacion.perfiles.find((x) => x.id === evaluacion.recomendado)!
+    render(<Ajustes config={{ ...configInicial(), perfil: 'no-existe' as never }} evaluacion={evaluacion} rutas={null} cambiarCarpeta={async () => {}}
+      actualizar={() => {}} reemplazarConfig={() => {}} reanalizar={async () => {}} volver={() => {}} />)
+    expect(await boton('Reparar')).toBeTruthy()
+    expect(screen.getByText(new RegExp(`^Perfil actual: ${recomendado.nombre}`))).toBeTruthy()
+  })
+
+  describe('un perfil guardado que ya no está en la evaluación (INS-43)', () => {
+    const huerfana = () => ({ ...configInicial(), perfil: 'no-existe' as never })
+    const recomendadoDe = (e: ReturnType<typeof evaluarEjemplo>) => e.perfiles.find((x) => x.id === e.recomendado)!
+
+    it('perfilDe devuelve el perfil pedido, y si no está (o es null) el recomendado, y si tampoco el primero', () => {
+      const e = evaluarEjemplo(equipoEjemplo)
+      expect(perfilDe(e, 'ligero').id).toBe('ligero')
+      expect(perfilDe(e, 'no-existe').id).toBe(e.recomendado)
+      expect(perfilDe(e, null).id).toBe(e.recomendado)
+      expect(perfilDe(e, undefined).id).toBe(e.recomendado)
+      expect(perfilDe({ ...e, recomendado: 'tampoco' }, 'no-existe')).toBe(e.perfiles[0])
+      expect(() => perfilDe({ ...e, perfiles: [] }, 'ligero')).toThrow('La evaluación no trae ningún perfil')
+    })
+
+    it('Descarga no se cae y descarga el perfil recomendado', async () => {
+      const e = evaluarEjemplo(equipoEjemplo)
+      render(<Descarga ir={() => {}} config={huerfana()} evaluacion={e} actualizar={() => {}} />)
+      expect(await screen.findByText(new RegExp(`^Perfil ${recomendadoDe(e).nombre}\\.`))).toBeTruthy()
+    })
+
+    it('Perfil no se cae, marca el recomendado y guarda el recomendado, no el id que no existe', async () => {
+      const e = evaluarEjemplo(equipoEjemplo)
+      const guardados: unknown[] = []
+      render(<ElegirPerfil ir={() => {}} config={huerfana()} evaluacion={e} rutas={null} cambiarCarpeta={async () => {}}
+        actualizar={(c) => guardados.push(c.perfil)} />)
+      const tarjeta = await boton(new RegExp(`^${recomendadoDe(e).nombre}`))
+      expect(tarjeta.getAttribute('aria-pressed')).toBe('true')
+      fireEvent.click(await boton(/^Descargar/))
+      expect(guardados).toEqual([e.recomendado])
+    })
+
+    it('Listo no se cae y enseña el perfil recomendado', () => {
+      const e = evaluarEjemplo(equipoEjemplo)
+      render(<Listo config={huerfana()} evaluacion={e} rutas={null} jugar={() => {}} />)
+      expect(screen.getByText(recomendadoDe(e).nombre)).toBeTruthy()
+    })
+  })
+
+  it('durante un cambio de perfil, el control de CPU, Reparar y la carpeta están desactivados', async () => {
+    await hastaAjustes()
+    fijarRetardoCambioPerfil(300)
+    fireEvent.click(await boton(/^Ligero/))
+    fireEvent.click(await boton(/^Cambiar/))
+    await boton('Pausar')
+    expect(screen.getByRole('button', { name: 'Alto' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Moderado' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Reparar' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: /Mover/ })).toHaveProperty('disabled', true)
+    await boton(/^Borrar modelos que ya no uso/, 5000)
+    expect(screen.getByRole('button', { name: 'Alto' })).toHaveProperty('disabled', false)
+  }, 30000)
+
+  it('si cambiar de perfil falla, muestra el error y sigue el perfil de antes', async () => {
+    await hastaAjustes()
+    const antes = (await ejemplo.cargarConfig()).perfil
+    fijarErrorCambioPerfil('El motor de IA no arranca con el perfil nuevo (x); sigue el perfil de antes.')
+    fireEvent.click(await boton(/^Ligero/))
+    fireEvent.click(await boton(/^Cambiar/))
+    expect((await screen.findByRole('alert')).textContent).toContain('sigue el perfil de antes')
+    expect((await ejemplo.cargarConfig()).perfil).toBe(antes)
+  }, 30000)
+
+  describe('motor detenido', () => {
+    const aviso = { motivo: 'El motor de IA se detuvo: out of memory', sinMemoria: true }
+    const conAsistenteHecho = async () => {
+      await ejemplo.guardarConfig({ ...configInicial(), consentimientoAceptado: true, permisoAnalisis: true, equipo: await ejemplo.analizarEquipo(), perfil: 'equilibrado', pasoAsistente: 7, asistenteCompletado: true })
+    }
+
+    it('perfilMasLigero elige el de memoria justo por debajo, sin experimentales, y null con el más ligero', () => {
+      const ids = catalogo.perfiles.map((p) => p.id)
+      expect(perfilMasLigero(catalogo.perfiles, 'equilibrado')).toBe('ligero')
+      expect(perfilMasLigero(catalogo.perfiles, 'ligero')).toBe('minimo')
+      expect(perfilMasLigero(catalogo.perfiles, ids[0])).toBeNull()
+      expect(perfilMasLigero(catalogo.perfiles, null)).toBeNull()
+      const mezcla = [{ id: 'a', memoriaGb: 1 }, { id: 'x', memoriaGb: 2, experimental: true }, { id: 'b', memoriaGb: 3 }] as never
+      expect(perfilMasLigero(mezcla, 'b' as never)).toBe('a')
+    })
+
+    it('al montar, si hay un aviso pendiente, sale la pantalla con el motivo', async () => {
+      await conAsistenteHecho()
+      fijarMotorDetenido(aviso)
+      render(<App />)
+      expect(await screen.findByText('El motor de IA se ha detenido')).toBeTruthy()
+      expect(screen.getByText(aviso.motivo)).toBeTruthy()
+    })
+
+    it('el evento abre la pantalla y la escucha se limpia al desmontar', async () => {
+      await conAsistenteHecho()
+      const { unmount } = render(<App />)
+      await boton(/Ajustes/, 3000)
+      expect(oyentesMotor()).toBe(1)
+      emitirMotorDetenido(aviso)
+      expect(await screen.findByText('El motor de IA se ha detenido')).toBeTruthy()
+      unmount()
+      expect(oyentesMotor()).toBe(0)
+    })
+
+    it('Reintentar con éxito vuelve a donde estaba', async () => {
+      await conAsistenteHecho()
+      fijarMotorDetenido(aviso)
+      render(<App />)
+      fireEvent.click(await boton('Reintentar'))
+      await waitFor(() => expect(screen.queryByText('El motor de IA se ha detenido')).toBeNull())
+      expect(await boton(/Ajustes/)).toBeTruthy()
+    })
+
+    it('Reintentar con fallo se queda y muestra el error real', async () => {
+      await conAsistenteHecho()
+      fijarMotorDetenido(aviso)
+      fijarErrorReintento('El motor de IA no arranca: falta memoria')
+      render(<App />)
+      fireEvent.click(await boton('Reintentar'))
+      expect((await screen.findByRole('alert')).textContent).toBe('El motor de IA no arranca: falta memoria')
+      expect(screen.getByText('El motor de IA se ha detenido')).toBeTruthy()
+      expect(await boton('Reintentar')).toHaveProperty('disabled', false)
+    })
+
+    it('«Cambiar a un perfil más ligero» lleva a Ajustes con el siguiente perfil elegido, y no sale sin falta de memoria', async () => {
+      await conAsistenteHecho()
+      fijarMotorDetenido({ ...aviso, sinMemoria: false })
+      render(<App />)
+      await screen.findByText('El motor de IA se ha detenido')
+      expect(screen.queryByRole('button', { name: 'Cambiar a un perfil más ligero' })).toBeNull()
+      cleanup()
+      fijarMotorDetenido(aviso)
+      render(<App />)
+      fireEvent.click(await boton('Cambiar a un perfil más ligero'))
+      expect((await boton(/^Ligero/)).getAttribute('aria-pressed')).toBe('true')
+    })
+
+    it('un aviso en el asistente: Reintentar con éxito sigue en el asistente, y Volver de Ajustes (desde «más ligero») también', async () => {
+      await hastaElPerfil()
+      emitirMotorDetenido(aviso)
+      fireEvent.click(await boton('Reintentar'))
+      await waitFor(() => expect(screen.queryByText('El motor de IA se ha detenido')).toBeNull())
+      expect(await boton(/^Equilibrado/)).toBeTruthy()
+      emitirMotorDetenido(aviso)
+      fireEvent.click(await boton('Cambiar a un perfil más ligero'))
+      fireEvent.click(await boton('Volver'))
+      expect(await boton(/^Equilibrado/)).toBeTruthy()
+      expect(screen.queryByRole('button', { name: /Ajustes/ })).toBeNull()
+    }, 30000)
+
+    it('un aviso durante un cambio de perfil espera: Ajustes sigue y la pantalla sale al acabar', async () => {
+      await conAsistenteHecho()
+      render(<App />)
+      fireEvent.click(await boton(/Ajustes/))
+      fijarRetardoCambioPerfil(300)
+      fireEvent.click(await boton(/^Ligero/))
+      fireEvent.click(await boton(/^Cambiar/))
+      await boton('Pausar')
+      emitirMotorDetenido(aviso)
+      await new Promise((ok) => setTimeout(ok, 50))
+      expect(screen.queryByText('El motor de IA se ha detenido')).toBeNull()
+      expect(screen.getByRole('button', { name: 'Pausar' })).toBeTruthy()
+      expect(await screen.findByText('El motor de IA se ha detenido', {}, { timeout: 10000 })).toBeTruthy()
+    }, 30000)
+
+    it('un aviso durante un cambio que ya no sigue en pie no sale al acabar', async () => {
+      await conAsistenteHecho()
+      render(<App />)
+      fireEvent.click(await boton(/Ajustes/))
+      fijarRetardoCambioPerfil(300)
+      fireEvent.click(await boton(/^Ligero/))
+      fireEvent.click(await boton(/^Cambiar/))
+      await boton('Pausar')
+      emitirMotorDetenido(aviso)
+      fijarMotorDetenido(null)
+      await boton(/^Borrar modelos que ya no uso/, 5000)
+      await new Promise((ok) => setTimeout(ok, 100))
+      expect(screen.queryByText('El motor de IA se ha detenido')).toBeNull()
+    }, 30000)
+
+    it('Pausar con un error que no es de cancelación muestra el error real', async () => {
+      await conAsistenteHecho()
+      render(<App />)
+      fireEvent.click(await boton(/Ajustes/))
+      fijarRetardoCambioPerfil(300)
+      fijarErrorCambioPerfil('El motor de IA no arranca con el perfil nuevo (x).')
+      fireEvent.click(await boton(/^Ligero/))
+      fireEvent.click(await boton(/^Cambiar/))
+      fireEvent.click(await boton('Pausar'))
+      expect((await screen.findByRole('alert')).textContent).toContain('no arranca con el perfil nuevo')
+      expect(screen.queryByText(/Descarga en pausa|pausad/i)).toBeNull()
+    }, 30000)
+
+    it('Copiar informe copia y confirma; si copiar falla deja el texto desplegado', async () => {
+      await conAsistenteHecho()
+      fijarMotorDetenido(aviso)
+      render(<App />)
+      fireEvent.click(await boton('Copiar informe'))
+      expect(await screen.findByText('Copiado')).toBeTruthy()
+      expect(textoCopiado()).toBe(TEXTO_INFORME)
+      cleanup()
+      fijarErrorCopiar('portapapeles no disponible')
+      render(<App />)
+      fireEvent.click(await boton('Copiar informe'))
+      expect((await screen.findByRole('alert')).textContent).toMatch(/cópialo a mano/)
+      expect(screen.getByText(/Tarkor \(informe de ejemplo\)/)).toBeTruthy()
+      expect(screen.queryByText('Copiado')).toBeNull()
+    })
+  })
 
   it('guarda el progreso para continuar donde se quedó', async () => {
     await hastaElPermiso()

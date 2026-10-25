@@ -195,8 +195,49 @@ export const ajustes = {
   volver: 'Volver',
   carpeta: 'Carpeta de la IA',
   moverCarpeta: 'Mover a otra carpeta',
+  pausar: 'Pausar',
+  cambiando: 'Cambiando de perfil…',
+  /** Principio del mensaje con que el núcleo informa de una pausa (`Error::Cancelado`, app/nucleo). */
+  prefijoCancelacion: 'Descarga cancelada',
+  pausado: 'Cambio pausado. Lo descargado se conserva y sigue el perfil de antes.',
+  borrar: (gb: string) => `Borrar modelos que ya no uso (${gb} GB)`,
+  borrando: 'Borrando…',
+  dondeCorre: {
+    gpu: 'La IA usa la gráfica al 100 %',
+    repartida: (gpu: number) => `Repartida: ${gpu} % gráfica, ${100 - gpu} % procesador (va más lenta)`,
+    cpu: 'La IA va en el procesador',
+    nada: 'Se carga al narrar el primer turno',
+    memoria: (gb: string) => `ocupa ${gb} GB`,
+  },
+}
+
+export const informe = {
+  copiar: 'Copiar informe',
+  copiado: 'Copiado',
+  verDetalles: 'Ver detalles',
+  ocultarDetalles: 'Ocultar detalles',
+  cargando: 'Preparando el informe…',
+  errorCopiar: 'No se pudo copiar solo: selecciona el texto de abajo y cópialo a mano.',
+  errorInforme: 'No se pudo preparar el informe.',
+}
+
+export const motorDetenido = {
+  titulo: 'El motor de IA se ha detenido',
+  lead: 'Tu partida está guardada hasta el último turno completado.',
+  reintentar: 'Reintentar',
+  reintentando: 'Reintentando…',
+  masLigero: 'Cambiar a un perfil más ligero',
+  sinMemoria: 'Parece que se quedó sin memoria.',
 }
 
 export const errores = {
   guardar: 'No se pudo guardar la configuración en la carpeta de datos. Comprueba que hay espacio libre.',
+}
+
+/** La frase de «dónde corre la IA» según el porcentaje en la gráfica (`null` = nada cargado). */
+export function fraseUso(porcentajeGpu: number | null): string {
+  const d = ajustes.dondeCorre
+  if (porcentajeGpu === null) return d.nada
+  const gpu = Math.min(100, Math.max(0, Math.round(porcentajeGpu)))
+  return gpu >= 100 ? d.gpu : gpu <= 0 ? d.cpu : d.repartida(gpu)
 }

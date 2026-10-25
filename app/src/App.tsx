@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from './api'
 import { configInicial } from './ejemplo'
 import { errores } from './textos'
-import type { Config, Evaluacion, Rutas } from './tipos'
+import type { Config, Evaluacion, MotorDetenido, PerfilId, Rutas } from './tipos'
+import { perfilMasLigero } from './tipos'
+import { PantallaMotorDetenido } from './pantallaMotor'
 import { Ajustes, Bienvenida, ElegirPerfil, Juego, Listo, QueSeInstala, TuEquipo } from './pantallas'
 import { Comprobacion, Descarga } from './pantallasIa'
 
@@ -14,7 +16,40 @@ export default function App() {
   const [evaluacion, setEvaluacion] = useState<Evaluacion | null>(null)
   const [vista, setVista] = useState<Vista>('asistente')
   const [error, setError] = useState<string | null>(null)
+  const [aviso, setAviso] = useState<MotorDetenido | null>(null)
+  const [perfilAjustes, setPerfilAjustes] = useState<PerfilId | undefined>()
   const ultima = useRef<Config | null>(null)
+  // Ajustes está cambiando de perfil: el aviso espera (si no, Ajustes se desmonta y pierde progreso, Pausar y error).
+  const [cambiando, setCambiando] = useState(false)
+  // Vista en la que estaba la app cuando llegó el aviso, y a dónde lleva «Volver» de Ajustes.
+  const vistaRef = useRef<Vista>('asistente')
+  vistaRef.current = vista
+  const antesDelAviso = useRef<Vista | null>(null)
+  const [volverA, setVolverA] = useState<Vista>('juego')
+  const ponerAviso = useCallback((a: MotorDetenido) => {
+    if (antesDelAviso.current === null) antesDelAviso.current = vistaRef.current
+    setAviso(a)
+  }, [])
+
+  // La pantalla del motor detenido sale con el evento y, al montar, si el aviso se emitió antes de escuchar.
+  useEffect(() => {
+    let vivo = true
+    let quitar: (() => void) | null = null
+    api.alMotorDetenido((a) => ponerAviso(a)).then((f) => { if (vivo) quitar = f; else f() }).catch(() => {})
+    return () => { vivo = false; quitar?.() }
+  }, [ponerAviso])
+
+  // Al montar (aviso emitido antes de escuchar) y al acabar un cambio de perfil se lee el aviso: si el motor ya no está parado, no se muestra.
+  useEffect(() => {
+    if (cambiando) return
+    let vivo = true
+    void api.motorDetenido().then((a) => {
+      if (!vivo) return
+      if (a) ponerAviso(a)
+      else { antesDelAviso.current = null; setAviso(null) }
+    }, () => {})
+    return () => { vivo = false }
+  }, [cambiando, ponerAviso])
 
   useEffect(() => {
     void (async () => {
@@ -35,6 +70,12 @@ export default function App() {
     ultima.current = siguiente
     setConfig(siguiente)
     api.guardarConfig(siguiente).then(() => setError(null), () => setError(errores.guardar))
+  }, [])
+
+  // El núcleo ya guardó este `Config` (p. ej. al cambiar de perfil): se adopta tal cual, sin volver a guardarlo.
+  const reemplazarConfig = useCallback((c: Config) => {
+    ultima.current = c
+    setConfig(c)
   }, [])
 
   const ir = useCallback((paso: number) => actualizar({ pasoAsistente: Math.min(7, Math.max(1, paso)) }), [actualizar])
@@ -72,13 +113,24 @@ export default function App() {
 
   if (!config) return null
 
-  const aviso = error && <div className="error" role="alert" style={{ position: 'fixed', bottom: 16, left: 16, right: 16 }}>{error}</div>
+  const avisoError = error && <div className="error" role="alert" style={{ position: 'fixed', bottom: 16, left: 16, right: 16 }}>{error}</div>
 
+  if (aviso && !cambiando) {
+    const salir = () => { antesDelAviso.current = null; setAviso(null) }
+    return <>{avisoError}<PantallaMotorDetenido aviso={aviso}
+      masLigero={evaluacion ? perfilMasLigero(evaluacion.perfiles, config.perfil) : null}
+      reintentado={salir}
+      irAAjustes={(p) => {
+        const antes = antesDelAviso.current ?? vista
+        if (antes !== 'ajustes') setVolverA(antes)
+        setPerfilAjustes(p); salir(); setVista('ajustes')
+      }} /></>
+  }
   if (vista === 'juego') {
-    return <>{aviso}<Juego abrirAjustes={() => setVista('ajustes')} repetir={() => { setVista('asistente'); actualizar({ ...configInicial(), carpetaIa: config.carpetaIa, pasoAsistente: 1 }); setEvaluacion(null) }} /></>
+    return <>{avisoError}<Juego abrirAjustes={() => setVista('ajustes')} repetir={() => { setVista('asistente'); actualizar({ ...configInicial(), carpetaIa: config.carpetaIa, pasoAsistente: 1 }); setEvaluacion(null) }} /></>
   }
   if (vista === 'ajustes' && evaluacion) {
-    return <>{aviso}<Ajustes config={config} evaluacion={evaluacion} rutas={rutas} cambiarCarpeta={cambiarCarpeta} actualizar={actualizar} reanalizar={analizar} volver={() => setVista('juego')} /></>
+    return <>{avisoError}<Ajustes perfilInicial={perfilAjustes} config={config} evaluacion={evaluacion} rutas={rutas} cambiarCarpeta={cambiarCarpeta} actualizar={actualizar} reemplazarConfig={reemplazarConfig} reanalizar={analizar} alCambiar={setCambiando} volver={() => { setPerfilAjustes(undefined); setVista(volverA); setVolverA('juego') }} /></>
   }
 
   // Sin evaluación no se puede pasar del paso 3.
@@ -94,5 +146,5 @@ export default function App() {
     case 6: pantalla = <Comprobacion {...nav} />; break
     default: pantalla = <Listo config={config} evaluacion={evaluacion!} rutas={rutas} jugar={() => { actualizar({ asistenteCompletado: true }); setVista('juego') }} />
   }
-  return <>{aviso}{pantalla}</>
+  return <>{avisoError}{pantalla}</>
 }

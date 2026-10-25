@@ -119,12 +119,23 @@ Ver [`06`](06-inventario-exclusiones.md).
 Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md).
 
 - [ ] **INS-41** Integrar el build del juego (frontend + backend en bytecode + plantilla) en la app de
-  Tauri.
+  Tauri. Pendiente: pantalla del motor detenido: variante "El motor del juego se ha detenido" (docs/11), cuando
+  `MotorDetenido` diga qué proceso es.
 - [ ] **INS-42** Asistente real de punta a punta: descargas y comprobaciones de verdad; calentar el
   narrador al arrancar. Incluye la autopausa al perder la red con reanudación sola y la velocidad
-  de la narración de prueba (ronda de diseño del 2026-10-25).
-- [ ] **INS-43** Ajustes → Rendimiento de la IA (con uso de la gráfica vía `/api/ps`) y pantalla de
-  motor detenido.
+  de la narración de prueba (ronda de diseño del 2026-10-25). Si calentar el narrador o una narración fallan por
+  falta de memoria (`serve` sigue vivo y la pantalla del motor detenido no sale), ofrecer el perfil más ligero
+  (hallazgo de la revisión de `INS-43`).
+- [x] **INS-43** (2026-10-25) Ajustes → Rendimiento de la IA (con uso de la gráfica vía `/api/ps`) y pantalla de
+  motor detenido. Decidido el 2026-10-25 (ver `11`): frase de dónde corre la IA y memoria real; cambiar de perfil
+  descarga, reinicia el motor y ofrece borrar lo que sobra; "Copiar informe" con "Ver detalles"; un hilo de Rust
+  vigila el motor y avisa con un evento. Hecho: núcleo (`ollama::resumen_uso`, `sobrantes`, `informe.rs` con
+  `anonimizar`, marca de arranque en el registro y `sin_memoria` desde ella), comandos `uso_ia`, `cambiar_perfil`,
+  `modelos_sobrantes`, `borrar_modelos`, `informe`, `motor_detenido` y `reintentar_motor`, hilo de vigilancia con
+  el evento `motor-detenido`; frontal: línea de uso cada 5 s, cambio de perfil con progreso y pausa, borrar
+  sobrantes, `CopiarInforme` y la pantalla del motor detenido (Reintentar, "Cambiar a un perfil más ligero");
+  tests de vitest y E2E `app/e2e/rendimiento.e2e.mjs`. Pendiente de `INS-8`: en Windows, la vigilancia y el
+  reinicio del motor, el informe con rutas de Windows (`anonimizar`) y la línea de uso con una gráfica real.
 - [ ] **INS-44** NSIS: castellano, instalación por usuario, desinstalador con las dos casillas.
 - [ ] **INS-45** AppImage (+ `.deb` opcional) compilado en Ubuntu 22.04.
 - [ ] **INS-46** Workflow de GitHub Actions en el repo privado que publica releases con `SHA256SUMS`

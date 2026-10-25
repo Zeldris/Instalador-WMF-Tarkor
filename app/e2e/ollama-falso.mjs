@@ -2,13 +2,36 @@
 // (versión, modelos, descarga con progreso por capas, generación y /api/ps), para recorrer el
 // asistente sin descargar gigas ni depender del registro de modelos.
 //
-// Uso: node e2e/ollama-falso.mjs [puerto]   → imprime la URL; la app lo usa con TARKOR_OLLAMA_URL.
+// Dos modos:
+//  - `node e2e/ollama-falso.mjs [puerto]` → un Ollama «externo»: imprime la URL y la app lo usa con
+//    TARKOR_OLLAMA_URL (todo en memoria).
+//  - `node e2e/ollama-falso.mjs serve` → el motor «propio», lanzado por la app como `ollama serve`
+//    (rendimiento.e2e.mjs lo instala detrás de un `bin/ollama`): escucha en OLLAMA_HOST y guarda los
+//    modelos y cuál está cargado en OLLAMA_MODELS/falso.json, para sobrevivir a los reinicios.
+//    `/api/delete` borra de verdad y `/api/ps` da `size` y `size_vram` (60 % en la gráfica).
+//    FALSO_PASO_MS alarga el progreso de `/api/pull` (80 ms por paso por defecto).
 
 import { createServer } from 'node:http'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 
-const puerto = Number(process.argv[2] ?? 11499)
-const descargados = new Set()
+const propio = process.argv[2] === 'serve'
+const [host, puertoPropio] = (process.env.OLLAMA_HOST ?? '127.0.0.1:11499').split(':')
+const puerto = propio ? Number(puertoPropio) : Number(process.argv[2] ?? 11499)
 const esperar = (ms) => new Promise((ok) => setTimeout(ok, ms))
+const pasoMs = Number(process.env.FALSO_PASO_MS ?? 80)
+// Tamaños en disco (bytes) parecidos a los reales; el resto, 500 MB.
+const TAMANOS = { 'qwen2.5:7b': 4.7e9, 'qwen2.5:1.5b-instruct': 1.0e9, 'qwen3.5:2b': 2.7e9, 'nomic-embed-text:latest': 2.74e8 }
+const tamano = (m) => TAMANOS[m] ?? 5e8
+
+// Estado: modelos descargados (en el motor propio, en OLLAMA_MODELS/falso.json) y el que está cargado.
+const archivo = propio ? join(process.env.OLLAMA_MODELS ?? '.', 'falso.json') : null
+const estado = { modelos: [], cargado: null }
+if (archivo) {
+  try { Object.assign(estado, JSON.parse(readFileSync(archivo, 'utf8'))) } catch { /* primera vez */ }
+}
+const guardar = () => { if (archivo) { mkdirSync(join(archivo, '..'), { recursive: true }); writeFileSync(archivo, JSON.stringify(estado)) } }
+const etiqueta = (m) => (m === 'nomic-embed-text' ? 'nomic-embed-text:latest' : m)
 
 async function cuerpo(req) {
   let datos = ''
@@ -23,18 +46,31 @@ createServer(async (req, res) => {
   }
   const ruta = req.url
   if (ruta === '/api/version') return json({ version: '0.34.3-falso' })
-  if (ruta === '/api/tags') return json({ models: [...descargados].map((name) => ({ name })) })
-  if (ruta === '/api/ps') return json({ models: [] })
+  if (ruta === '/api/tags') return json({ models: estado.modelos.map((name) => ({ name, size: tamano(name) })) })
+  if (ruta === '/api/ps') {
+    // Un modelo cargado reparte su memoria: 60 % en la gráfica y el resto en el procesador.
+    const m = estado.cargado
+    return json({ models: m && estado.modelos.includes(m) ? [{ name: m, size: 2e9, size_vram: 1.2e9 }] : [] })
+  }
+  if (ruta === '/api/delete' && req.method === 'DELETE') {
+    const { model } = await cuerpo(req)
+    if (!estado.modelos.includes(etiqueta(model))) return json({ error: `model '${model}' not found` }, 404)
+    estado.modelos = estado.modelos.filter((m) => m !== etiqueta(model))
+    if (estado.cargado === etiqueta(model)) estado.cargado = null
+    guardar()
+    return json({})
+  }
   if (ruta === '/api/pull') {
     const { model } = await cuerpo(req)
     res.writeHead(200, { 'content-type': 'application/x-ndjson' })
     res.write(JSON.stringify({ status: 'pulling manifest' }) + '\n')
     for (let i = 1; i <= 5; i++) {
-      await esperar(80)
+      await esperar(pasoMs)
       res.write(JSON.stringify({ status: `pulling ${model}`, digest: `sha256:${model}`, total: 500, completed: i * 100 }) + '\n')
     }
     res.write(JSON.stringify({ status: 'success' }) + '\n')
-    descargados.add(model === 'nomic-embed-text' ? 'nomic-embed-text:latest' : model)
+    if (!estado.modelos.includes(etiqueta(model))) estado.modelos.push(etiqueta(model))
+    guardar()
     return res.end()
   }
   if (ruta === '/api/embed') {
@@ -52,8 +88,15 @@ createServer(async (req, res) => {
   }
   if (ruta === '/api/generate') {
     const { model } = await cuerpo(req)
-    if (![...descargados].some((d) => d.startsWith(model))) return json({ error: `model '${model}' not found` }, 404)
+    const hay = estado.modelos.find((d) => d.startsWith(model))
+    if (!hay) return json({ error: `model '${model}' not found` }, 404)
+    estado.cargado = hay
+    guardar()
     return json({ response: ' La niebla del estrecho se abre y deja ver las hogueras de Berig. ', eval_count: 60, eval_duration: 5e9 })
   }
   json({ error: 'ruta desconocida' }, 404)
-}).listen(puerto, '127.0.0.1', () => console.log(`http://127.0.0.1:${puerto}`))
+}).listen(puerto, propio ? host : '127.0.0.1', () => {
+  // Como Ollama de verdad, que vuelca su configuración (con la carpeta personal) al registro al arrancar.
+  if (propio) console.log(`time=falso level=INFO source=routes.go msg="server config" env="map[HOME:${process.env.HOME} OLLAMA_HOST:${host}:${puerto} OLLAMA_MODELS:${process.env.OLLAMA_MODELS}]"`)
+  else console.log(`http://127.0.0.1:${puerto}`)
+})

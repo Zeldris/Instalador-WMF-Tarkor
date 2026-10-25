@@ -5,7 +5,7 @@
 
 import type { Api } from './api'
 import { catalogo, descargaGb as descargaDe } from './catalogo'
-import type { Config, Equipo, Evaluacion, PerfilEvaluado } from './tipos'
+import type { Config, Equipo, Evaluacion, MotorDetenido, PerfilEvaluado, Sobrante, UsoIa } from './tipos'
 
 export const configInicial = (): Config => ({
   version: 1,
@@ -63,7 +63,7 @@ export function evaluarEjemplo(equipo: Equipo | null): Evaluacion {
       necesitaDiscoGb,
     }
   })
-  const masLigero = perfiles.find((p) => !p.experimental)!.id
+  const masLigero = (perfiles.find((p) => !p.experimental) ?? perfiles[0]).id
   if (paraIa === null) return { memoriaParaIaGb: null, discoLibreGb: disco, perfiles, maximoSeguro: null, recomendado: masLigero, equipoInsuficiente: false }
   const caben = perfiles.filter((p) => p.cabeEnMemoria && p.cabeEnDisco && !p.experimental)
   const ultimo = caben.at(-1)
@@ -73,6 +73,41 @@ export function evaluarEjemplo(equipo: Equipo | null): Evaluacion {
 }
 
 let guardada = configInicial()
+let sobrantes: Sobrante[] = []
+let usoSimulado: UsoIa | Error = { porcentajeGpu: 100, memoriaMb: 5400 }
+/** Para los tests: lo que dirá `usoIa` (un `Error` hace que falle, como con el motor parado). */
+export const fijarUsoIa = (uso: UsoIa | Error) => { usoSimulado = uso }
+/** Para los tests: vuelve al estado de ejemplo de los modelos sobrantes y del uso. */
+let errorCambioPerfil: string | null = null
+/** Para los tests: el siguiente cambio de perfil falla con este mensaje, sin tocar el perfil guardado. */
+export const fijarErrorCambioPerfil = (mensaje: string) => { errorCambioPerfil = mensaje }
+let retardoCambioPerfil = 0
+/** Para los tests: el cambio de perfil tarda esto (ms) antes de acabar o de fallar. */
+export const fijarRetardoCambioPerfil = (ms: number) => { retardoCambioPerfil = ms }
+export const reiniciarModelos = () => { errorCambioPerfil = null; retardoCambioPerfil = 0; sobrantes = []; usoSimulado = { porcentajeGpu: 100, memoriaMb: 5400 } }
+const modelosDe = (id: string | null) => {
+  const perfil = catalogo.perfiles.find((p) => p.id === id) ?? catalogo.perfiles[0]
+  return [...new Set([perfil.narrador, perfil.cronista, perfil.sugerencias, perfil.embeddings])]
+}
+let avisoMotor: MotorDetenido | null = null
+let errorReintento: string | null = null
+let errorCopiar: string | null = null
+let copiado: string | null = null
+const oyentes = new Set<(a: MotorDetenido) => void>()
+/** Para los tests: el aviso que devolverá `motorDetenido` (null = ninguno). */
+export const fijarMotorDetenido = (aviso: MotorDetenido | null) => { avisoMotor = aviso }
+/** Para los tests: como el evento `motor-detenido` de Rust: guarda el aviso y avisa a quien escuche. */
+export const emitirMotorDetenido = (aviso: MotorDetenido) => { avisoMotor = aviso; oyentes.forEach((f) => f(aviso)) }
+/** Para los tests: el siguiente `reintentarMotor` falla con este mensaje. */
+export const fijarErrorReintento = (mensaje: string | null) => { errorReintento = mensaje }
+/** Para los tests: `copiar` falla con este mensaje (null = funciona). */
+export const fijarErrorCopiar = (mensaje: string | null) => { errorCopiar = mensaje }
+/** Para los tests: lo último que se copió al portapapeles simulado. */
+export const textoCopiado = () => copiado
+/** Para los tests: cuántos oyentes de `motor-detenido` siguen activos. */
+export const oyentesMotor = () => oyentes.size
+export const TEXTO_INFORME = 'Tarkor (informe de ejemplo)\nSistema: Linux\nMotor: en marcha'
+export const reiniciarMotorDetenido = () => { avisoMotor = null; errorReintento = null; errorCopiar = null; copiado = null; oyentes.clear() }
 let cancelado = false
 const pausa = (ms: number) => new Promise((ok) => setTimeout(ok, ms))
 
@@ -143,6 +178,43 @@ export const ejemplo: Api = {
     discoLibreIaGb = DISCO_CARPETA_ELEGIDA_GB
     rutasEjemplo = { ...rutasEjemplo, ia: `${destino}/Tarkor IA` }
     return { ...rutasEjemplo }
+  },
+  usoIa: async () => {
+    if (usoSimulado instanceof Error) throw usoSimulado.message
+    return { ...usoSimulado }
+  },
+  cambiarPerfil: async (perfil, progreso) => {
+    cancelado = false
+    if (retardoCambioPerfil) await pausa(retardoCambioPerfil)
+    if (errorCambioPerfil) throw errorCambioPerfil
+    const antes = modelosDe(guardada.perfil)
+    const nuevos = modelosDe(perfil)
+    const faltan = nuevos.filter((m) => !guardada.modelosDescargados.includes(m))
+    for (const modelo of faltan) {
+      const total = (catalogo.modelos[modelo]?.descargaGb ?? 1) * 1024 ** 3
+      await simular(total, 8, (hecho) => progreso({ modelo, estado: 'pulling', hecho, total }))
+      progreso({ modelo, estado: 'success', hecho: total, total })
+    }
+    guardada = { ...guardada, perfil, modelosDescargados: nuevos }
+    sobrantes = antes.filter((m) => !nuevos.includes(m)).map((modelo) => ({ modelo, gb: catalogo.modelos[modelo]?.descargaGb ?? 1 }))
+    return structuredClone(guardada)
+  },
+  modelosSobrantes: async () => sobrantes.map((s) => ({ ...s })),
+  borrarModelos: async (modelos) => { sobrantes = sobrantes.filter((s) => !modelos.includes(s.modelo)) },
+  informe: async () => TEXTO_INFORME,
+  motorDetenido: async () => (avisoMotor ? { ...avisoMotor } : null),
+  reintentarMotor: async () => {
+    await pausa(30)
+    if (errorReintento) throw errorReintento
+    avisoMotor = null
+  },
+  alMotorDetenido: async (cb) => {
+    oyentes.add(cb)
+    return () => { oyentes.delete(cb) }
+  },
+  copiar: async (texto) => {
+    if (errorCopiar) throw errorCopiar
+    copiado = texto
   },
   comprobar: async (id) => {
     await pausa(150)

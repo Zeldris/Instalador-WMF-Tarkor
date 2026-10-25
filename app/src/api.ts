@@ -2,7 +2,9 @@
 // navegador normal, y los tests) usa un equipo de ejemplo y descargas simuladas.
 
 import { Channel, invoke } from '@tauri-apps/api/core'
-import type { Comprobacion, Config, Equipo, Evaluacion, InfoMotor, ProgresoModelo, ProgresoMotor, Reparacion, Rutas } from './tipos'
+import type { Comprobacion, Config, Equipo, Evaluacion, InfoMotor, MotorDetenido, ProgresoModelo, ProgresoMotor, Reparacion, Rutas, Sobrante, UsoIa } from './tipos'
+import { listen } from '@tauri-apps/api/event'
+import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { open } from '@tauri-apps/plugin-dialog'
 import { ejemplo } from './ejemplo'
 
@@ -26,6 +28,23 @@ export interface Api {
   elegirCarpeta(): Promise<string | null>
   /** Mueve la IA a `<destino>/Tarkor IA` y devuelve las rutas nuevas. */
   cambiarCarpetaIa(destino: string): Promise<Rutas>
+  /** Dónde corre la IA ahora; falla si el motor no está en marcha. */
+  usoIa(): Promise<UsoIa>
+  /** Descarga lo que falte del perfil nuevo (se pausa con `cancelarDescargas`) y devuelve el `Config` ya guardado. */
+  cambiarPerfil(perfil: string, progreso: (p: ProgresoModelo) => void): Promise<Config>
+  /** Modelos del motor propio que no son del perfil actual; vacío con un Ollama externo. */
+  modelosSobrantes(): Promise<Sobrante[]>
+  borrarModelos(modelos: string[]): Promise<void>
+  /** El texto de «Copiar informe» (sin datos personales). */
+  informe(): Promise<string>
+  /** Aviso de motor detenido que aún no se ha resuelto, o null. */
+  motorDetenido(): Promise<MotorDetenido | null>
+  /** Vuelve a arrancar el motor; falla con el motivo si no arranca. */
+  reintentarMotor(): Promise<void>
+  /** Escucha el evento `motor-detenido`; devuelve la función que deja de escuchar. */
+  alMotorDetenido(cb: (aviso: MotorDetenido) => void): Promise<() => void>
+  /** Deja el texto en el portapapeles del sistema. */
+  copiar(texto: string): Promise<void>
 }
 
 function canal<T>(fn: (m: T) => void): Channel<T> {
@@ -52,6 +71,15 @@ const tauri: Api = {
     return typeof r === 'string' ? r : null
   },
   cambiarCarpetaIa: (destino) => invoke('cambiar_carpeta_ia', { destino }),
+  usoIa: () => invoke('uso_ia'),
+  cambiarPerfil: (perfil, progreso) => invoke('cambiar_perfil', { perfil, canal: canal(progreso) }),
+  modelosSobrantes: () => invoke('modelos_sobrantes'),
+  borrarModelos: (modelos) => invoke('borrar_modelos', { modelos }),
+  informe: () => invoke('informe'),
+  motorDetenido: () => invoke('motor_detenido'),
+  reintentarMotor: () => invoke('reintentar_motor'),
+  alMotorDetenido: (cb) => listen<MotorDetenido>('motor-detenido', (e) => cb(e.payload)),
+  copiar: (texto) => writeText(texto),
 }
 
 export const api: Api = enTauri ? tauri : ejemplo

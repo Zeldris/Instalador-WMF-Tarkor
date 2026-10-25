@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api } from './api'
 import { comun, pasos, perfil as t, reparar as tr } from './textos'
+import * as tx from './textos'
 import type { Evaluacion, PerfilId, ProgresoModelo, ProgresoMotor, Reparacion, UsoCpu } from './tipos'
 import { pideConfirmar } from './tipos'
 import { fmt } from './formato'
@@ -158,12 +159,12 @@ export function useMoverCarpeta(cambiar: () => Promise<void>) {
   return { moviendo, error, mover }
 }
 
-export function CarpetaIa({ ruta, accion, moviendo, error, onMover }: { ruta: string; accion: string; moviendo: boolean; error: string | null; onMover: () => void }) {
+export function CarpetaIa({ ruta, accion, moviendo, error, onMover, desactivado = false }: { ruta: string; accion: string; moviendo: boolean; error: string | null; onMover: () => void; desactivado?: boolean }) {
   return (
     <div className="carpeta">
       <div className="fila">
         <span className="tenue">{t.carpeta}</span> <span className="ruta">{ruta}</span>
-        <button type="button" className="enlace" disabled={moviendo} onClick={onMover}>{moviendo ? t.moviendo : accion}</button>
+        <button type="button" className="enlace" disabled={moviendo || desactivado} onClick={onMover}>{moviendo ? t.moviendo : accion}</button>
       </div>
       {error && <div className="error" role="alert">{error}</div>}
     </div>
@@ -176,13 +177,13 @@ function textoMotor(p: ProgresoMotor) {
   return p.fase === 'descargando' ? tr.motor.descargando(pc(p.hecho, p.total)) : tr.motor[p.fase]
 }
 
-function textoModelo(p: ProgresoModelo) {
+export function textoModelo(p: ProgresoModelo) {
   if (p.estado === 'verificando') return tr.comprobandoModelos(pc(p.hecho, p.total))
   return p.total > 0 && p.hecho < p.total ? tr.descargandoModelo(p.modelo, pc(p.hecho, p.total)) : tr.pidiendoModelo(p.modelo)
 }
 
 /** «Reparar» (`INS-49`): el botón, lo que está haciendo y cómo acabó. `alTerminar` solo se llama si salió bien. */
-export function Reparar({ alTerminar }: { alTerminar?: (r: Reparacion) => void }) {
+export function Reparar({ alTerminar, desactivado = false }: { alTerminar?: (r: Reparacion) => void; desactivado?: boolean }) {
   const [reparando, setReparando] = useState(false)
   const [estado, setEstado] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -210,7 +211,7 @@ export function Reparar({ alTerminar }: { alTerminar?: (r: Reparacion) => void }
   return (
     <div className="reparar">
       <div className="fila">
-        <button type="button" className="btn" disabled={reparando} onClick={empezar}>{reparando ? tr.reparando : tr.boton}</button>
+        <button type="button" className="btn" disabled={reparando || desactivado} onClick={empezar}>{reparando ? tr.reparando : tr.boton}</button>
         {reparando && <button type="button" className="btn" onClick={() => { cancelando.current = true; void api.cancelarDescargas() }}>{tr.cancelar}</button>}
         <span className="peq tenue" aria-live="polite">{estado || tr.explicacion}</span>
       </div>
@@ -219,15 +220,15 @@ export function Reparar({ alTerminar }: { alTerminar?: (r: Reparacion) => void }
   )
 }
 
-export function ControlUsoCpu({ uso, hilos, onCambiar }: { uso: UsoCpu; hilos: number; onCambiar: (u: UsoCpu) => void }) {
+export function ControlUsoCpu({ uso, hilos, onCambiar, desactivado = false }: { uso: UsoCpu; hilos: number; onCambiar: (u: UsoCpu) => void; desactivado?: boolean }) {
   const moderado = Math.max(1, Math.floor(hilos / 2))
   const alto = Math.max(1, hilos - 1)
   return (
     <div className="fila">
       <span>{t.usoCpu}</span>
       <div className="seg" role="group" aria-label={t.usoCpu}>
-        <button type="button" aria-pressed={uso === 'moderado'} onClick={() => onCambiar('moderado')}>{t.moderado}</button>
-        <button type="button" aria-pressed={uso === 'alto'} onClick={() => onCambiar('alto')}>{t.alto}</button>
+        <button type="button" aria-pressed={uso === 'moderado'} disabled={desactivado} onClick={() => onCambiar('moderado')}>{t.moderado}</button>
+        <button type="button" aria-pressed={uso === 'alto'} disabled={desactivado} onClick={() => onCambiar('alto')}>{t.alto}</button>
       </div>
       <span className="peq tenue">{uso === 'moderado' ? t.usoModerado(moderado, hilos) : t.usoAlto(alto, hilos)}</span>
     </div>
@@ -250,5 +251,65 @@ export function DetallesTecnicos({ evaluacion }: { evaluacion: Evaluacion }) {
       </div>
       <p className="peq tenue" style={{ marginTop: 6 }}>{t.detallesPie}</p>
     </details>
+  )
+}
+
+/** «Copiar informe» y «Ver detalles» (docs/11): copia con el portapapeles de Tauri; si falla, deja el texto desplegado para copiarlo a mano. */
+export function CopiarInforme() {
+  const [texto, setTexto] = useState<string | null>(null)
+  const [visible, setVisible] = useState(false)
+  const [copiado, setCopiado] = useState(false)
+  const [ocupado, setOcupado] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [cargando, setCargando] = useState(false)
+  // El informe cambia (motor parado, memoria): se pide de nuevo cada vez, y mientras llega se ve «cargando».
+  const obtener = async (): Promise<string> => {
+    setCargando(true)
+    try {
+      const x = await api.informe()
+      setTexto(x)
+      return x
+    } finally {
+      setCargando(false)
+    }
+  }
+  const copiar = async () => {
+    setOcupado(true)
+    setError(null)
+    setCopiado(false)
+    let dado: string
+    try {
+      dado = await obtener()
+    } catch {
+      setError(tx.informe.errorInforme)
+      setOcupado(false)
+      return
+    }
+    try {
+      await api.copiar(dado)
+      setCopiado(true)
+    } catch {
+      setVisible(true)
+      setError(tx.informe.errorCopiar)
+    }
+    setOcupado(false)
+  }
+  const detalles = async () => {
+    if (visible) { setVisible(false); return }
+    setError(null)
+    setVisible(true)
+    try { await obtener() } catch { setVisible(false); setError(tx.informe.errorInforme) }
+  }
+  return (
+    <div>
+      <div className="fila">
+        <button type="button" className="btn" disabled={ocupado} onClick={() => void copiar()}>{tx.informe.copiar}</button>
+        <button type="button" className="btn" aria-expanded={visible} onClick={() => void detalles()}>{visible ? tx.informe.ocultarDetalles : tx.informe.verDetalles}</button>
+        {copiado && <span className="peq tenue" role="status">{tx.informe.copiado}</span>}
+      </div>
+      {error && <div className="error" role="alert">{error}</div>}
+      {cargando && <p className="peq tenue" role="status">{tx.informe.cargando}</p>}
+      {visible && !cargando && texto !== null && <pre className="peq" tabIndex={0} aria-label={tx.informe.copiar} style={{ whiteSpace: 'pre-wrap', userSelect: 'text', maxHeight: 240, overflow: 'auto' }}>{texto}</pre>}
+    </div>
   )
 }

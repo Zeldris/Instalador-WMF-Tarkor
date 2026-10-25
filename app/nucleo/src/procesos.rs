@@ -69,6 +69,57 @@ pub enum Estado {
     Detenido { motivo: String },
 }
 
+/// Avisa una sola vez de una parada: `Some(motivo)` si el proceso está `Detenido` y todavía no se
+/// había avisado. Mientras siga detenido (o se esté reintentando) no vuelve a avisar.
+pub fn aviso_nuevo(estado: &Estado, ya_avisado: bool) -> Option<&str> {
+    match estado {
+        Estado::Detenido { motivo } if !ya_avisado => Some(motivo),
+        _ => None,
+    }
+}
+
+/// Lo que se cuenta al frontal cuando el proceso se detiene (evento `motor-detenido`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MotorDetenido {
+    pub motivo: String,
+    /// El registro habla de falta de memoria: se ofrece un perfil más ligero.
+    pub sin_memoria: bool,
+}
+
+/// Principio de la línea que `Proceso::lanzar` escribe en el registro antes de cada arranque.
+const MARCA_ARRANQUE: &str = "--- Tarkor: arranque de ";
+
+/// Lo que el registro lleva desde la última marca de arranque (desde la propia marca); sin marca,
+/// todo el texto. Así una falta de memoria de un arranque anterior no cuenta para el último.
+pub fn desde_ultimo_arranque(texto: &str) -> &str {
+    let mut ini = None;
+    let mut pos = 0;
+    for linea in texto.split_inclusive('\n') {
+        if linea.starts_with(MARCA_ARRANQUE) {
+            ini = Some(pos);
+        }
+        pos += linea.len();
+    }
+    &texto[ini.unwrap_or(0)..]
+}
+
+/// ¿Dicen las líneas del registro que el proceso murió por falta de memoria? Sin distinguir
+/// mayúsculas; son las frases de Ollama/llama.cpp (CPU, CUDA, ROCm y Vulkan).
+pub fn sin_memoria(texto: &str) -> bool {
+    const SENALES: [&str; 7] = [
+        "out of memory",
+        "cudamalloc failed",
+        "unable to allocate",
+        "failed to allocate",
+        "insufficient memory",
+        "requires more system memory",
+        "erroroutofdevicememory",
+    ];
+    let t = texto.to_lowercase();
+    SENALES.iter().any(|s| t.contains(s))
+}
+
 pub struct Proceso {
     pub espec: Especificacion,
     hijo: Option<Child>,
@@ -96,7 +147,9 @@ impl Proceso {
         if let Some(dir) = e.registro.parent() {
             fs::create_dir_all(dir)?;
         }
-        let log = File::options().create(true).append(true).open(&e.registro)?;
+        let mut log = File::options().create(true).append(true).open(&e.registro)?;
+        // Marca de arranque: separa en el registro un arranque de otro (`desde_ultimo_arranque`).
+        writeln!(log, "{MARCA_ARRANQUE}{} ---", e.nombre)?;
         let mut cmd = Command::new(&e.programa);
         cmd.args(&e.argumentos)
             .envs(&e.entorno)
@@ -111,15 +164,22 @@ impl Proceso {
         }
         self.hijo = Some(hijo);
 
-        if !esperar_http(e.puerto, &e.ruta_salud, e.espera_arranque) {
-            let motivo = match self.hijo.as_mut().and_then(|h| h.try_wait().ok().flatten()) {
-                Some(st) => format!("{} se cerró al arrancar ({st})", e.nombre),
-                None => format!("{} no respondió en {} s", e.nombre, e.espera_arranque.as_secs()),
-            };
-            self.parar();
-            return Err(io::Error::other(motivo));
-        }
-        Ok(())
+        // Un proceso que se cierra al arrancar da el error en cuanto se cierra, no al acabar la espera.
+        let fin = Instant::now() + e.espera_arranque;
+        let motivo = loop {
+            if get_ok(e.puerto, &e.ruta_salud) {
+                return Ok(());
+            }
+            if let Some(st) = self.hijo.as_mut().and_then(|h| h.try_wait().ok().flatten()) {
+                break format!("{} se cerró al arrancar ({st})", e.nombre);
+            }
+            if Instant::now() >= fin {
+                break format!("{} no respondió en {} s", e.nombre, e.espera_arranque.as_secs());
+            }
+            std::thread::sleep(Duration::from_millis(150));
+        };
+        self.parar();
+        Err(io::Error::other(motivo))
     }
 
     pub fn url(&self) -> String {
@@ -144,13 +204,6 @@ impl Proceso {
             Ok(()) => Estado::Reiniciado,
             Err(e) => Estado::Detenido { motivo: e.to_string() },
         }
-    }
-
-    /// Reintento manual desde la pantalla "El motor se ha detenido": vuelve a dar un reinicio.
-    pub fn reintentar(&mut self) -> io::Result<()> {
-        self.parar();
-        self.reinicios = 0;
-        self.lanzar()
     }
 
     pub fn parar(&mut self) {
@@ -303,6 +356,18 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn si_se_cierra_al_arrancar_no_agota_la_espera() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut e = espec(dir.path(), "exit 1", puerto_libre().unwrap());
+        e.espera_arranque = Duration::from_secs(30);
+        let inicio = Instant::now();
+        let err = Proceso::arrancar(e).err().unwrap();
+        assert!(err.to_string().contains("se cerró al arrancar"), "{err}");
+        assert!(inicio.elapsed() < Duration::from_secs(5), "tardó {:?}", inicio.elapsed());
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn un_reinicio_y_luego_detenido() {
         let dir = tempfile::tempdir().unwrap();
         // "El proceso" es un sleep; la salud la da un servidor de juguete aparte.
@@ -313,9 +378,51 @@ mod tests {
         assert_eq!(proc.vigilar(), Estado::Reiniciado);
         thread::sleep(Duration::from_millis(600));
         assert!(matches!(proc.vigilar(), Estado::Detenido { motivo } if motivo.contains("dos veces")));
-        // El reintento manual da otra oportunidad.
-        proc.reintentar().unwrap();
-        assert_eq!(proc.vigilar(), Estado::Funcionando);
+        // Cada arranque deja su marca en el registro.
+        let log = fs::read_to_string(dir.path().join("registros/prueba.log")).unwrap();
+        assert_eq!(log.matches(MARCA_ARRANQUE).count(), 2, "{log}");
+    }
+
+    #[test]
+    fn detecta_la_falta_de_memoria_en_el_registro() {
+        for linea in [
+            "ggml_backend_cuda_buffer_type_alloc_buffer: allocating 9000 MiB on device 0: cudaMalloc failed: out of memory",
+            "Error: model requires more system memory (6.1 GiB) than is available (4.0 GiB)",
+            "CUDAMALLOC FAILED",
+            "llama runner: unable to allocate CPU buffer",
+            "vk::Device::allocateMemory: ErrorOutOfDeviceMemory",
+            "failed to allocate compute buffers",
+            "insufficient memory to load",
+        ] {
+            assert!(sin_memoria(linea), "{linea}");
+        }
+        assert!(!sin_memoria(""));
+        assert!(!sin_memoria("time=2026 level=INFO msg=\"Listening on 127.0.0.1:11500\"\nexit status 2"));
+    }
+
+    #[test]
+    fn la_falta_de_memoria_de_un_arranque_viejo_no_cuenta() {
+        let log = format!(
+            "{MARCA_ARRANQUE}El motor de IA ---\nllama runner: out of memory\n{MARCA_ARRANQUE}El motor de IA ---\nListening on 127.0.0.1:11500\nexit status 2\n"
+        );
+        assert!(sin_memoria(&log), "el registro entero sí la tiene");
+        let ultimo = desde_ultimo_arranque(&log);
+        assert!(ultimo.starts_with(MARCA_ARRANQUE) && ultimo.contains("Listening"), "{ultimo}");
+        assert!(!sin_memoria(ultimo), "{ultimo}");
+        // Si la falta de memoria es del último arranque, sí.
+        let log2 = format!("{MARCA_ARRANQUE}x ---\nbien\n{MARCA_ARRANQUE}x ---\nout of memory\n");
+        assert!(sin_memoria(desde_ultimo_arranque(&log2)));
+        // Sin marca (registro de antes de la marca): todo.
+        assert_eq!(desde_ultimo_arranque("a\nb"), "a\nb");
+    }
+
+    #[test]
+    fn avisa_una_sola_vez_de_cada_parada() {
+        let parado = Estado::Detenido { motivo: "se cayó".into() };
+        assert_eq!(aviso_nuevo(&parado, false), Some("se cayó"));
+        assert_eq!(aviso_nuevo(&parado, true), None);
+        assert_eq!(aviso_nuevo(&Estado::Funcionando, false), None);
+        assert_eq!(aviso_nuevo(&Estado::Reiniciado, false), None);
     }
 
     #[cfg(unix)]

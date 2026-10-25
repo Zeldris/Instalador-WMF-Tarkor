@@ -9,8 +9,8 @@ Envoltorio Tauri v2 del juego: asistente de primer arranque, análisis del equip
 
 | Carpeta | Qué hay |
 |---|---|
-| `nucleo/` | Rust sin interfaz: detección de equipo (`equipo.rs`), perfiles y máximo seguro (`perfiles.rs`), `config.json` y carpetas (`config.rs`). Con tests. |
-| `src-tauri/` | App de Tauri: expone el núcleo al asistente como comandos. |
+| `nucleo/` | Rust sin interfaz: detección de equipo (`equipo.rs`), perfiles y máximo seguro (`perfiles.rs`), `config.json` y carpetas (`config.rs`), cliente de Ollama y uso de la gráfica (`ollama.rs`), vigilancia de procesos (`procesos.rs`) y texto de «Copiar informe» (`informe.rs`). Con tests. |
+| `src-tauri/` | App de Tauri: expone el núcleo al asistente como comandos (también `uso_ia`, `cambiar_perfil`, `modelos_sobrantes`, `borrar_modelos`, `informe`, `motor_detenido` y `reintentar_motor`, y el evento `motor-detenido` que emite un hilo que vigila el motor cada 2 s) y el plugin de portapapeles. |
 | `src/` | Asistente en React. Textos en `textos.ts`; tipos espejo de Rust en `tipos.ts`. |
 
 `src/simulacion.ts` simula la descarga y la comprobación hasta `INS-5`: no debe llegar a una
@@ -42,6 +42,12 @@ viendo fallar el test con su motivo y devolviéndola.
 
 ## Prueba de punta a punta (Linux)
 
+**Para correrlas:** `bash tools/qa/e2e.sh [app/e2e/<prueba>.e2e.mjs]...` desde la raíz (sin argumentos, todas). Compila
+el binario (`npx tauri build --no-bundle`), usa ese y no el instalado, pone un `HOME` con nombre de usuario de 4+ letras,
+un `TARKOR_DATOS` nuevo y el puerto 4444 de `tauri-driver`, lo corre todo bajo `xvfb-run` y solo imprime una línea por
+prueba (y el final del log si falla; el log completo y las capturas, en la carpeta que dice). El script es la fuente de
+verdad; los pasos a mano de abajo explican qué hace por dentro.
+
 Recorre el asistente en la app instalada pulsando los botones por su texto, guarda una captura de
 cada pantalla, comprueba `config.json` y vuelve a abrir la app para ver que no repite el asistente.
 
@@ -59,6 +65,21 @@ xvfb-run -a sh -c 'node e2e/ollama-falso.mjs 11499 & F=$!; tauri-driver & D=$!; 
 Sin `TARKOR_OLLAMA_URL` la app instala y arranca el motor real (1,4 GB). En una red que bloquea
 el registro de modelos, `E2E_ESPERA_ERROR_RED=1` comprueba que el error se explica y se puede
 reintentar.
+
+### Ajustes → Rendimiento de la IA y motor detenido (`INS-43`)
+
+`e2e/rendimiento.e2e.mjs` usa el motor **propio** de la app, no uno externo (con `TARKOR_OLLAMA_URL` no hay
+reinicio automático, ni modelos sobrantes, ni pantalla de motor detenido): prepara una carpeta de datos nueva
+con un `bin/ollama` que es `e2e/ollama-falso.mjs serve`, acaba el asistente con el perfil Mínimo y comprueba
+dónde corre la IA, el cambio de perfil con su progreso, el borrado de sobrantes, el informe sin la carpeta
+personal, dos caídas del motor y «Reintentar». `HOME` debe acabar en un nombre de usuario de 4 letras o más
+(con él comprueba que el informe no lo cuenta) y `TARKOR_OLLAMA_URL` no debe estar puesta. Usa el binario
+que se acaba de compilar (`npx tauri build --no-bundle` → `target/release/tarkor`) o el instalado.
+
+```sh
+export HOME=$(mktemp -d)/lucianita TARKOR_DATOS=$(mktemp -d); mkdir -p $HOME; unset TARKOR_OLLAMA_URL
+xvfb-run -a sh -c 'tauri-driver & D=$!; trap "kill $D" EXIT; sleep 2; node e2e/rendimiento.e2e.mjs target/release/tarkor capturas'
+```
 
 ## Motor de IA sin el asistente
 

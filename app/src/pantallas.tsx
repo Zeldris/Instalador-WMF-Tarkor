@@ -1,10 +1,11 @@
 // Pantallas del asistente de primer arranque (docs/11-diseno-del-frontal.md).
 
-import { useState } from 'react'
-import { CarpetaIa, ControlUsoCpu, DetallesTecnicos, Marco, Medidor, Pagina, Reparar, Tarjetas, useMoverCarpeta } from './componentes'
+import { useEffect, useRef, useState } from 'react'
+import { api } from './api'
+import { CarpetaIa, CopiarInforme, ControlUsoCpu, DetallesTecnicos, Marco, Medidor, Pagina, Reparar, Tarjetas, textoModelo, useMoverCarpeta } from './componentes'
 import * as tx from './textos'
-import type { Config, Equipo, Evaluacion, PerfilId, Rutas } from './tipos'
-import { bloqueado } from './tipos'
+import type { Config, Equipo, Evaluacion, PerfilId, Rutas, Sobrante, UsoIa } from './tipos'
+import { bloqueado, perfilDe } from './tipos'
 import { fmt, gbDeMb } from './formato'
 
 interface Nav {
@@ -87,7 +88,7 @@ export function TuEquipo({ ir, config, evaluacion, analizar, elegirAMano }: Nav 
 
   const gpu = e.gpus.find((g) => !g.integrada) ?? e.gpus[0]
   const integrada = !e.gpus.some((g) => !g.integrada)
-  const recomendado = evaluacion.perfiles.find((p) => p.id === evaluacion.recomendado)!
+  const recomendado = perfilDe(evaluacion, evaluacion.recomendado)
   return (
     <Marco paso={3} titulo={t.titulo} lead={t.lead}
       barra={<><button type="button" className="btn" disabled={analizando} onClick={lanzar}>{t.reanalizar}</button><span className="hueco" />
@@ -125,8 +126,9 @@ export function ElegirPerfil({ ir, config, evaluacion, rutas, cambiarCarpeta, ac
   const [confirmado, setConfirmado] = useState(false)
   const carpeta = useMoverCarpeta(cambiarCarpeta)
   const manual = evaluacion.memoriaParaIaGb === null
-  const elegido = config.perfil ?? evaluacion.recomendado
-  const p = evaluacion.perfiles.find((x) => x.id === elegido)!
+  // Un perfil guardado que ya no existe cuenta como el recomendado: la tarjeta marcada y lo que se guarda son el mismo.
+  const p = perfilDe(evaluacion, config.perfil)
+  const elegido = p.id
   const hilos = config.equipo?.hilos ?? 4
   return (
     <Marco paso={4} titulo={t.titulo} lead={manual ? t.leadManual : t.lead}
@@ -147,7 +149,7 @@ export function ElegirPerfil({ ir, config, evaluacion, rutas, cambiarCarpeta, ac
 
 export function Listo({ config, evaluacion, rutas, jugar }: { config: Config; evaluacion: Evaluacion; rutas: Rutas | null; jugar: () => void }) {
   const t = tx.listo
-  const p = evaluacion.perfiles.find((x) => x.id === (config.perfil ?? evaluacion.recomendado))!
+  const p = perfilDe(evaluacion, config.perfil)
   return (
     <Marco paso={7} titulo={t.titulo} lead={t.lead}
       barra={<><span className="hueco" /><button type="button" className="btn pri" onClick={jugar}>{t.accion}</button></>}>
@@ -175,38 +177,121 @@ export function Juego({ abrirAjustes, repetir }: { abrirAjustes: () => void; rep
   )
 }
 
-export function Ajustes({ config, evaluacion, rutas, cambiarCarpeta, actualizar, reanalizar, volver }: {
+const REFRESCO_USO_MS = 5000
+
+/** Dónde corre la IA y la memoria que ocupa, refrescado cada 5 s mientras Ajustes está abierto. Si falla, no se muestra nada. */
+function DondeCorre() {
+  const [uso, setUso] = useState<UsoIa | null>(null)
+  useEffect(() => {
+    let vivo = true
+    const leer = () => { api.usoIa().then((u) => { if (vivo) setUso(u) }, () => { if (vivo) setUso(null) }) }
+    leer()
+    const id = setInterval(leer, REFRESCO_USO_MS)
+    return () => { vivo = false; clearInterval(id) }
+  }, [])
+  if (!uso) return null
+  const d = tx.ajustes.dondeCorre
+  return (
+    <p className="peq" aria-live="polite">
+      {tx.fraseUso(uso.porcentajeGpu)}{uso.porcentajeGpu !== null && uso.memoriaMb > 0 && <span className="tenue"> · {d.memoria(fmt(uso.memoriaMb / 1024))}</span>}
+    </p>
+  )
+}
+
+/** «Cambiar y descargar» (`INS-43`): llama a `cambiar_perfil`, que da el progreso y devuelve el `Config` guardado. */
+function useCambiarPerfil(reemplazarConfig: (c: Config) => void) {
+  const [cambiando, setCambiando] = useState(false)
+  const [estado, setEstado] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [borrando, setBorrando] = useState(false)
+  const [sobrantes, setSobrantes] = useState<Sobrante[]>([])
+  const pausando = useRef(false)
+  const cambiar = async (perfil: PerfilId) => {
+    pausando.current = false
+    setCambiando(true)
+    setError(null)
+    setEstado(tx.ajustes.cambiando)
+    try {
+      reemplazarConfig(await api.cambiarPerfil(perfil, (p) => setEstado(textoModelo(p))))
+      setEstado('')
+      // Con un Ollama externo el núcleo devuelve una lista vacía: sus modelos no se tocan.
+      setSobrantes(await api.modelosSobrantes().catch(() => []))
+    } catch (e) {
+      if (pausando.current && String(e).startsWith(tx.ajustes.prefijoCancelacion)) setEstado(tx.ajustes.pausado)
+      else { setEstado(''); setError(String(e)) }
+    } finally {
+      setCambiando(false)
+    }
+  }
+  const pausar = () => { pausando.current = true; void api.cancelarDescargas() }
+  const borrar = async () => {
+    setError(null)
+    setBorrando(true)
+    try {
+      await api.borrarModelos(sobrantes.map((s) => s.modelo))
+      setSobrantes([])
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setBorrando(false)
+    }
+  }
+  return { cambiando, borrando, estado, error, sobrantes, cambiar, pausar, borrar }
+}
+
+export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpeta, actualizar, reemplazarConfig, reanalizar, alCambiar, volver }: {
+  /** Perfil ya elegido al abrir (desde «Cambiar a un perfil más ligero»). */
+  perfilInicial?: PerfilId
   config: Config
   evaluacion: Evaluacion
   rutas: Rutas | null
   cambiarCarpeta: () => Promise<void>
   actualizar: (c: Partial<Config>) => void
+  /** Sustituye el estado entero por el `Config` que ya guardó el núcleo (si no, un guardado posterior volvería al perfil viejo). */
+  reemplazarConfig: (c: Config) => void
   reanalizar: () => Promise<void>
+  /** Avisa a la app de que está (o ya no) cambiando de perfil: mientras, no se tapa Ajustes con la pantalla del motor. */
+  alCambiar?: (cambiando: boolean) => void
   volver: () => void
 }) {
   const t = tx.ajustes
-  const [elegido, setElegido] = useState<PerfilId>(config.perfil ?? evaluacion.recomendado)
+  const [elegido, setElegido] = useState<PerfilId>(perfilInicial ?? config.perfil ?? evaluacion.recomendado)
   const [confirmado, setConfirmado] = useState(false)
   const carpeta = useMoverCarpeta(cambiarCarpeta)
-  const actual = evaluacion.perfiles.find((x) => x.id === (config.perfil ?? evaluacion.recomendado))!
-  const nuevo = evaluacion.perfiles.find((x) => x.id === elegido)!
-  const extra = Math.max(0, nuevo.descargaGb - actual.descargaGb)
+  const cambio = useCambiarPerfil(reemplazarConfig)
+  useEffect(() => { alCambiar?.(cambio.cambiando) }, [alCambiar, cambio.cambiando])
+  useEffect(() => () => alCambiar?.(false), [alCambiar])
+  // Un perfil guardado que ya no está en la evaluación cuenta como el recomendado.
+  const actual = perfilDe(evaluacion, config.perfil)
+  // Un id que no está en la evaluación (un perfil que ya no existe) no deja nada preseleccionado.
+  const nuevo = evaluacion.perfiles.find((x) => x.id === elegido)
+  const extra = nuevo ? Math.max(0, nuevo.descargaGb - actual.descargaGb) : 0
   return (
     <div className="ventana">
       <Pagina sola titulo={t.titulo} lead={t.actual(actual.nombre, fmt(actual.memoriaGb), fmt(actual.descargaGb))}
-        barra={<><button type="button" className="btn" onClick={volver}>{t.volver}</button>
-          <button type="button" className="btn" onClick={reanalizar}>{t.reanalizar}</button><span className="hueco" />
-          <button type="button" className="btn pri" disabled={nuevo.id === actual.id || bloqueado(evaluacion, nuevo, confirmado)} onClick={() => actualizar({ perfil: nuevo.id })}>
-            {nuevo.id === actual.id ? t.actualBoton : extra > 0 ? t.cambiarDescargar(fmt(extra)) : t.cambiar}
+        barra={<><button type="button" className="btn" disabled={cambio.cambiando} onClick={volver}>{t.volver}</button>
+          <button type="button" className="btn" disabled={cambio.cambiando} onClick={reanalizar}>{t.reanalizar}</button><span className="hueco" />
+          {cambio.cambiando && <button type="button" className="btn" onClick={cambio.pausar}>{t.pausar}</button>}
+          <button type="button" className="btn pri" disabled={cambio.cambiando || !nuevo || nuevo.id === actual.id || bloqueado(evaluacion, nuevo, confirmado)} onClick={() => nuevo && void cambio.cambiar(nuevo.id)}>
+            {nuevo?.id === actual.id ? t.actualBoton : extra > 0 ? t.cambiarDescargar(fmt(extra)) : t.cambiar}
           </button></>}>
+        <DondeCorre />
         <Medidor evaluacion={evaluacion} />
+        {cambio.estado && <p className="peq tenue" aria-live="polite">{cambio.estado}</p>}
+        {cambio.error && <div className="error" role="alert">{cambio.error}</div>}
+        {cambio.sobrantes.length > 0 && (
+          <div className="fila">
+            <button type="button" className="btn" disabled={cambio.borrando || cambio.cambiando} onClick={() => void cambio.borrar()}>{cambio.borrando ? t.borrando : t.borrar(fmt(cambio.sobrantes.reduce((a, s) => a + s.gb, 0)))}</button>
+          </div>
+        )}
         <Tarjetas evaluacion={evaluacion} seleccionado={elegido} confirmado={confirmado} onConfirmar={setConfirmado}
           onCambiarCarpeta={carpeta.mover} moviendo={carpeta.moviendo}
           onSeleccionar={(id) => { setConfirmado(false); setElegido(id) }} />
-        {rutas && <CarpetaIa ruta={rutas.ia} accion={t.moverCarpeta} moviendo={carpeta.moviendo} error={carpeta.error} onMover={carpeta.mover} />}
-        <ControlUsoCpu uso={config.usoCpu} hilos={config.equipo?.hilos ?? 4} onCambiar={(usoCpu) => actualizar({ usoCpu })} />
-        <Reparar alTerminar={(r) => actualizar({ modelosDescargados: r.modelos })} />
-        {nuevo.descargaGb < actual.descargaGb && <p className="peq tenue">{t.liberar(nuevo.nombre, fmt(actual.descargaGb - nuevo.descargaGb))}</p>}
+        {rutas && <CarpetaIa ruta={rutas.ia} accion={t.moverCarpeta} moviendo={carpeta.moviendo} error={carpeta.error} onMover={carpeta.mover} desactivado={cambio.cambiando} />}
+        <ControlUsoCpu uso={config.usoCpu} hilos={config.equipo?.hilos ?? 4} onCambiar={(usoCpu) => actualizar({ usoCpu })} desactivado={cambio.cambiando} />
+        <Reparar alTerminar={(r) => actualizar({ modelosDescargados: r.modelos })} desactivado={cambio.cambiando} />
+        <CopiarInforme />
+        {nuevo && nuevo.descargaGb < actual.descargaGb && <p className="peq tenue">{t.liberar(nuevo.nombre, fmt(actual.descargaGb - nuevo.descargaGb))}</p>}
       </Pagina>
     </div>
   )

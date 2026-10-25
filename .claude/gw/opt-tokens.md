@@ -26,6 +26,12 @@ antes de la `/retro`; todo en español, y solo lo que confirme la usuaria entra 
   la bitácora preparada, así el tope de 600 caracteres salta al hacer el commit y no al subir, cuando arreglarlo
   obliga a rehacer commits.
 
+- **Compactaciones de la tarea** (opt-tokens de `INS-43`): `recuperar.py --estado` da también las compactaciones
+  desde la última fusión de `origin/main` (el inicio de la tarea), que son las que se comparan con el presupuesto de
+  la bitácora; las de toda la sesión sumaban tareas anteriores.
+- **Arreglos al mismo subagente y revisores acotados** (opt-tokens de `INS-43`): en
+  [`orchestrate-dealer.md`](orchestrate-dealer.md).
+
 ## Costes conocidos
 
 - **Compilar Rust en frío**: el primer `cargo build`/`clippy` de una sesión tarda minutos y su salida es larga. Se
@@ -62,3 +68,8 @@ antes de la `/retro`; todo en español, y solo lo que confirme la usuaria entra 
   Acordado: **`/clear` tras cada subida a `main`** (o cada tarea grande), sin enlazar tareas en una sesión; el código
   de un plan cerrado, a subagentes con Sonnet (`orchestrate-dealer`) con `/code-review` corto de su diff; el repo del
   juego, solo con un subagente (`docs/06` y su `index.css` arrastraron 1,9M).
+- **2026-10-25, `INS-43`** (desde las 16:30): sesión principal 80 llamadas, contexto medio 106k, 2 compactaciones;
+  15 subagentes, 197 llamadas y 17,2M de entrada de 25,7M (el reparto funciona: la principal bajó del 96 % al 33 %).
+  Lo más caro: 7 revisores con Opus (4,7M, 17-21 llamadas cada uno), 4 rondas de arreglos con un subagente nuevo
+  (~1,5M cada una) y el primer E2E (40 llamadas, 4,2M, buscando cómo correrlo; el segundo, con el README al día, 8).
+  Acordado: arreglos al mismo subagente, revisores acotados y compactaciones de la tarea en `recuperar.py`.
