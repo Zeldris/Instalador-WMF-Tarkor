@@ -14,7 +14,7 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-25). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #8 (2026-10-25, `f399a63`): `INS-43` (y `INS-42`), con la confirmación de la usuaria. La CI de GitHub no arrancó (pago); `ci-local` en verde sobre `98bda69`, Windows sin cubrir (pendiente de `INS-8`). |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 🚧 2026-10-26: `INS-42` cerrada y revisada (trozos A, B y C, con sus arreglos medios; los leves en «Siguiente paso», puntos 6 a 8). Pausar al cambiar de perfil solo gana a cortes de red y cancelaciones: otro fallo se enseña (test de `INS-43`). Siguiente: las tres fases antes de `main`, empezando por la revisión del diff contra `origin/main`. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 🚧 2026-10-26: fase 1 antes de `main` hecha (revisión del diff contra `origin/main`; medios arreglados, leves en «Siguiente paso»). Siguiente: fase 2 (`opt-tokens` y `retro`, presentadas a la usuaria) y luego la fase 3. |
 | **Tests** | 2026-10-25: núcleo `cargo test -p tarkor-nucleo` 104, asistente `vitest` 27, `tsc -b` 0, clippy 0 avisos, `cargo check` del núcleo para Windows (mingw) en verde; E2E del asistente con el Ollama falso en verde. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -45,11 +45,9 @@ cada commit.**
    en vez de sumar al extraer; la lista única de modelos de un perfil está copiada en cuatro sitios (conviene un
    `modelosDe(perfil)` en `catalogo.ts`).
 6. Pendientes leves de la revisión del trozo A de `INS-42`: `clasificar` (`ollama.rs`) no reconoce `EOF` ni
-   `unexpected EOF` como corte de red; `"403"` y `"oom"` casan como subcadenas sueltas (una URL o «zoom») y ahora
-   deciden la autopausa; sin test de Atrás o desmontar durante la espera, ni de `aErrorIa` con el objeto de Tauri;
+   `unexpected EOF` como corte de red; sin test de Atrás o desmontar durante la espera, ni de `aErrorIa` con el objeto de Tauri;
    el máximo de progreso va por modelo, no por capa (una capa nueva más pequeña no cuenta como progreso).
-7. Pendientes leves de la revisión del trozo B de `INS-42`: `calentar` no tiene tope de espera (un motor colgado
-   deja «Preparando el narrador…» para siempre) y no manda las `options` del juego (`num_thread`), que podrían
+7. Pendientes leves de la revisión del trozo B de `INS-42`: `calentar` no manda las `options` del juego (`num_thread`), que podrían
    recargar el modelo en el primer turno; al abrir con el motor ya caído, `Juego` puede arrancarlo a la vez que
    «Reintentar» de la pantalla del motor detenido; el test «calienta una sola vez» usa `rerender` y no prueba el
    `[]` del efecto; la fila de fallo de la Comprobación ofrece «Probar un perfil más ligero» aunque no haya uno;
@@ -60,7 +58,15 @@ cada commit.**
    reponer capas, lo hecho se pierde y dice «Todo estaba en orden»; `maxHecho` nunca se vacía (un modelo borrado y
    vuelto a bajar no cuenta como progreso); la comprobación del E2E de `rendimiento` con «Esperando conexión» es
    tautológica.
-9. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
+9. Pendientes leves de la fase 1 antes de `main` (`INS-42`; no vuelven a revisarse en su PR):
+   - cada reintento de `reparar` tras un corte vuelve a parar el motor y a recalcular todos los hashes;
+   - que el runner local cierre la conexión («forcibly closed») cuenta como corte de red;
+   - mientras el cambio de perfil espera la red, `cambiando` oculta la pantalla del motor detenido;
+   - el reintento de Reparar usa un `alTerminar` de un render anterior;
+   - sin Range (un 200 desde 0) el progreso no reinicia la escalera de esperas;
+   - «Probar un perfil más ligero» de la Comprobación no preselecciona el más ligero;
+   - el `map_err(|e| ErrorIa::from(e.to_string()))` se repite en cinco comandos.
+10. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
 
 ## Decisiones de la usuaria que bloquean algo
 

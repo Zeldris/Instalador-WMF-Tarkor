@@ -544,6 +544,8 @@ describe('calentar el narrador al entrar en el juego (INS-42)', () => {
     fijarCalentar('error')
     render(<App />)
     const linea = await screen.findByText(/el motor no respondió/)
+    // La frase dice qué se pierde (el primer turno tardará más) y deja el motivo del núcleo entre paréntesis.
+    expect(linea.textContent).toBe('No se pudo preparar el narrador: el primer turno tardará más. (No se pudo cargar el narrador: el motor no respondió.)')
     expect(linea.className).toMatch(/tenue/)
     expect(screen.queryByRole('alert')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Cambiar a un perfil más ligero' })).toBeNull()
@@ -555,7 +557,7 @@ describe('calentar el narrador al entrar en el juego (INS-42)', () => {
     vi.spyOn(ejemplo, 'asegurarMotor').mockRejectedValue('No se pudo arrancar el motor de IA.')
     const calentar = vi.spyOn(ejemplo, 'calentarNarrador')
     render(<App />)
-    expect(await screen.findByText('No se pudo arrancar el motor de IA.')).toBeTruthy()
+    expect(await screen.findByText('No se pudo preparar el narrador: el primer turno tardará más. (No se pudo arrancar el motor de IA.)')).toBeTruthy()
     expect(calentar).not.toHaveBeenCalled()
   })
 
@@ -797,6 +799,37 @@ describe('autopausa por red al cambiar de perfil y al reparar (INS-42)', () => {
     expect(screen.queryByText(/Esperando conexión/)).toBeNull()
     expect(await boton('Reparar')).toHaveProperty('disabled', false)
   }), 30000)
+
+  it('mientras Reparar espera la red, Volver, Volver a analizar y el uso del procesador están desactivados', () => conRelojFalso(async () => {
+    fijarSinRed(1)
+    render(<Ajustes config={config} evaluacion={e} rutas={null} cambiarCarpeta={async () => {}} actualizar={() => {}}
+      reemplazarConfig={vi.fn()} reanalizar={async () => {}} volver={() => {}} />)
+    fireEvent.click(await boton('Reparar'))
+    await screen.findByText(linea, {}, { timeout: 3000 })
+    expect(screen.getByRole('button', { name: 'Volver' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Volver a analizar mi equipo' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Alto' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Moderado' })).toHaveProperty('disabled', true)
+    // Al terminar la reparación se vuelve a poder salir.
+    await pasar(5000)
+    expect(await screen.findByText(/^Todo estaba en orden/, {}, { timeout: 10000 })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Volver' })).toHaveProperty('disabled', false)
+    expect(screen.getByRole('button', { name: 'Alto' })).toHaveProperty('disabled', false)
+  }), 30000)
+
+  it('mientras Reparar espera la red en la Comprobación, Reintentar y el perfil más ligero están desactivados', async () => {
+    await hastaElPerfil()
+    fireEvent.click(await boton(/^Descargar/))
+    fijarModelosDanados(true)
+    fireEvent.click(await boton('Comprobar la instalación', 10000))
+    await screen.findByRole('alert', {}, { timeout: 3000 })
+    expect(await boton('Reintentar')).toHaveProperty('disabled', false)
+    fijarSinRed(1)
+    fireEvent.click(await boton('Reparar'))
+    await screen.findByText(/^Esperando conexión/, {}, { timeout: 3000 })
+    expect(screen.getByRole('button', { name: 'Reintentar' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Probar un perfil más ligero' })).toHaveProperty('disabled', true)
+  }, 20000)
 
   it('Pausar durante la espera del cambio de perfil cancela el reintento', () => conRelojFalso(async () => {
     fijarSinRed(1)

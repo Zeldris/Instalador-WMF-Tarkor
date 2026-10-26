@@ -185,7 +185,8 @@ function CalentarNarrador({ masLigero, irAAjustes }: { masLigero: PerfilId | nul
         if (vivo) setEstado({ fase: 'listo' })
       } catch (e) {
         const error = aErrorIa(e)
-        if (vivo) setEstado({ fase: 'error', mensaje: error.message, sinMemoria: error.sinMemoria })
+        // Sin memoria el mensaje del núcleo ya lo explica; en otro fallo, la frase dice qué se pierde y el motivo va entre paréntesis.
+        if (vivo) setEstado({ fase: 'error', mensaje: error.sinMemoria ? error.message : t.noCalento(error.message), sinMemoria: error.sinMemoria })
       }
     })()
     return () => { vivo = false }
@@ -335,6 +336,8 @@ export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpe
   const cambio = useCambiarPerfil(reemplazarConfig)
   // Reparar y el cambio de perfil usan el mismo motor (en Rust, `Ocupado`): mientras uno trabaja o espera la red, el otro no se toca.
   const [reparando, setReparando] = useState(false)
+  // Con el motor ocupado (cambio de perfil, reparación o mover la carpeta) no se sale ni se cambia el uso del procesador.
+  const ocupado = cambio.cambiando || reparando || carpeta.moviendo
   useEffect(() => { alCambiar?.(cambio.cambiando) }, [alCambiar, cambio.cambiando])
   useEffect(() => () => alCambiar?.(false), [alCambiar])
   // Un perfil guardado que ya no está en la evaluación cuenta como el recomendado.
@@ -345,8 +348,8 @@ export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpe
   return (
     <div className="ventana">
       <Pagina sola titulo={t.titulo} lead={t.actual(actual.nombre, fmt(actual.memoriaGb), fmt(actual.descargaGb))}
-        barra={<><button type="button" className="btn" disabled={cambio.cambiando} onClick={volver}>{t.volver}</button>
-          <button type="button" className="btn" disabled={cambio.cambiando} onClick={reanalizar}>{t.reanalizar}</button><span className="hueco" />
+        barra={<><button type="button" className="btn" disabled={ocupado} onClick={volver}>{t.volver}</button>
+          <button type="button" className="btn" disabled={ocupado} onClick={reanalizar}>{t.reanalizar}</button><span className="hueco" />
           {cambio.cambiando && <button type="button" className="btn" onClick={cambio.pausar}>{t.pausar}</button>}
           {cambio.segundosEspera !== null && <button type="button" className="btn" onClick={cambio.reintentarAhora}>{tx.descarga.reintentarAhora}</button>}
           <button type="button" className="btn pri" disabled={cambio.cambiando || reparando || !nuevo || nuevo.id === actual.id || bloqueado(evaluacion, nuevo, confirmado)} onClick={() => nuevo && void cambio.cambiar(nuevo.id)}>
@@ -367,7 +370,7 @@ export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpe
           onCambiarCarpeta={carpeta.mover} moviendo={carpeta.moviendo} desactivado={reparando}
           onSeleccionar={(id) => { setConfirmado(false); setElegido(id) }} />
         {rutas && <CarpetaIa ruta={rutas.ia} accion={t.moverCarpeta} moviendo={carpeta.moviendo} error={carpeta.error} onMover={carpeta.mover} desactivado={cambio.cambiando || reparando} />}
-        <ControlUsoCpu uso={config.usoCpu} hilos={config.equipo?.hilos ?? 4} onCambiar={(usoCpu) => actualizar({ usoCpu })} desactivado={cambio.cambiando} />
+        <ControlUsoCpu uso={config.usoCpu} hilos={config.equipo?.hilos ?? 4} onCambiar={(usoCpu) => actualizar({ usoCpu })} desactivado={ocupado} />
         <Reparar alTerminar={(r) => actualizar({ modelosDescargados: r.modelos })} alReparar={setReparando} desactivado={cambio.cambiando} />
         <CopiarInforme />
         {nuevo && nuevo.descargaGb < actual.descargaGb && <p className="peq tenue">{t.liberar(nuevo.nombre, fmt(actual.descargaGb - nuevo.descargaGb))}</p>}

@@ -120,11 +120,11 @@ export const oyentesMotor = () => oyentes.size
 export const TEXTO_INFORME = 'Tarkor (informe de ejemplo)\nSistema: Linux\nMotor: en marcha'
 export const reiniciarMotorDetenido = () => { avisoMotor = null; errorReintento = null; errorCopiar = null; copiado = null; oyentes.clear() }
 let calentarResultado: 'ok' | 'sinMemoria' | 'error' = 'ok'
-/** Para los tests: cómo acaba el siguiente `calentarNarrador` (`sinMemoria` y `error` fallan con un `ErrorIa`). */
 /** Para los tests: si el motor del ejemplo corre (lo pone en marcha `asegurarMotor`/`iniciarMotor`) y cuántas veces se ha arrancado. */
 let motorEnMarcha = false
 let arranquesMotor = 0
 export const arranquesDelMotor = () => arranquesMotor
+/** Para los tests: cómo acaba el siguiente `calentarNarrador` (`sinMemoria` y `error` fallan con un `ErrorIa`). */
 export const fijarCalentar = (r: 'ok' | 'sinMemoria' | 'error') => { calentarResultado = r }
 let tokensPorSegundoPrueba = 12
 /** Para los tests: la velocidad de la narración de prueba (tokens por segundo; 12 = ~8 palabras/s). */

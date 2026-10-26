@@ -189,6 +189,7 @@ export const juego = {
   repetir: 'Repetir el asistente',
   preparando: 'Preparando el narrador…',
   listo: 'El narrador está listo',
+  noCalento: (motivo: string) => `No se pudo preparar el narrador: el primer turno tardará más. (${motivo})`,
   masLigero: 'Cambiar a un perfil más ligero',
 }
 

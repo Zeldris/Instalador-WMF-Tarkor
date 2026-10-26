@@ -194,6 +194,8 @@ export function Comprobacion({ ir, hayMasLigero }: { ir: (paso: number) => void;
   const [detalles, setDetalles] = useState<string[]>(() => t.pasos.map(() => ''))
   // Cada reintento es una ronda nueva, aunque empiece en el mismo paso que la anterior.
   const [ronda, setRonda] = useState({ desde: 0, n: 0 })
+  // «Reparar» usa el mismo motor que el reintento de la fila: mientras repara o espera la red, la fila no se toca.
+  const [reparando, setReparando] = useState(false)
   const [copiado, setCopiado] = useState('')
 
   useEffect(() => {
@@ -243,13 +245,13 @@ export function Comprobacion({ ir, hayMasLigero }: { ir: (paso: number) => void;
             <Detalle estado={estados[i]} id={paso.id} detalle={detalles[i]} hayMasLigero={hayMasLigero} ir={ir} />
             {estados[i] === 'fallo' && (
               <div className="fila">
-                <button type="button" className="btn pri" onClick={reintentar}>{t.reintentar}</button>
-                <button type="button" className="btn" onClick={() => ir(4)}>{t.masLigero}</button>
+                <button type="button" className="btn pri" disabled={reparando} onClick={reintentar}>{t.reintentar}</button>
+                <button type="button" className="btn" disabled={reparando} onClick={() => ir(4)}>{t.masLigero}</button>
                 <button type="button" className="btn" onClick={copiar}>{t.copiar}</button>
                 <span className="peq tenue" aria-live="polite">{copiado}</span>
               </div>
             )}
-            {estados[i] === 'fallo' && (paso.id === 'motor' || paso.id === 'modelos') && <Reparar alTerminar={reintentar} />}
+            {estados[i] === 'fallo' && (paso.id === 'motor' || paso.id === 'modelos') && <Reparar alTerminar={reintentar} alReparar={setReparando} />}
           </li>
         ))}
       </ol>
