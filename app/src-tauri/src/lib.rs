@@ -59,16 +59,24 @@ mod arranque {
     #[derive(Default)]
     pub struct Candado(Mutex<()>);
 
-    /// `Estado::arranque` cogido. Solo lo da `Candado::coger`, y `arrancar_con_turno`, `sacar_motor` y `poner_motor` lo
-    /// piden: arrancar o parar el motor sin el candado no compila. La guarda va como `dyn` para no nombrar el tipo de
-    /// tokio.
+    /// Un candado cogido. Solo lo da `Candado::coger`; `sacar_motor` y `poner_motor` (y con ellos `arrancar_con_turno`)
+    /// lo piden y comprueban con `es_de` que sea el de `Estado::arranque`: cambiar el motor sin ese candado no compila,
+    /// y con otro cae en el `assert`. Fuera quedan la vigilancia (relanza el mismo proceso dentro de `Estado::motor`) y
+    /// la salida (lo para al cerrar). La guarda va como `dyn` para no nombrar el tipo de tokio.
     pub struct Turno<'a> {
+        candado: &'a Candado,
         _guarda: Box<dyn Send + Sync + 'a>,
+    }
+
+    impl Turno<'_> {
+        pub fn es_de(&self, candado: &Candado) -> bool {
+            std::ptr::eq(self.candado, candado)
+        }
     }
 
     impl Candado {
         pub async fn coger(&self) -> Turno<'_> {
-            Turno { _guarda: Box::new(self.0.lock().await) }
+            Turno { candado: self, _guarda: Box::new(self.0.lock().await) }
         }
 
         /// El turno solo si hay que arrancar: con el candado cogido pregunta `en_marcha`, y si ya corre lo suelta. La
@@ -138,14 +146,16 @@ impl Estado {
     }
 
     /// Saca el motor propio del `Mutex` (y su URL) para pararlo o sustituirlo, con el candado de arranque cogido.
-    fn sacar_motor(&self, _turno: &Turno<'_>) -> Option<Proceso> {
+    fn sacar_motor(&self, turno: &Turno<'_>) -> Option<Proceso> {
+        assert!(turno.es_de(&self.arranque), "sacar_motor con un turno que no es de Estado::arranque");
         let p = self.motor.lock().unwrap().take();
         *self.url_motor.lock().unwrap() = None;
         p
     }
 
     /// Pone el motor recién arrancado, con su URL.
-    fn poner_motor(&self, proceso: Proceso, _turno: &Turno<'_>) {
+    fn poner_motor(&self, proceso: Proceso, turno: &Turno<'_>) {
+        assert!(turno.es_de(&self.arranque), "poner_motor con un turno que no es de Estado::arranque");
         let url = proceso.url();
         *self.motor.lock().unwrap() = Some(proceso);
         *self.url_motor.lock().unwrap() = Some(url);
@@ -899,6 +909,14 @@ mod tests {
         let candado = Candado::default();
         assert!(tauri::async_runtime::block_on(candado.turno_si_parado(|| async { false })).is_some(), "parado: turno");
         assert!(tauri::async_runtime::block_on(candado.turno_si_parado(|| async { true })).is_none(), "en marcha: no");
+    }
+
+    #[test]
+    fn el_turno_sabe_de_que_candado_es() {
+        let (uno, otro) = (Candado::default(), Candado::default());
+        let turno = tauri::async_runtime::block_on(uno.coger());
+        assert!(turno.es_de(&uno));
+        assert!(!turno.es_de(&otro), "el turno de otro candado no vale para Estado::arranque");
     }
 
     #[test]

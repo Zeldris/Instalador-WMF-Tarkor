@@ -14,7 +14,7 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-25). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #8 (2026-10-25, `f399a63`): `INS-43` (y `INS-42`), con la confirmación de la usuaria. La CI de GitHub no arrancó (pago); `ci-local` en verde sobre `98bda69`, Windows sin cubrir (pendiente de `INS-8`). |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 🚧 2026-10-26: fases 1 y 2 antes de `main` hechas; la retro ([`retro-2026-10-26-ins42.md`](retro-2026-10-26-ins42.md)) aplicada, con `FLU-5` aplazada a después de fusionar. Fase 3: hallazgos de la revisión de `Turno` arreglados (tipo propio, sin tokio). Siguiente: revisión corta de ese arreglo, `revisado.sh`, `ci-local.py --apuntar`, descripción del PR y pedir confirmación para el PR. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 🚧 2026-10-26: fases 1 y 2 antes de `main` hechas; la retro ([`retro-2026-10-26-ins42.md`](retro-2026-10-26-ins42.md)) aplicada, con `FLU-5` aplazada a después de fusionar. Fase 3: hallazgos de la revisión de `Turno` arreglados (tipo propio que recuerda su candado, sin tokio) y revisados. Siguiente: `revisado.sh`, `ci-local.py --apuntar`, descripción del PR y pedir confirmación para el PR. |
 | **Tests** | 2026-10-25: núcleo `cargo test -p tarkor-nucleo` 104, asistente `vitest` 27, `tsc -b` 0, clippy 0 avisos, `cargo check` del núcleo para Windows (mingw) en verde; E2E del asistente con el Ollama falso en verde. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -66,6 +66,11 @@ cada commit.**
    - sin Range (un 200 desde 0) el progreso no reinicia la escalera de esperas;
    - «Probar un perfil más ligero» de la Comprobación no preselecciona el más ligero;
    - el `map_err(|e| ErrorIa::from(e.to_string()))` se repite en cinco comandos.
+   - de la fase 3 (el `Turno`): la vigilancia relanza el motor dentro de `Estado::motor` sin turno, y un
+     `asegurar` a la vez lo ve parado y lo reinicia otra vez; la salida (`RunEvent::Exit`) para el motor sin turno, y
+     uno que esté arrancando al cerrar queda vivo; un fallo pasajero de `version()` hace que `asegurar` reinicie un
+     motor sano (las tres, ya en `main`); el test de dos arranques copia la forma de `asegurar` en vez de llamarlo (el
+     tipo lo cubre: sin turno no se llama a `arrancar_con_turno`); `coger` reserva memoria para la guarda.
 10. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
 
 ## Decisiones de la usuaria que bloquean algo
