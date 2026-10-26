@@ -26,6 +26,11 @@ export interface Api {
   /** Falla con un `ErrorIa`: `red` si se perdió internet (la Descarga espera y reintenta sola). */
   descargarModelos(progreso: (p: ProgresoModelo) => void): Promise<string[]>
   cancelarDescargas(): Promise<void>
+  /**
+   * Carga el narrador del perfil en memoria (docs/12, INS-42). No arranca el motor: debe estar en marcha.
+   * Falla con un `ErrorIa`: `sinMemoria` si no cupo, y entonces se ofrece un perfil más ligero.
+   */
+  calentarNarrador(): Promise<void>
   /** Comprueba el motor y los modelos del perfil y repone lo que falte o esté dañado. */
   reparar(motor: (p: ProgresoMotor) => void, modelos: (p: ProgresoModelo) => void): Promise<Reparacion>
   comprobar(id: string): Promise<Comprobacion>
@@ -69,6 +74,7 @@ const tauri: Api = {
   iniciarMotor: () => invoke('iniciar_motor'),
   descargarModelos: (progreso) => invoke<string[]>('descargar_modelos', { canal: canal(progreso) }).catch((e) => { throw aErrorIa(e) }),
   cancelarDescargas: () => invoke('cancelar_descargas'),
+  calentarNarrador: () => invoke<void>('calentar_narrador').catch((e) => { throw aErrorIa(e) }),
   reparar: (motor, modelos) => invoke('reparar', { canalMotor: canal(motor), canal: canal(modelos) }),
   comprobar: (id) => invoke('comprobar', { id }),
   elegirCarpeta: async () => {

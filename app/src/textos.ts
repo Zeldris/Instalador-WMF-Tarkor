@@ -150,6 +150,7 @@ export const comprobacion = {
     `Tu equipo narra a unas ${palabras} palabras por segundo: una narración típica tardará unos ${segundos} segundos.`,
   reintentar: 'Reintentar',
   masLigero: 'Probar un perfil más ligero',
+  lenta: 'Tu equipo narra despacio con este perfil: uno más ligero responderá antes',
   copiar: 'Copiar informe',
   copiado: 'Informe copiado',
 }
@@ -186,6 +187,9 @@ export const juego = {
   lead: 'El asistente está completo. En esta fase del desarrollo el juego todavía no va dentro de la app (fase 4 del plan).',
   ajustes: 'Ajustes → Rendimiento de la IA',
   repetir: 'Repetir el asistente',
+  preparando: 'Preparando el narrador…',
+  listo: 'El narrador está listo',
+  masLigero: 'Cambiar a un perfil más ligero',
 }
 
 export const ajustes = {

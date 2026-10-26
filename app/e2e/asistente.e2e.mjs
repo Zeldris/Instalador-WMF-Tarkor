@@ -155,6 +155,9 @@ async function recorrido() {
   await captura('listo')
   await pulsar('Jugar')
   await buscar(titulo('Aquí se abrirá el juego'))
+  // Al entrar en el juego se calienta el narrador (docs/12): el Ollama falso acepta `/api/generate` con solo `model`.
+  await buscar(conTexto('El narrador está listo'), 60000)
+  comprobar(true, 'al entrar en el juego se calienta el narrador')
 
   const c = leerConfig()
   comprobar(c.asistenteCompletado === true, 'config.json: asistente completado')

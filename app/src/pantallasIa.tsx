@@ -218,7 +218,13 @@ export function Descarga({ ir, config, evaluacion, actualizar, esperas = ESPERAS
 
 type EstadoComp = 'pendiente' | 'curso' | 'ok' | 'omitida' | 'fallo'
 
-export function Comprobacion({ ir }: { ir: (paso: number) => void }) {
+/**
+ * Palabras por segundo de la narración de prueba por debajo de las cuales se sugiere un perfil más ligero: a esa
+ * velocidad una narración típica (~150 palabras) pasa de ~50 s (docs/09, «Velocidad real»).
+ */
+export const PALABRAS_LENTAS = 3
+
+export function Comprobacion({ ir, hayMasLigero }: { ir: (paso: number) => void; /** Hay un perfil de menos memoria al que bajar. */ hayMasLigero: boolean }) {
   const t = tx.comprobacion
   const [estados, setEstados] = useState<EstadoComp[]>(() => t.pasos.map(() => 'pendiente'))
   const [detalles, setDetalles] = useState<string[]>(() => t.pasos.map(() => ''))
@@ -270,7 +276,7 @@ export function Comprobacion({ ir }: { ir: (paso: number) => void }) {
               <span className={`icono ${estados[i]}`}>{estados[i] === 'ok' ? '✓' : estados[i] === 'fallo' ? '!' : estados[i] === 'omitida' ? '–' : ''}</span>
               <span>{paso.nombre}</span>
             </div>
-            <Detalle estado={estados[i]} id={paso.id} detalle={detalles[i]} />
+            <Detalle estado={estados[i]} id={paso.id} detalle={detalles[i]} hayMasLigero={hayMasLigero} ir={ir} />
             {estados[i] === 'fallo' && (
               <div className="fila">
                 <button type="button" className="btn pri" onClick={reintentar}>{t.reintentar}</button>
@@ -287,7 +293,7 @@ export function Comprobacion({ ir }: { ir: (paso: number) => void }) {
   )
 }
 
-function Detalle({ estado, id, detalle }: { estado: EstadoComp; id: string; detalle: string }) {
+function Detalle({ estado, id, detalle, hayMasLigero, ir }: { estado: EstadoComp; id: string; detalle: string; hayMasLigero: boolean; ir: (paso: number) => void }) {
   const t = tx.comprobacion
   if (estado === 'fallo') return <div className="error" role="alert">{detalle}</div>
   if (estado === 'omitida') return <p className="peq tenue">{detalle}</p>
@@ -300,6 +306,12 @@ function Detalle({ estado, id, detalle }: { estado: EstadoComp; id: string; deta
     <>
       <p className="cita">«{texto}»</p>
       <p className="peq tenue">{t.velocidad(palabras, Math.round(150 / palabras))}</p>
+      {palabras < PALABRAS_LENTAS && hayMasLigero && (
+        <div className="fila">
+          <p className="peq">{t.lenta}</p>
+          <button type="button" className="btn" onClick={() => ir(4)}>{t.masLigero}</button>
+        </div>
+      )}
     </>
   )
 }

@@ -131,6 +131,11 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
   `instalar_motor` y `descargar_modelos`, y la Descarga espera con «Esperando conexión» y reintenta sola a los 5, 10,
   20, 40 y 60 s (con «Pausar» y «Reintentar ahora»); E2E con `FALSO_CORTES_PULL`. Pendiente: lo mismo al cambiar de
   perfil en Ajustes (`cambiar_perfil`) y en Reparar, que siguen mostrando el error de red como texto.
+  Hecho del trozo B (2026-10-26, falta la revisión): comando `calentar_narrador` (Tauri) y `calentarNarrador` en la
+  `Api`; al entrar en el juego se arranca el motor si no corre y se calienta el narrador («Preparando el narrador…» /
+  «El narrador está listo»), con el aviso y «Cambiar a un perfil más ligero» si falta memoria y una línea discreta en
+  otro error; la Comprobación sugiere un perfil más ligero bajo 3 palabras/s (`PALABRAS_LENTAS`); tests de vitest y
+  E2E (`asistente`, `rendimiento`). Pendiente: lo del trozo A y marcar la casilla al cerrar la tarea.
 - [x] **INS-43** (2026-10-25) Ajustes → Rendimiento de la IA (con uso de la gráfica vía `/api/ps`) y pantalla de
   motor detenido. Decidido el 2026-10-25 (ver `11`): frase de dónde corre la IA y memoria real; cambiar de perfil
   descarga, reinicia el motor y ofrece borrar lo que sobra; "Copiar informe" con "Ver detalles"; un hilo de Rust

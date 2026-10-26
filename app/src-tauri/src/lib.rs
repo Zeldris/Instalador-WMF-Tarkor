@@ -387,6 +387,20 @@ async fn descargar_modelos(app: tauri::AppHandle, canal: Channel<ProgresoModelo>
     .map_err(|e| ErrorIa::from(e.to_string()))?
 }
 
+/// Carga el narrador del perfil en memoria al entrar en el juego (`INS-42`, docs/12), para que el primer turno no
+/// espere la carga. No arranca el motor: si no está en marcha falla, y el frontal lo arranca antes de llamar.
+/// El error lleva `sin_memoria` cuando el motor no pudo cargar el modelo (pide un perfil más ligero).
+#[tauri::command]
+async fn calentar_narrador(app: tauri::AppHandle) -> Result<(), ErrorIa> {
+    let estado = app.state::<Estado>();
+    let narrador = estado.perfil(&estado.config())?.narrador.clone();
+    let cliente = estado.cliente()?;
+    tauri::async_runtime::spawn_blocking(move || cliente.calentar(&narrador))
+        .await
+        .map_err(|e| ErrorIa::from(e.to_string()))?
+        .map_err(ErrorIa::from)
+}
+
 /// Cambia de perfil desde Ajustes (`INS-43`, docs/11): descarga con el motor en marcha lo que falte
 /// del perfil nuevo y, solo si termina bien, guarda `perfil` y `modelos_descargados` y reinicia el
 /// motor para que aplique los ajustes del perfil nuevo. Si la descarga falla o se cancela
@@ -770,6 +784,7 @@ pub fn run() {
             motor_detenido,
             reintentar_motor,
             descargar_modelos,
+            calentar_narrador,
             cambiar_perfil,
             modelos_sobrantes,
             borrar_modelos,

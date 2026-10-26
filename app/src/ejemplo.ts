@@ -92,7 +92,7 @@ let sinRedAntes: ProgresoModelo[] | ((corte: number) => ProgresoModelo[]) | null
 let motorInstalado = false
 /** Para los tests: las `n` siguientes llamadas a `descargarModelos` fallan por falta de red (un `ErrorIa` con `red`), como el núcleo. */
 export const fijarSinRed = (n: number, antes: typeof sinRedAntes = null) => { sinRedRestantes = n; sinRedCortes = 0; sinRedAntes = antes }
-export const reiniciarModelos = () => { sinRedRestantes = 0; sinRedCortes = 0; sinRedAntes = null; motorInstalado = false; errorCambioPerfil = null; retardoCambioPerfil = 0; sobrantes = []; usoSimulado = { porcentajeGpu: 100, memoriaMb: 5400 } }
+export const reiniciarModelos = () => { calentarResultado = 'ok'; tokensPorSegundoPrueba = 12; sinRedRestantes = 0; sinRedCortes = 0; sinRedAntes = null; motorInstalado = false; errorCambioPerfil = null; retardoCambioPerfil = 0; sobrantes = []; usoSimulado = { porcentajeGpu: 100, memoriaMb: 5400 } }
 const modelosDe = (id: string | null) => {
   const perfil = catalogo.perfiles.find((p) => p.id === id) ?? catalogo.perfiles[0]
   return [...new Set([perfil.narrador, perfil.cronista, perfil.sugerencias, perfil.embeddings])]
@@ -116,6 +116,12 @@ export const textoCopiado = () => copiado
 export const oyentesMotor = () => oyentes.size
 export const TEXTO_INFORME = 'Tarkor (informe de ejemplo)\nSistema: Linux\nMotor: en marcha'
 export const reiniciarMotorDetenido = () => { avisoMotor = null; errorReintento = null; errorCopiar = null; copiado = null; oyentes.clear() }
+let calentarResultado: 'ok' | 'sinMemoria' | 'error' = 'ok'
+/** Para los tests: cómo acaba el siguiente `calentarNarrador` (`sinMemoria` y `error` fallan con un `ErrorIa`). */
+export const fijarCalentar = (r: 'ok' | 'sinMemoria' | 'error') => { calentarResultado = r }
+let tokensPorSegundoPrueba = 12
+/** Para los tests: la velocidad de la narración de prueba (tokens por segundo; 12 = ~8 palabras/s). */
+export const fijarTokensPorSegundo = (n: number) => { tokensPorSegundoPrueba = n }
 let cancelado = false
 const pausa = (ms: number) => new Promise((ok) => setTimeout(ok, ms))
 
@@ -174,6 +180,11 @@ export const ejemplo: Api = {
     return modelos
   },
   cancelarDescargas: async () => { cancelado = true },
+  calentarNarrador: async () => {
+    await pausa(30)
+    if (calentarResultado === 'sinMemoria') throw new ErrorIa('El motor se quedó sin memoria al cargar el narrador: model requires more system memory than is available', false, true)
+    if (calentarResultado === 'error') throw new ErrorIa('No se pudo cargar el narrador: el motor no respondió.')
+  },
   reparar: async (motor, progreso) => {
     cancelado = false
     motor({ fase: 'verificando' })
@@ -241,7 +252,7 @@ export const ejemplo: Api = {
     if (['basedatos', 'juego', 'mundo'].includes(id)) return { resultado: 'omitida', motivo: 'Llega con el juego empaquetado (fase 4).' }
     if (id === 'modelos' && modelosDanados) throw 'Faltan modelos: qwen2.5:7b. Vuelve al paso de descarga.'
     if (id === 'narracion') {
-      return { resultado: 'ok', detalle: JSON.stringify({ texto: 'La niebla del estrecho se abre un instante y deja ver, al otro lado, las hogueras de Berig.', tokensPorSegundo: 12 }) }
+      return { resultado: 'ok', detalle: JSON.stringify({ texto: 'La niebla del estrecho se abre un instante y deja ver, al otro lado, las hogueras de Berig.', tokensPorSegundo: tokensPorSegundoPrueba }) }
     }
     return { resultado: 'ok', detalle: 'Correcto (ejemplo).' }
   },

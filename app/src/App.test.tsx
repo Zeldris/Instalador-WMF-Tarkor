@@ -6,7 +6,7 @@ import { ErrorIa, perfilDe, perfilMasLigero } from './tipos'
 import { catalogo } from './catalogo'
 import { Ajustes, ElegirPerfil, Listo } from './pantallas'
 import { Descarga } from './pantallasIa'
-import { ejemplo, configInicial, evaluarEjemplo, equipoEjemplo, fijarDiscoLibreIa, fijarErrorCambioPerfil, fijarRetardoCambioPerfil, fijarErrorCarpetaIa, fijarModelosDanados, fijarSinRed, fijarUsoIa, reiniciarCarpetaIa, reiniciarModelos, emitirMotorDetenido, fijarErrorCopiar, fijarErrorReintento, fijarMotorDetenido, oyentesMotor, reiniciarMotorDetenido, textoCopiado, TEXTO_INFORME } from './ejemplo'
+import { ejemplo, configInicial, evaluarEjemplo, equipoEjemplo, fijarDiscoLibreIa, fijarErrorCambioPerfil, fijarRetardoCambioPerfil, fijarErrorCarpetaIa, fijarModelosDanados, fijarSinRed, fijarUsoIa, reiniciarCarpetaIa, reiniciarModelos, emitirMotorDetenido, fijarCalentar, fijarTokensPorSegundo, fijarErrorCopiar, fijarErrorReintento, fijarMotorDetenido, oyentesMotor, reiniciarMotorDetenido, textoCopiado, TEXTO_INFORME } from './ejemplo'
 
 afterEach(async () => {
   cleanup()
@@ -481,6 +481,128 @@ describe('asistente de primer arranque', () => {
     expect(guardada.consentimientoAceptado).toBe(true)
     expect(guardada.pasoAsistente).toBe(3)
   })
+})
+
+/** Entra en la app con el asistente acabado y ese perfil: abre directamente la vista del juego. */
+const conJuego = async (perfil: string) => {
+  await ejemplo.guardarConfig({ ...configInicial(), consentimientoAceptado: true, permisoAnalisis: true, equipo: await ejemplo.analizarEquipo(), perfil: perfil as never, pasoAsistente: 7, asistenteCompletado: true })
+}
+
+describe('calentar el narrador al entrar en el juego (INS-42)', () => {
+  it('con el motor parado lo arranca y luego calienta el narrador; con el motor en marcha no lo reinicia', async () => {
+    await conJuego('equilibrado')
+    const iniciar = vi.spyOn(ejemplo, 'iniciarMotor')
+    const calentar = vi.spyOn(ejemplo, 'calentarNarrador')
+    render(<App />)
+    expect((await screen.findByRole('status')).textContent).toBe('Preparando el narrador…')
+    expect((await screen.findByText('El narrador está listo')).getAttribute('role')).toBe('status')
+    expect(iniciar).toHaveBeenCalledTimes(1)
+    expect(calentar).toHaveBeenCalledTimes(1)
+    expect(iniciar.mock.invocationCallOrder[0]).toBeLessThan(calentar.mock.invocationCallOrder[0])
+    cleanup()
+
+    iniciar.mockClear()
+    calentar.mockClear()
+    vi.spyOn(ejemplo, 'estadoMotor').mockResolvedValue({ ...(await ejemplo.estadoMotor()), enMarcha: true })
+    render(<App />)
+    await screen.findByText('El narrador está listo')
+    expect(iniciar).not.toHaveBeenCalled()
+    expect(calentar).toHaveBeenCalledTimes(1)
+  })
+
+  it('calienta una sola vez por entrada, aunque la pantalla se vuelva a pintar', async () => {
+    await conJuego('equilibrado')
+    const calentar = vi.spyOn(ejemplo, 'calentarNarrador')
+    const { rerender } = render(<App />)
+    await screen.findByText('El narrador está listo')
+    rerender(<App />)
+    await act(async () => { await new Promise((ok) => setTimeout(ok, 50)) })
+    expect(calentar).toHaveBeenCalledTimes(1)
+  })
+
+  it('sin memoria avisa y ofrece el perfil más ligero, que lleva a Ajustes con ese perfil elegido', async () => {
+    await conJuego('equilibrado')
+    fijarCalentar('sinMemoria')
+    render(<App />)
+    const aviso = await screen.findByRole('alert')
+    expect(aviso.textContent).toMatch(/se quedó sin memoria al cargar el narrador/)
+    fireEvent.click(within(aviso).getByRole('button', { name: 'Cambiar a un perfil más ligero' }))
+    expect((await boton(/^Ligero/)).getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('sin memoria pero ya en el perfil más ligero, solo dice el motivo, sin botón', async () => {
+    await conJuego('minimo')
+    fijarCalentar('sinMemoria')
+    render(<App />)
+    expect(await screen.findByText(/se quedó sin memoria al cargar el narrador/)).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Cambiar a un perfil más ligero' })).toBeNull()
+  })
+
+  it('cualquier otro error es una línea discreta con el motivo, sin aviso ni botón', async () => {
+    await conJuego('equilibrado')
+    fijarCalentar('error')
+    render(<App />)
+    const linea = await screen.findByText(/el motor no respondió/)
+    expect(linea.className).toMatch(/tenue/)
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Cambiar a un perfil más ligero' })).toBeNull()
+    expect(screen.queryByText('El narrador está listo')).toBeNull()
+  })
+
+  it('si el motor no arranca, lo dice en la misma línea discreta y no calienta', async () => {
+    await conJuego('equilibrado')
+    vi.spyOn(ejemplo, 'iniciarMotor').mockRejectedValue('No se pudo arrancar el motor de IA.')
+    const calentar = vi.spyOn(ejemplo, 'calentarNarrador')
+    render(<App />)
+    expect(await screen.findByText('No se pudo arrancar el motor de IA.')).toBeTruthy()
+    expect(calentar).not.toHaveBeenCalled()
+  })
+
+  it('si se sale antes de que conteste el motor, no lo arranca ni calienta', async () => {
+    await conJuego('equilibrado')
+    const original = ejemplo.estadoMotor
+    vi.spyOn(ejemplo, 'estadoMotor').mockImplementation(async () => { await new Promise((ok) => setTimeout(ok, 60)); return original() })
+    const iniciar = vi.spyOn(ejemplo, 'iniciarMotor')
+    const calentar = vi.spyOn(ejemplo, 'calentarNarrador')
+    render(<App />)
+    await screen.findByText('Preparando el narrador…')
+    cleanup()
+    await act(async () => { await new Promise((ok) => setTimeout(ok, 150)) })
+    expect(iniciar).not.toHaveBeenCalled()
+    expect(calentar).not.toHaveBeenCalled()
+  })
+})
+
+describe('narración de prueba lenta (INS-42)', () => {
+  const conComprobacion = async (perfil: string) => {
+    await ejemplo.guardarConfig({ ...configInicial(), consentimientoAceptado: true, permisoAnalisis: true, equipo: await ejemplo.analizarEquipo(), perfil: perfil as never, pasoAsistente: 6 })
+    render(<App />)
+    await screen.findByText(/palabras por segundo/, {}, { timeout: 5000 })
+  }
+  const SUGERENCIA = 'Tu equipo narra despacio con este perfil: uno más ligero responderá antes'
+
+  it('por debajo de 3 palabras por segundo sugiere un perfil más ligero, y el botón vuelve a elegir perfil', async () => {
+    fijarTokensPorSegundo(2)
+    await conComprobacion('equilibrado')
+    expect(screen.getByText(SUGERENCIA)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Probar un perfil más ligero' }))
+    expect((await boton(/^Equilibrado/)).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByText(/Cuanta más memoria le dediques/)).toBeTruthy()
+  }, 15000)
+
+  it('a una velocidad normal no sugiere nada', async () => {
+    await conComprobacion('equilibrado')
+    expect(screen.queryByText(SUGERENCIA)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Probar un perfil más ligero' })).toBeNull()
+  }, 15000)
+
+  it('lenta pero en el perfil más ligero no sugiere nada: no hay a dónde bajar', async () => {
+    fijarTokensPorSegundo(2)
+    await conComprobacion('minimo')
+    expect(screen.queryByText(SUGERENCIA)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Probar un perfil más ligero' })).toBeNull()
+  }, 15000)
 })
 
 describe('descarga sin red (INS-42)', () => {

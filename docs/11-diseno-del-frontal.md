@@ -133,8 +133,10 @@ La pantalla central del asistente.
 Lista de las 7 comprobaciones de [`07`](07-flujo-de-instalacion.md) con un icono de estado cada
 una (pendiente, en curso, correcto, fallo). La última, "Narración de prueba", muestra la frase
 generada y la velocidad medida ("unas 9 palabras por segundo"), sacada de `eval_count /
-eval_duration`. Por debajo de 3 palabras/s se sugiere un perfil más ligero. Es la única prueba de
-velocidad: no hay botón aparte (LM Studio muestra la velocidad en cada respuesta).
+eval_duration`. Por debajo de 3 palabras/s (`PALABRAS_LENTAS` en `app/src/pantallasIa.tsx`) añade
+«Tu equipo narra despacio con este perfil: uno más ligero responderá antes» y el botón «Probar un perfil más ligero»
+(vuelve al paso 4), solo si existe un perfil más ligero (`perfilMasLigero`). Es la única prueba de velocidad: no hay
+botón aparte (LM Studio muestra la velocidad en cada respuesta).
 
 En caso de fallo, la fila se expande con la explicación, **Reintentar**, "Ver detalles" y
 **Copiar informe**. Si el fallo es de memoria, se ofrece "Probar un perfil más ligero" que vuelve
@@ -144,6 +146,17 @@ al paso 4. Si falla el motor de IA o un modelo, también **Reparar** (ver Ajuste
 
 - "Todo preparado". Resumen: perfil elegido, espacio usado, dónde están tus partidas.
 - Acción: **Jugar** → abre el juego (pantalla de inicio actual del frontend).
+
+### Entrar en el juego: calentar el narrador
+
+Al entrar en la vista del juego (también al abrir la app con el asistente ya completado) el frontal mira `estado_motor`
+y, solo si el motor no está en marcha, lo arranca (`iniciar_motor` reiniciaría uno que ya corre); luego
+`calentar_narrador` carga el narrador del perfil en memoria para que el primer turno no espere (`INS-42`, `12`). Una
+línea de estado lo cuenta: «Preparando el narrador…» y, al acabar, «El narrador está listo». No bloquea nada.
+
+- Si no cabe en memoria (`sinMemoria`) y hay un perfil más ligero: aviso con el motivo y **Cambiar a un perfil más
+  ligero**, que lleva a Ajustes con ese perfil ya elegido (el mismo camino que la pantalla del motor detenido).
+- Cualquier otro fallo (o sin perfil más ligero al que bajar): una línea discreta con el motivo, sin botón.
 
 ### Ajustes → Rendimiento de la IA
 

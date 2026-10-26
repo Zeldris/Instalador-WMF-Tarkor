@@ -186,6 +186,7 @@ async function recorrido() {
   await buscar(titulo('Todo preparado'))
   await pulsar(boton('Jugar'))
   await buscar(titulo('Aquí se abrirá el juego'), 30000)
+  await veTexto(/El narrador está listo/, 60000)
   await pulsar(boton('Ajustes'))
   await buscar(titulo('Rendimiento de la IA'))
 

@@ -5,7 +5,7 @@ import { api } from './api'
 import { CarpetaIa, CopiarInforme, ControlUsoCpu, DetallesTecnicos, Marco, Medidor, Pagina, Reparar, Tarjetas, textoModelo, useMoverCarpeta } from './componentes'
 import * as tx from './textos'
 import type { Config, Equipo, Evaluacion, PerfilId, Rutas, Sobrante, UsoIa } from './tipos'
-import { bloqueado, perfilDe } from './tipos'
+import { aErrorIa, bloqueado, perfilDe } from './tipos'
 import { fmt, gbDeMb } from './formato'
 
 interface Nav {
@@ -164,14 +164,61 @@ export function Listo({ config, evaluacion, rutas, jugar }: { config: Config; ev
   )
 }
 
-export function Juego({ abrirAjustes, repetir }: { abrirAjustes: () => void; repetir: () => void }) {
+type EstadoNarrador = { fase: 'preparando' | 'listo' } | { fase: 'error'; mensaje: string; sinMemoria: boolean }
+
+/**
+ * Carga el narrador en memoria al entrar en el juego (docs/12 «Calentar el narrador», INS-42), para que el primer
+ * turno no espere. Arranca el motor si no corre (`iniciarMotor` reinicia uno en marcha: por eso se mira antes).
+ * Si no cabe en memoria y hay un perfil más ligero, lo ofrece; cualquier otro fallo es una línea discreta que no bloquea.
+ */
+function CalentarNarrador({ masLigero, irAAjustes }: { masLigero: PerfilId | null; irAAjustes: (perfil: PerfilId) => void }) {
+  const t = tx.juego
+  const [estado, setEstado] = useState<EstadoNarrador>({ fase: 'preparando' })
+  useEffect(() => {
+    let vivo = true
+    void (async () => {
+      try {
+        const motor = await api.estadoMotor()
+        if (!vivo) return
+        if (!motor.enMarcha) await api.iniciarMotor()
+        if (!vivo) return
+        await api.calentarNarrador()
+        if (vivo) setEstado({ fase: 'listo' })
+      } catch (e) {
+        const error = aErrorIa(e)
+        if (vivo) setEstado({ fase: 'error', mensaje: error.message, sinMemoria: error.sinMemoria })
+      }
+    })()
+    return () => { vivo = false }
+  }, [])
+  if (estado.fase === 'error') {
+    if (estado.sinMemoria && masLigero) {
+      return (
+        <div className="error" role="alert">
+          <p>{estado.mensaje}</p>
+          <div className="fila"><button type="button" className="btn" onClick={() => irAAjustes(masLigero)}>{t.masLigero}</button></div>
+        </div>
+      )
+    }
+    return <p className="peq tenue" role="status">{estado.mensaje}</p>
+  }
+  return <p className="peq tenue" role="status">{estado.fase === 'listo' ? t.listo : t.preparando}</p>
+}
+
+export function Juego({ abrirAjustes, repetir, masLigero, irAAjustes }: {
+  abrirAjustes: () => void
+  repetir: () => void
+  /** El siguiente perfil de menos memoria, o null si ya es el más ligero. */
+  masLigero: PerfilId | null
+  irAAjustes: (perfil: PerfilId) => void
+}) {
   const t = tx.juego
   return (
     <div className="ventana">
       <Pagina sola titulo={t.titulo} lead={t.lead}
         barra={<><button type="button" className="btn" onClick={repetir}>{t.repetir}</button><span className="hueco" />
           <button type="button" className="btn pri" onClick={abrirAjustes}>{t.ajustes}</button></>}>
-        <span />
+        <CalentarNarrador masLigero={masLigero} irAAjustes={irAAjustes} />
       </Pagina>
     </div>
   )
