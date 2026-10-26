@@ -12,10 +12,10 @@ cada commit.**
 |---|---|
 | **Actualizado** | 2026-10-26 |
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
-| **Último commit en `main`** | Fusión del PR #8 (2026-10-25, `f399a63`): `INS-43` (y `INS-42`), con la confirmación de la usuaria. La CI de GitHub no arrancó (pago); `ci-local` en verde sobre `98bda69`, Windows sin cubrir (pendiente de `INS-8`). |
+| **Último commit en `main`** | Fusión del PR #9 (2026-10-26, `b4450fe`): `INS-42`, con la confirmación de la usuaria. La CI de GitHub no arrancó (sin cuota); `ci-local` en verde, Windows sin cubrir (pendiente de `INS-8`). |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | ✅ 2026-10-26: `FLU-5` hecha: `cargo fmt` del workspace a 120 columnas en un commit aparte (`a27489f`, en `.git-blame-ignore-revs`) y `cargo fmt --all --check` en el check y en el CI. Presupuesto: 0 compactaciones (27 en la sesión, 0 desde la fusión). Sin subir a `main`. Siguiente: decidir con la usuaria si `FLU-5` va sola a `main` (PR) o con la próxima tarea; la siguiente del plan es la fusión del PR #1 del juego (fase 2). |
-| **Tests** | 2026-10-25: núcleo `cargo test -p tarkor-nucleo` 104, asistente `vitest` 27, `tsc -b` 0, clippy 0 avisos, `cargo check` del núcleo para Windows (mingw) en verde; E2E del asistente con el Ollama falso en verde. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-10-26: `FLU-5` hecha (`cargo fmt` del workspace a 120 columnas con `use_small_heuristics = "Max"`, en `a27489f` y `9b0035c`, ambos en `.git-blame-ignore-revs`; `cargo fmt --all --check` en el check y en el CI). La usuaria pide llevarla a `main` con el CI local (GitHub sin cuota). Fase 1 hecha: arreglos de la revisión subidos. Presupuesto: 0 compactaciones (27 en la sesión, 0 desde la fusión). Siguiente: fase 2 (`opt-tokens` y `retro`, presentadas a la usuaria), luego `ci-local --apuntar`, `revisado.sh` y el PR. |
+| **Tests** | 2026-10-26: núcleo `cargo test -p tarkor-nucleo` 116, `cargo fmt --all --check` en verde, clippy 0 avisos, `tsc -b` 0, `cargo check` del núcleo y la app para Windows (mingw) en verde. Asistente `vitest` 27 y E2E con el Ollama falso: último verde el 2026-10-25. |
 
 ## Dónde está todo (para saber qué sigue)
 
@@ -71,7 +71,10 @@ cada commit.**
      uno que esté arrancando al cerrar queda vivo; un fallo pasajero de `version()` hace que `asegurar` reinicie un
      motor sano (las tres, ya en `main`); el test de dos arranques copia la forma de `asegurar` en vez de llamarlo (el
      tipo lo cubre: sin turno no se llama a `arrancar_con_turno`); `coger` reserva memoria para la guarda.
-10. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
+10. Pendientes leves de la revisión de `FLU-5` (no vuelven a revisarse en su PR): el commit de formato `a27489f` no
+    actualizó la bitácora (se hizo en los siguientes); ni el CI ni el repo fijan la versión de Rust (`app/rust-toolchain.toml`),
+    así que un `rustfmt` nuevo podría formatear distinto en local y en el CI.
+11. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
 
 ## Decisiones de la usuaria que bloquean algo
 
@@ -100,8 +103,8 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 
 Dos líneas cada una como mucho; el detalle está en el commit y la más antigua sale cuando hay más de 5.
 
-- ~~`FLU-5` · `cargo fmt` en el check~~ (2026-10-26): workspace formateado a 120 columnas en un commit aparte
-  (`a27489f`, ignorado por `git blame`) y `cargo fmt --all --check` en el check y en el CI.
+- ~~`FLU-5` · `cargo fmt` en el check~~ (2026-10-26): workspace formateado a 120 columnas en commits aparte
+  (`a27489f` y `9b0035c`, ignorados por `git blame`) y `cargo fmt --all --check` en el check y en el CI.
 - ~~`INS-42` · Asistente real de punta a punta~~ (2026-10-26): autopausa por red con espera creciente en la
   Descarga, Ajustes y Reparar; calentar el narrador al entrar; perfil más ligero si falta memoria o narra lento.
 - ~~`INS-43` · Rendimiento de la IA y motor detenido~~ (2026-10-25): dónde corre la IA, cambiar de perfil con
