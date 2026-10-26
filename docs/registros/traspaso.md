@@ -14,7 +14,7 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #11 (2026-10-26, `a73f881`): `FLU-6`, con la confirmación de la usuaria. La CI de GitHub no arrancó (sin cuota); `ci-local` en verde sobre `f59202b`, Windows sin cubrir (pendiente de `INS-8`). |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-10-26: `INS-31` encargada a una sesión en el repo del juego (`session_01XdLgJee1jbp9j6iKsMcaaz`, rama `claude/ins-31-url-backend` desde su `main`, PR en borrador sin fusionar); la usuaria eligió sesión aparte y base `main`. Contrato `window.__TARKOR__.apiUrl` en `docs/04`. Presupuesto: 0 compactaciones. Siguiente: revisar el informe y el PR de esa sesión; si está bien, marcar `INS-31` en el plan. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-10-26: `INS-31` hecha en el repo del juego por una sesión aparte (rama `claude/ins-31-url-backend`, `1e9d9ad1`, desde su `main`); diff revisado aquí (solo `apiBaseUrl()` y la sustitución de `${API_URL}`); la sesión no abrió el PR y lo abrí yo: [PR #78](https://github.com/Zeldris/World-Maker-Fantasy/pull/78) en borrador, sin fusionar, CI sin comprobar. Sin tarea en curso. Siguiente: lo que pida la usuaria (la fase 3 sigue con `INS-32`). |
 | **Tests** | 2026-10-26: núcleo `cargo test -p tarkor-nucleo` 116, `cargo fmt --all --check` en verde, clippy 0 avisos, `tsc -b` 0, `cargo check` del núcleo y la app para Windows (mingw) en verde. Asistente `vitest` 27 y E2E con el Ollama falso: último verde el 2026-10-25. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -79,7 +79,10 @@ cada commit.**
     nunca un fallo); el job de Windows baja también rustfmt, clippy y el destino de Windows, que no usa; el test de
     la versión de Rust no entiende un `channel` que no sea número (`nightly-…`); `scout-updates` no lee `rust-toolchain.toml`, así que nadie avisa
     cuando la 1.94.1 se queda vieja.
-12. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
+12. Pendientes leves de `INS-31` (PR #78 del juego): con `VITE_API_URL=""` la base queda vacía (igual que antes);
+    el comentario de `useEntityBanner.test.tsx` aún dice «concatena API_URL»; `docs/arquitectura/15-instalacion.md`
+    del juego no menciona `window.__TARKOR__`.
+13. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
 
 ## Decisiones de la usuaria que bloquean algo
 
@@ -108,6 +111,8 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 
 Dos líneas cada una como mucho; el detalle está en el commit y la más antigua sale cuando hay más de 5.
 
+- ~~`INS-31` · URL del backend en tiempo de ejecución~~ (2026-10-26): `apiBaseUrl()` en el `api.ts` del juego con
+  `window.__TARKOR__.apiUrl`; PR #78 del juego en borrador, sin fusionar.
 - ~~`FLU-6` · Versión de Rust fijada~~ (2026-10-26): Rust 1.94.1 en `app/rust-toolchain.toml`, con rustfmt, clippy
   y el destino de Windows; el CI y `instalar-entorno.sh` lo instalan de ahí.
 - ~~`FLU-5` · `cargo fmt` en el check~~ (2026-10-26): workspace formateado a 120 columnas en commits aparte
@@ -116,5 +121,3 @@ Dos líneas cada una como mucho; el detalle está en el commit y la más antigua
   Descarga, Ajustes y Reparar; calentar el narrador al entrar; perfil más ligero si falta memoria o narra lento.
 - ~~`INS-43` · Rendimiento de la IA y motor detenido~~ (2026-10-25): dónde corre la IA, cambiar de perfil con
   borrado de sobrantes, «Copiar informe» y pantalla del motor detenido con vigilancia en Rust.
-- ~~`INS-49` · Reparar~~ (2026-10-25): suma de cada archivo del motor y de cada capa de los modelos; reinstala o
-  vuelve a pedir solo lo dañado, desde Ajustes y desde la comprobación.
