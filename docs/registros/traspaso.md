@@ -14,7 +14,7 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-25). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #8 (2026-10-25, `f399a63`): `INS-43` (y `INS-42`), con la confirmación de la usuaria. La CI de GitHub no arrancó (pago); `ci-local` en verde sobre `98bda69`, Windows sin cubrir (pendiente de `INS-8`). |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 🚧 2026-10-26: `INS-42`. Trozos **A** (autopausa por red en la Descarga) y **B** (calentar el narrador al entrar en el juego con `asegurar_motor`; perfil más ligero si falta memoria o narra bajo 3 palabras/s) hechos y revisados. Trozo **C**: la misma autopausa en Ajustes → cambiar de perfil y en Reparar; luego cerrar `INS-42`. Siguiente: trozo C. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 🚧 2026-10-26: `INS-42` cerrada en el plan (trozos A, B y C hechos; A y B revisados). Falta la revisión corta del trozo C (`29d9fd1`: `useEsperaRed` en Descarga, cambiar de perfil y Reparar). Siguiente: revisar el trozo C y luego las tres fases antes de `main`. |
 | **Tests** | 2026-10-25: núcleo `cargo test -p tarkor-nucleo` 104, asistente `vitest` 27, `tsc -b` 0, clippy 0 avisos, `cargo check` del núcleo para Windows (mingw) en verde; E2E del asistente con el Ollama falso en verde. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -84,6 +84,8 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 
 Dos líneas cada una como mucho; el detalle está en el commit y la más antigua sale cuando hay más de 5.
 
+- ~~`INS-42` · Asistente real de punta a punta~~ (2026-10-26): autopausa por red con espera creciente en la
+  Descarga, Ajustes y Reparar; calentar el narrador al entrar; perfil más ligero si falta memoria o narra lento.
 - ~~`INS-43` · Rendimiento de la IA y motor detenido~~ (2026-10-25): dónde corre la IA, cambiar de perfil con
   borrado de sobrantes, «Copiar informe» y pantalla del motor detenido con vigilancia en Rust.
 - ~~`INS-49` · Reparar~~ (2026-10-25): suma de cada archivo del motor y de cada capa de los modelos; reinstala o
@@ -92,5 +94,3 @@ Dos líneas cada una como mucho; el detalle está en el commit y la más antigua
   tarjeta, «Cambiar carpeta» en el paso 4 y «Mover a otra carpeta» en Ajustes.
 - ~~`INS-14` · Perfiles por encima del máximo seguro~~ (2026-10-25): se pueden elegir con aviso y confirmación
   en la tarjeta, sin interruptor; implementado el mismo día.
-- ~~`FLU-4` · Galivelop-workflow v0.3.0~~ (2026-10-25): `/gw-update` de scripts, skills y ganchos; `comprobar.yml`
-  se queda el local; dos reglas nuevas en `REVIEW.md`.
