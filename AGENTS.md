@@ -8,7 +8,9 @@ en `.claude/skills/` y su configuración en `.claude/gw.json` (solo la lee `.cla
 
 ## Al empezar cualquier sesión
 
-1. Lee la bitácora, `docs/registros/traspaso.md`: rama, tarea en curso, qué falta y siguiente paso.
+1. La bitácora, `docs/registros/traspaso.md`: rama, tarea en curso, qué falta y siguiente paso. Basta la fila de tu
+   rama que da el gancho de inicio (`recuperar.py --estado`); «Siguiente paso» solo si la fila no lo da, y
+   siempre «Decisiones de la usuaria que bloquean algo» (es corta).
 2. `git fetch origin <rama>` y comprueba que el último commit coincide con lo que dice la bitácora.
 3. Comprueba que el check está en verde antes de tocar nada: las órdenes de `check` en `.claude/gw.json`.
 4. Sigue por el **siguiente paso** de la bitácora, salvo que la usuaria pida otra cosa.
