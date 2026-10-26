@@ -17,6 +17,8 @@ pub enum Error {
     SinConexion(String),
     /// Ollama respondió con un error (modelo inexistente, sin memoria, sin red...).
     Ollama(String),
+    /// El modelo no terminó de cargarse en el tiempo máximo (`TOPE_CALENTAR`).
+    NarradorSinCargar,
     Cancelado,
 }
 
@@ -25,6 +27,10 @@ impl std::fmt::Display for Error {
         match self {
             Error::SinConexion(e) => write!(f, "El motor de IA no responde ({e})."),
             Error::Ollama(e) => write!(f, "{}", explicar(e)),
+            Error::NarradorSinCargar => write!(
+                f,
+                "El narrador no terminó de cargarse a tiempo. Cierra otros programas o prueba un perfil más ligero, y vuelve a intentarlo."
+            ),
             Error::Cancelado => write!(f, "Descarga cancelada. Lo descargado se conserva para continuar."),
         }
     }
@@ -45,9 +51,9 @@ enum Clase {
 
 fn clasificar(e: &str) -> Clase {
     let m = e.to_ascii_lowercase();
-    if m.contains("memory") || m.contains("oom") {
+    if m.contains("memory") || contiene_palabra(&m, "oom") {
         Clase::SinMemoria
-    } else if m.contains("forbidden") || m.contains("403") || m.contains("proxy") || m.contains("certificate") {
+    } else if m.contains("forbidden") || contiene_numero(&m, "403") || m.contains("proxy") || m.contains("certificate") {
         Clase::RedBloqueada
     } else if ["dial tcp", "no such host", "connection", "timeout", "unreachable", "max retries exceeded"]
         .iter()
@@ -59,6 +65,25 @@ fn clasificar(e: &str) -> Clase {
     } else {
         Clase::Otro
     }
+}
+
+/// `p` aparece como palabra suelta: sin letras, dígitos ni `_` pegados («oom» sí, «room» o «bloom» no).
+fn contiene_palabra(m: &str, p: &str) -> bool {
+    let pegado = |c: char| c.is_alphanumeric() || c == '_';
+    coincide_aislado(m, p, pegado, pegado)
+}
+
+/// `n` aparece como número suelto: sin dígitos pegados ni un `:` o un `.` delante («status 403» y «403: x» sí; el
+/// puerto de «1.2.3.4:54031» o de «:403», no).
+fn contiene_numero(m: &str, n: &str) -> bool {
+    coincide_aislado(m, n, |c| c.is_ascii_digit() || c == ':' || c == '.', |c| c.is_ascii_digit())
+}
+
+/// Alguna aparición de `p` en `m` cuyo carácter anterior no cumple `antes` ni el siguiente `despues`.
+fn coincide_aislado(m: &str, p: &str, antes: fn(char) -> bool, despues: fn(char) -> bool) -> bool {
+    m.match_indices(p).any(|(i, _)| {
+        !m[..i].chars().next_back().is_some_and(antes) && !m[i + p.len()..].chars().next().is_some_and(despues)
+    })
 }
 
 impl Error {
@@ -151,6 +176,10 @@ pub fn sobrantes(hay: Vec<(String, u64)>, del_perfil: &[&str]) -> Vec<(String, u
         .collect()
 }
 
+/// Tiempo máximo para cargar el modelo en memoria (`calentar`): un equipo justo de memoria puede tardar, pero no
+/// indefinidamente (REVIEW.md, «Esperas con tope»).
+const TOPE_CALENTAR: Duration = Duration::from_secs(5 * 60);
+
 /// Tiempo máximo de espera de lectura de las peticiones cortas (`/api/ps`, `/api/tags`...): un Ollama
 /// que acepta la conexión y no contesta no deja colgado al sondeo.
 const ESPERA_LECTURA: Duration = Duration::from_secs(10);
@@ -162,6 +191,8 @@ pub struct Cliente {
     /// Descargas en streaming (`/api/pull`) y generación (`/api/generate`, que puede tardar en
     /// cargar el modelo): sin tiempo de espera de lectura.
     agente_largo: ureq::Agent,
+    /// Carga del modelo (`calentar`): como `agente_largo`, pero con tope global.
+    agente_calentar: ureq::Agent,
 }
 
 /// Un fallo de `ureq`; el de tiempo de espera lo dice con esas palabras.
@@ -179,10 +210,16 @@ impl Cliente {
 
     /// Como `new`, con otro tiempo de espera de lectura para las peticiones cortas.
     pub fn con_espera(base: impl Into<String>, espera: Duration) -> Cliente {
+        Cliente::con_esperas(base, espera, TOPE_CALENTAR)
+    }
+
+    /// Como `con_espera`, con otro tope para cargar el modelo (los tests lo acortan).
+    fn con_esperas(base: impl Into<String>, espera: Duration, tope_calentar: Duration) -> Cliente {
         let base_config = || ureq::Agent::config_builder().proxy(None).http_status_as_error(false).timeout_connect(Some(Duration::from_secs(3)));
         let agente = base_config().timeout_recv_response(Some(espera)).timeout_recv_body(Some(espera)).build().into();
         let agente_largo = base_config().build().into();
-        Cliente { base: base.into().trim_end_matches('/').to_string(), agente, agente_largo }
+        let agente_calentar = base_config().timeout_global(Some(tope_calentar)).build().into();
+        Cliente { base: base.into().trim_end_matches('/').to_string(), agente, agente_largo, agente_calentar }
     }
 
     fn get(&self, ruta: &str) -> Result<Value, Error> {
@@ -191,8 +228,12 @@ impl Cliente {
     }
 
     fn post(&self, ruta: &str, cuerpo: Value) -> Result<Value, Error> {
-        let mut r = self.agente_largo.post(format!("{}{ruta}", self.base)).send_json(cuerpo).map_err(sin_conexion)?;
-        leer_json(r.status().as_u16(), r.body_mut().read_to_string().map_err(sin_conexion)?)
+        self.post_con(&self.agente_largo, ruta, cuerpo, sin_conexion)
+    }
+
+    fn post_con(&self, agente: &ureq::Agent, ruta: &str, cuerpo: Value, error: fn(ureq::Error) -> Error) -> Result<Value, Error> {
+        let mut r = agente.post(format!("{}{ruta}", self.base)).send_json(cuerpo).map_err(error)?;
+        leer_json(r.status().as_u16(), r.body_mut().read_to_string().map_err(error)?)
     }
 
     pub fn version(&self) -> Result<String, Error> {
@@ -293,9 +334,16 @@ impl Cliente {
         })
     }
 
-    /// Carga un modelo en memoria sin generar nada, para que el primer turno no espere la carga.
+    /// Carga un modelo en memoria sin generar nada, para que el primer turno no espere la carga. Con tope: si no
+    /// termina, `NarradorSinCargar`.
     pub fn calentar(&self, modelo: &str) -> Result<(), Error> {
-        self.post("/api/generate", json!({ "model": modelo }))?;
+        fn tope(e: ureq::Error) -> Error {
+            match e {
+                ureq::Error::Timeout(ureq::Timeout::Global) => Error::NarradorSinCargar,
+                e => sin_conexion(e),
+            }
+        }
+        self.post_con(&self.agente_calentar, "/api/generate", json!({ "model": modelo }), tope)?;
         Ok(())
     }
 
@@ -468,6 +516,32 @@ mod tests {
     }
 
     #[test]
+    fn oom_y_403_solo_cuentan_como_palabra_y_numero_sueltos() {
+        let o = |m: &str| Error::Ollama(m.to_string());
+        // «room», «bloom» o «zoom» no son «oom».
+        for m in ["write /x: no space left on device / no room left", "bloom filter failed", "zoom: no such file"] {
+            assert!(!o(m).sin_memoria(), "{m}");
+        }
+        assert!(!o("write /x: no space left on device / no room left").es_de_red());
+        assert_eq!(clasificar("no room left"), Clase::Otro);
+        for m in ["runner killed by OOM", "oom-killer", "llama runner: oom.", "out of memory", "not enough memory"] {
+            assert!(o(m).sin_memoria(), "{m}");
+        }
+        // Un puerto con «403» dentro no es un 403: aquí es una conexión cortada.
+        let corte = o("read tcp 10.0.0.2:54031->1.2.3.4:443: connection reset by peer");
+        assert!(corte.es_de_red(), "{corte}");
+        for m in ["unexpected status 403", "403 Forbidden", "http 403: nope", "error 403"] {
+            assert!(!o(m).es_de_red(), "{m}");
+            assert!(explicar_str(m).starts_with("La red de este equipo no deja descargar"), "{m}");
+        }
+        assert!(!explicar_str("dial tcp 1.2.3.4:403: i/o timeout").starts_with("La red de este equipo no deja"));
+    }
+
+    fn explicar_str(m: &str) -> String {
+        Error::Ollama(m.to_string()).to_string()
+    }
+
+    #[test]
     fn descarga_incompleta_es_error() {
         let c = ollama_falso("{\"status\":\"pulling manifest\"}\n");
         assert!(c.descargar_modelo("x", &AtomicBool::new(false), &mut |_| {}).is_err());
@@ -539,6 +613,30 @@ mod tests {
     fn sin_motor_es_sin_conexion() {
         let c = Cliente::new(format!("http://127.0.0.1:{}", crate::procesos::puerto_libre().unwrap()));
         assert!(matches!(c.version(), Err(Error::SinConexion(_))));
+    }
+
+    #[test]
+    fn calentar_carga_el_modelo() {
+        assert!(ollama_falso(PULL_OK).calentar("qwen2.5:7b").is_ok());
+    }
+
+    #[test]
+    fn calentar_tiene_tope_y_dice_que_el_narrador_no_cargo() {
+        let l = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let c = Cliente::con_esperas(format!("http://127.0.0.1:{}", l.local_addr().unwrap().port()), ESPERA_LECTURA, Duration::from_millis(300));
+        // Acepta la conexión y nunca responde: el modelo "sigue cargando".
+        let aceptador = thread::spawn(move || {
+            let s = l.accept().unwrap();
+            thread::sleep(Duration::from_secs(3));
+            drop(s);
+        });
+        let inicio = std::time::Instant::now();
+        let e = c.calentar("qwen2.5:7b").unwrap_err();
+        assert!(inicio.elapsed() < Duration::from_secs(2), "tardó {:?}", inicio.elapsed());
+        assert!(matches!(e, Error::NarradorSinCargar), "{e:?}");
+        assert!(e.to_string().contains("El narrador no terminó de cargarse"), "{e}");
+        assert!(!e.es_de_red() && !e.sin_memoria());
+        drop(aceptador);
     }
 
     #[test]

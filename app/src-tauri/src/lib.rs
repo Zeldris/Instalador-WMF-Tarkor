@@ -46,7 +46,10 @@ struct Estado {
     /// `detenido` sí); lo lee «Copiar informe».
     ultimo_motivo_parada: Mutex<Option<String>>,
     /// Pone en fila los arranques del motor (`arrancar_motor`, `asegurar_motor`): dos a la vez sacarían el motor recién
-    /// puesto, su `Drop` lo mataría y lo que lo usara (calentar el narrador) fallaría.
+    /// puesto, su `Drop` lo mataría y lo que lo usara (calentar el narrador) fallaría. Quien para el motor para
+    /// trabajar y volver a arrancarlo (Reparar, mover la carpeta, reintentar, cambiar de perfil) lo tiene cogido todo
+    /// ese tramo, para que `asegurar_motor` no arranque un motor en mitad de la obra; y dentro arranca con
+    /// `arrancar_sin_candado`, nunca con `arrancar_motor` (que lo coge y se bloquearía).
     arranque: MutexAsincrono<()>,
 }
 
@@ -258,6 +261,11 @@ async fn iniciar_motor(app: tauri::AppHandle) -> Res<()> {
 /// seguidas, o un cambio de perfil a la vez, no lanzan dos arranques. Con un Ollama externo no hace nada.
 #[tauri::command]
 async fn asegurar_motor(app: tauri::AppHandle) -> Res<()> {
+    asegurar(&app).await
+}
+
+/// Lo que hace `asegurar_motor`; también lo usa `cambiar_perfil` para tener motor antes de descargar.
+async fn asegurar(app: &tauri::AppHandle) -> Res<()> {
     let estado = app.state::<Estado>();
     asegurar_con(
         &estado.arranque,
@@ -265,7 +273,7 @@ async fn asegurar_motor(app: tauri::AppHandle) -> Res<()> {
             let a = app.clone();
             tauri::async_runtime::spawn_blocking(move || a.state::<Estado>().en_marcha()).await.unwrap_or(false)
         },
-        || arrancar_sin_candado(&app),
+        || arrancar_sin_candado(app),
     )
     .await
 }
@@ -285,8 +293,8 @@ where
     arrancar().await
 }
 
-/// Lo que hace `iniciar_motor`; también lo usa `cambiar_carpeta_ia` para volver a arrancar el
-/// motor con la carpeta nueva. En fila con cualquier otro arranque.
+/// Lo que hace `iniciar_motor`. En fila con cualquier otro arranque: quien ya tenga `Estado::arranque` cogido usa
+/// `arrancar_sin_candado`.
 async fn arrancar_motor(app: &tauri::AppHandle) -> Res<()> {
     let estado = app.state::<Estado>();
     let _fila = estado.arranque.lock().await;
@@ -335,9 +343,10 @@ async fn arrancar_sin_candado(app: &tauri::AppHandle) -> Res<()> {
     Ok(())
 }
 
-/// Vuelve a arrancar el motor tras un error; si no arranca, avisa de la parada.
+/// Vuelve a arrancar el motor tras un error; si no arranca, avisa de la parada. Quien llama ya tiene
+/// `Estado::arranque`.
 async fn rearrancar_o_avisar(app: &tauri::AppHandle) {
-    if let Err(e) = arrancar_motor(app).await {
+    if let Err(e) = arrancar_sin_candado(app).await {
         avisar_parada(app, e);
     }
 }
@@ -360,6 +369,8 @@ async fn cambiar_carpeta_ia(app: tauri::AppHandle, destino: String) -> Res<Rutas
         return Ok(Rutas { ia: actual, ..estado.rutas.clone() });
     }
     let _ocupado = Ocupado::tomar(&estado.ocupado)?;
+    // Parar, mover y volver a arrancar, sin que `asegurar_motor` arranque un motor en mitad del movimiento.
+    let _fila = estado.arranque.lock().await;
     let parado = estado.sacar_motor();
     let en_marcha = parado.is_some();
     if let Some(mut p) = parado {
@@ -395,7 +406,7 @@ async fn cambiar_carpeta_ia(app: tauri::AppHandle, destino: String) -> Res<Rutas
         eprintln!("{aviso}");
     }
     if en_marcha {
-        if let Err(e) = arrancar_motor(&app).await {
+        if let Err(e) = arrancar_sin_candado(&app).await {
             avisar_parada(&app, e.clone());
             return Err(format!("La carpeta se movió a {}, pero el motor de IA no arranca: {e}", nueva.display()));
         }
@@ -470,16 +481,9 @@ async fn cambiar_perfil(app: tauri::AppHandle, perfil: String, canal: Channel<Pr
     if estado.ollama_externo.is_none() {
         // Tras una doble caída el `Proceso` sigue en el `Mutex` con el hijo muerto (o no hay
         // motor): sin motor vivo la descarga fallaría con un error de conexión, y «Cambiar a un
-        // perfil más ligero» no serviría justo cuando se ofrece. `arrancar_motor` borra el aviso.
-        let app2 = app.clone();
-        let vivo = tauri::async_runtime::spawn_blocking(move || {
-            app2.state::<Estado>().cliente().and_then(|c| c.version().map_err(|e| e.to_string())).is_ok()
-        })
-        .await
-        .map_err(|e| e.to_string())?;
-        if !vivo {
-            arrancar_motor(&app).await?;
-        }
+        // perfil más ligero» no serviría justo cuando se ofrece. Arrancar borra el aviso. Comprobar y arrancar van
+        // bajo el candado de arranque, que se suelta antes de descargar (puede tardar horas).
+        asegurar(&app).await?;
     }
     let cliente = estado.cliente()?;
     let (cancelar, lista) = (estado.cancelar.clone(), modelos.clone());
@@ -491,15 +495,17 @@ async fn cambiar_perfil(app: tauri::AppHandle, perfil: String, canal: Channel<Pr
     let mut config = estado.config();
     config.perfil = Some(perfil);
     config.modelos_descargados = modelos;
+    // Guardar el perfil y reiniciar el motor con él, sin que `asegurar_motor` arranque uno con la config a medias.
+    let _fila = estado.arranque.lock().await;
     config.guardar(&estado.rutas.datos).map_err(|e| ErrorIa::from(format!("No se pudo guardar el perfil nuevo ({e}); sigue el de antes.")))?;
     if estado.ollama_externo.is_none() {
-        if let Err(e) = arrancar_motor(&app).await {
+        if let Err(e) = arrancar_sin_candado(&app).await {
             // Sin motor con el perfil nuevo no se queda a medias: vuelve el de antes, con su motor.
             let mut vuelta = estado.config();
             vuelta.perfil = antes.perfil.clone();
             vuelta.modelos_descargados = antes.modelos_descargados.clone();
             let guardado = vuelta.guardar(&estado.rutas.datos);
-            let vuelto = arrancar_motor(&app).await;
+            let vuelto = arrancar_sin_candado(&app).await;
             if let Err(e2) = &vuelto {
                 // Sin motor con ninguno de los dos perfiles: se avisa, para que salga la pantalla
                 // «El motor se ha detenido» con su «Reintentar».
@@ -649,12 +655,13 @@ fn motor_detenido(estado: State<'_, Estado>) -> Option<MotorDetenido> {
 }
 
 /// «Reintentar» de la pantalla «El motor se ha detenido»: saca el motor viejo del `Mutex`, borra el
-/// aviso y vuelve a arrancar con `arrancar_motor` (puerto nuevo y config al día, hasta 30 s). Si
+/// aviso y vuelve a arrancar con `arrancar_sin_candado` (puerto nuevo y config al día, hasta 30 s). Si
 /// falla, se vuelve a guardar y emitir el aviso.
 #[tauri::command]
 async fn reintentar_motor(app: tauri::AppHandle) -> Res<()> {
     let estado = app.state::<Estado>();
     let _ocupado = Ocupado::tomar(&estado.ocupado)?;
+    let _fila = estado.arranque.lock().await;
     // Primero se saca el proceso y luego se borra el aviso: la vigilancia no ve un motor caído sin
     // aviso y lo avisa otra vez mientras se reintenta.
     let viejo = estado.sacar_motor();
@@ -662,7 +669,7 @@ async fn reintentar_motor(app: tauri::AppHandle) -> Res<()> {
     if let Some(mut v) = viejo {
         v.parar();
     }
-    match arrancar_motor(&app).await {
+    match arrancar_sin_candado(&app).await {
         Ok(()) => Ok(()),
         Err(motivo) => {
             avisar_parada(&app, motivo.clone());
@@ -695,6 +702,8 @@ async fn reparar(app: tauri::AppHandle, canal_motor: Channel<motor::Progreso>, c
     let modelos: Vec<String> = perfil.modelos().into_iter().map(String::from).collect();
     let (mut motor_reinstalado, mut capas_repuestas) = (false, 0);
     if estado.ollama_externo.is_none() {
+        // Parar, reparar y volver a arrancar, sin que `asegurar_motor` arranque un motor en mitad de la reparación.
+        let _fila = estado.arranque.lock().await;
         // Parado, ningún archivo está en uso: en Windows no se podría reponer ni borrar.
         if let Some(mut p) = estado.sacar_motor() {
             p.parar();
@@ -716,7 +725,7 @@ async fn reparar(app: tauri::AppHandle, canal_motor: Channel<motor::Progreso>, c
         .map_err(|e| ErrorIa::from(e.to_string()))
         .and_then(|r| r);
         // Con lo que haya (el motor de antes si no se pudo reponer), el motor vuelve a arrancar.
-        let arrancado = arrancar_motor(&app).await;
+        let arrancado = arrancar_sin_candado(&app).await;
         if let Err(e) = &arrancado {
             // Sin motor no se queda callado: sale la pantalla «El motor se ha detenido».
             avisar_parada(&app, e.clone());
