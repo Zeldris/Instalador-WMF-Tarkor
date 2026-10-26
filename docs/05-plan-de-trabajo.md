@@ -201,6 +201,7 @@ ganchos, `.claude/gw/scripts`, `tools/qa` y las skills ([runbook](runbooks/skill
   fecha, commit y resultado en [`ci-local.md`](registros/ci-local.md). El job de Windows sale como «sin cubrir».
 - [x] **FLU-4** (2026-10-25) `/gw-update` a Galivelop-workflow v0.3.0: scripts, esquema, skills y ganchos al día;
   `comprobar.yml` conserva sus jobs (el cambio de `ciInstall` no le toca) y `REVIEW.md` gana dos reglas de la plantilla.
-- [ ] **FLU-5** (2026-10-26, retro de `INS-42`) `cargo fmt` del workspace en un commit aparte y `cargo fmt --check`
-  en `check` de `.claude/gw.json` y en `comprobar.yml`. `lib.rs` no lo pasa desde antes de `INS-42`. Justo después de
-  fusionar la rama de `INS-42`, para no chocar con otras ramas que toquen `lib.rs`.
+- [x] **FLU-5** (2026-10-26, retro de `INS-42`) `cargo fmt` del workspace en un commit aparte (`a27489f`, a 120
+  columnas con `app/rustfmt.toml`, el ancho del resto del repo) y `cargo fmt --all --check` en `check` de
+  `.claude/gw.json` y en `comprobar.yml` (con `rustfmt` y `clippy` declarados en el toolchain). El commit de formato va
+  en `.git-blame-ignore-revs`.

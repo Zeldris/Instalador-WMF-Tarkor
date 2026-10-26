@@ -1,0 +1,6 @@
+# Commits de solo formato que `git blame` se salta (FLU-5). Se activa en cada clon con:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# GitHub lo lee solo. Los PR se fusionan con commit de merge, así que estos hashes llegan a main.
+
+# FLU-5: cargo fmt del workspace, a 120 columnas
+a27489f2d079fcae5e91d911a2401a43799dda28

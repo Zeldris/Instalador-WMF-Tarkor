@@ -26,6 +26,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-gnu
+          components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: app
@@ -35,6 +36,7 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: cargo test -p tarkor-nucleo
+      - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - name: El núcleo y la app compilan para Windows
         run: cargo check -p tarkor-nucleo -p tarkor --target x86_64-pc-windows-gnu --all-targets

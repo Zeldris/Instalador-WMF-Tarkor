@@ -14,7 +14,7 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #8 (2026-10-25, `f399a63`): `INS-43` (y `INS-42`), con la confirmación de la usuaria. La CI de GitHub no arrancó (pago); `ci-local` en verde sobre `98bda69`, Windows sin cubrir (pendiente de `INS-8`). |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | ✅ 2026-10-26: `INS-42` fusionada en `main` por el PR #9 (`b4450fe`), con la confirmación de la usuaria; CI de GitHub sin cuota, verde en local (`ci-local.md`), Windows sin cubrir. Rama rehecha desde `main`. Siguiente: `FLU-5` (`cargo fmt` del workspace en un commit aparte y `cargo fmt --check` en el check y en el CI). |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | ✅ 2026-10-26: `FLU-5` hecha: `cargo fmt` del workspace a 120 columnas en un commit aparte (`a27489f`, en `.git-blame-ignore-revs`) y `cargo fmt --all --check` en el check y en el CI. Presupuesto: 0 compactaciones (27 en la sesión, 0 desde la fusión). Sin subir a `main`. Siguiente: decidir con la usuaria si `FLU-5` va sola a `main` (PR) o con la próxima tarea; la siguiente del plan es la fusión del PR #1 del juego (fase 2). |
 | **Tests** | 2026-10-25: núcleo `cargo test -p tarkor-nucleo` 104, asistente `vitest` 27, `tsc -b` 0, clippy 0 avisos, `cargo check` del núcleo para Windows (mingw) en verde; E2E del asistente con el Ollama falso en verde. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -50,8 +50,8 @@ cada commit.**
 7. Pendientes leves de la revisión del trozo B de `INS-42`: `calentar` no manda las `options` del juego (`num_thread`), que podrían
    recargar el modelo en el primer turno; al abrir con el motor ya caído, `Juego` puede arrancarlo a la vez que
    «Reintentar» de la pantalla del motor detenido; el test «calienta una sola vez» usa `rerender` y no prueba el
-   `[]` del efecto; la fila de fallo de la Comprobación ofrece «Probar un perfil más ligero» aunque no haya uno;
-   `lib.rs` no pasa `cargo fmt` (ya antes de este trozo; `FLU-5`). El candado compartido ya no pide test: arrancar
+   `[]` del efecto; la fila de fallo de la Comprobación ofrece «Probar un perfil más ligero» aunque no haya uno.
+   El candado compartido ya no pide test: arrancar
    sin él no compila (`Turno`, retro de `INS-42`).
 8. Pendientes leves de la revisión del trozo C de `INS-42`: `cambiar` y `empezar` no reinician la escalera tras
    Pausar y volver a pulsar (queda en 40/60 s); si un reintento de `reparar` falla por red tras reinstalar el motor o
