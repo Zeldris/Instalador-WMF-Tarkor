@@ -106,7 +106,10 @@ Ver [`06`](06-inventario-exclusiones.md).
   **en `main` del juego** (`b76c66b2`, sin PR y con CI local por la cuota agotada, `QA-215`; retro `QA-259`…`QA-261`
   aplicada allí): `apiBaseUrl()` con el contrato
   `window.__TARKOR__.apiUrl` de [`04`](04-empaquetado-tauri.md); todas las URLs de `api.ts` pasan por ella; 8 tests.
-- [ ] **INS-32** Frontend: fuentes Cinzel e Inter en local.
+- [x] **INS-32** (2026-10-26) Frontend: fuentes Cinzel e Inter en local. Ya estaba hecho en `main` del juego por
+  su tarea `BAS-1` (`4a150259`, 2026-10-25): `frontend/src/assets/fonts/fonts.css` con Cinzel e Inter variables
+  (latin y latin-ext, de `@fontsource-variable` 5.3.0) y sus `LICENSE-*.txt` (OFL, ver `08`); en `frontend` no
+  queda ninguna petición a Google Fonts. Sin cambios en el juego.
 - [ ] **INS-33** Frontend: quitar `ImagePromptSlot`; deshabilitar "Crear desde cero" como "en
   construcción"; revisar el texto de `ComingSoon.tsx`.
 - [ ] **INS-34** Backend: build sin rutas ni servicios de curación (ruta de image-prompt, orquestador

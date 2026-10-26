@@ -184,7 +184,8 @@ si faltan, `env.ts` las lee con `?? ''`):
    (`@import url('https://fonts.googleapis.com/…')`). Una app de escritorio no puede depender de
    eso (sin red se vería con Georgia, y además es una petición a un tercero que contradice `08`).
    Acción: empaquetar Cinzel e Inter en local (p. ej. `@fontsource/cinzel`, `@fontsource/inter`)
-   en la build del instalador.
+   en la build del instalador. **Resuelto** (`INS-32`): el juego las empaqueta desde `BAS-1`
+   (`frontend/src/assets/fonts/`, con sus licencias).
 2. **`Modelfile` leído en tiempo de ejecución.** `backend/src/lib/modelfileSystemPrompt.ts` lee
    `../../Modelfile` del disco. En el binario hay que incrustar el texto en el build (ver `03` y
    `10`). Además, en el instalador el narrador pasa a ser el modelo base + `system` por petición
