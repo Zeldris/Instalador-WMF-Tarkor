@@ -14,7 +14,7 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #10 (2026-10-26, `76acfb3`): `FLU-5`, con la confirmación de la usuaria. La CI de GitHub no arrancó (sin cuota); `ci-local` en verde sobre `4641939`, Windows sin cubrir (pendiente de `INS-8`). |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-10-26: `FLU-6` hecha (Rust 1.94.1 fijado en `app/rust-toolchain.toml`; el CI y `instalar-entorno.sh` lo instalan de ahí), check en verde. Siguiente: las tres fases de `AGENTS.md` y PR a `main`, con la confirmación de la usuaria. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-10-26: `FLU-6` hecha; fase 1 de `AGENTS.md` (revisión del diff contra `origin/main`) con sus arreglos (orden y avisos del Rust en `instalar-entorno.sh`, pendiente del CI en el plan); leves en «Siguiente paso». Siguiente: fase 2 (`opt-tokens` y `retro`, presentadas a la usuaria). |
 | **Tests** | 2026-10-26: núcleo `cargo test -p tarkor-nucleo` 116, `cargo fmt --all --check` en verde, clippy 0 avisos, `tsc -b` 0, `cargo check` del núcleo y la app para Windows (mingw) en verde. Asistente `vitest` 27 y E2E con el Ollama falso: último verde el 2026-10-25. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -74,7 +74,13 @@ cada commit.**
 10. Pendientes leves de la revisión de `FLU-5` (no vuelven a revisarse en su PR): el commit de formato `a27489f` no
     actualizó la bitácora (se hizo en los siguientes). La versión de Rust la fija `FLU-6` (2026-10-26); el CI de
     GitHub con ella está sin probar hasta que vuelva la cuota.
-11. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
+11. Pendientes leves de la revisión de `FLU-6` (no vuelven a revisarse en su PR): `Swatinem/rust-cache` saca la
+    clave de `rustc -vV` en la raíz, donde manda el stable del runner y no la versión fijada (caché desperdiciada,
+    nunca un fallo); el job de Windows baja también rustfmt, clippy y el destino de Windows, que no usa; la versión
+    está en tres sitios (`rust-toolchain.toml` y el `rust-version` de los dos `Cargo.toml`; un
+    `[workspace.package]` lo dejaría en dos); `scout-updates` no lee `rust-toolchain.toml`, así que nadie avisa
+    cuando la 1.94.1 se queda vieja.
+12. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
 
 ## Decisiones de la usuaria que bloquean algo
 
