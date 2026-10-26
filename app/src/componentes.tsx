@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api, ErrorIa } from './api'
 import { textoEspera, useEsperaRed } from './esperaRed'
@@ -87,7 +87,7 @@ export function Medidor({ evaluacion }: { evaluacion: Evaluacion }) {
   )
 }
 
-export function Tarjetas({ evaluacion, seleccionado, onSeleccionar, confirmado, onConfirmar, onCambiarCarpeta, moviendo }: {
+export function Tarjetas({ evaluacion, seleccionado, onSeleccionar, confirmado, onConfirmar, onCambiarCarpeta, moviendo, desactivado = false }: {
   evaluacion: Evaluacion
   seleccionado: PerfilId | null
   onSeleccionar: (id: PerfilId) => void
@@ -95,6 +95,8 @@ export function Tarjetas({ evaluacion, seleccionado, onSeleccionar, confirmado, 
   onConfirmar: (si: boolean) => void
   onCambiarCarpeta: () => void
   moviendo: boolean
+  /** Algo más está usando el motor (p. ej. Reparar): no se cambia de perfil ni de carpeta. */
+  desactivado?: boolean
 }) {
   const analizado = evaluacion.memoriaParaIaGb !== null
   const libre = evaluacion.discoLibreGb
@@ -108,6 +110,7 @@ export function Tarjetas({ evaluacion, seleccionado, onSeleccionar, confirmado, 
               type="button"
               className={`tarjeta${sel ? ' sel' : ''}`}
               aria-pressed={sel}
+              disabled={desactivado}
               onClick={() => onSeleccionar(p.id)}
             >
               <span className="nombre">{p.nombre}</span>
@@ -137,7 +140,7 @@ export function Tarjetas({ evaluacion, seleccionado, onSeleccionar, confirmado, 
             {libre !== null && (
               <p className={`espacio peq${p.cabeEnDisco ? ' tenue' : ' sin'}`}>
                 <span><span className="nw">{t.necesita(fmt(p.necesitaDiscoGb))}</span> · <span className="nw">{t.libres(fmt(libre))}</span></span>
-                {!p.cabeEnDisco && <button type="button" className="enlace" disabled={moviendo} onClick={onCambiarCarpeta}>{t.cambiarCarpeta}</button>}
+                {!p.cabeEnDisco && <button type="button" className="enlace" disabled={moviendo || desactivado} onClick={onCambiarCarpeta}>{t.cambiarCarpeta}</button>}
               </p>
             )}
           </div>
@@ -187,12 +190,19 @@ export function textoModelo(p: ProgresoModelo) {
  * «Reparar» (`INS-49`): el botón, lo que está haciendo y cómo acabó. `alTerminar` solo se llama si salió bien.
  * Si se pierde la red (`ErrorIa.red`, `INS-42`) espera y repite la reparación sola, como la Descarga.
  */
-export function Reparar({ alTerminar, desactivado = false }: { alTerminar?: (r: Reparacion) => void; desactivado?: boolean }) {
+export function Reparar({ alTerminar, alReparar, desactivado = false }: {
+  alTerminar?: (r: Reparacion) => void
+  /** Avisa de que está (o ya no) reparando, esperando la red incluida: el padre bloquea lo que usa el mismo motor. */
+  alReparar?: (reparando: boolean) => void
+  desactivado?: boolean
+}) {
   const [reparando, setReparando] = useState(false)
   const [estado, setEstado] = useState('')
   const [error, setError] = useState<string | null>(null)
   const cancelando = useRef(false)
   const espera = useEsperaRed()
+  useEffect(() => { alReparar?.(reparando) }, [alReparar, reparando])
+  useEffect(() => () => alReparar?.(false), [alReparar])
   const empezar = async () => {
     cancelando.current = false
     espera.cancelar()

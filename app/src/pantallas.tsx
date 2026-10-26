@@ -274,7 +274,9 @@ function useCambiarPerfil(reemplazarConfig: (c: Config) => void) {
       // Con un Ollama externo el núcleo devuelve una lista vacía: sus modelos no se tocan.
       setSobrantes(await api.modelosSobrantes().catch(() => []))
     } catch (e) {
-      if (pausando.current && String(e).startsWith(tx.ajustes.prefijoCancelacion)) setEstado(tx.ajustes.pausado)
+      // Pausar manda sobre un corte de red que llega a la vez (sin reintento ni error). Otro fallo sí se enseña: p. ej. el
+      // motor que no arranca con el perfil nuevo, ya descargado, no es una pausa.
+      if (pausando.current && (String(e).startsWith(tx.ajustes.prefijoCancelacion) || (e instanceof ErrorIa && e.red))) setEstado(tx.ajustes.pausado)
       else if (e instanceof ErrorIa && e.red) {
         setEstado('')
         esperaPuesta = true
@@ -331,6 +333,8 @@ export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpe
   const [confirmado, setConfirmado] = useState(false)
   const carpeta = useMoverCarpeta(cambiarCarpeta)
   const cambio = useCambiarPerfil(reemplazarConfig)
+  // Reparar y el cambio de perfil usan el mismo motor (en Rust, `Ocupado`): mientras uno trabaja o espera la red, el otro no se toca.
+  const [reparando, setReparando] = useState(false)
   useEffect(() => { alCambiar?.(cambio.cambiando) }, [alCambiar, cambio.cambiando])
   useEffect(() => () => alCambiar?.(false), [alCambiar])
   // Un perfil guardado que ya no está en la evaluación cuenta como el recomendado.
@@ -345,7 +349,7 @@ export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpe
           <button type="button" className="btn" disabled={cambio.cambiando} onClick={reanalizar}>{t.reanalizar}</button><span className="hueco" />
           {cambio.cambiando && <button type="button" className="btn" onClick={cambio.pausar}>{t.pausar}</button>}
           {cambio.segundosEspera !== null && <button type="button" className="btn" onClick={cambio.reintentarAhora}>{tx.descarga.reintentarAhora}</button>}
-          <button type="button" className="btn pri" disabled={cambio.cambiando || !nuevo || nuevo.id === actual.id || bloqueado(evaluacion, nuevo, confirmado)} onClick={() => nuevo && void cambio.cambiar(nuevo.id)}>
+          <button type="button" className="btn pri" disabled={cambio.cambiando || reparando || !nuevo || nuevo.id === actual.id || bloqueado(evaluacion, nuevo, confirmado)} onClick={() => nuevo && void cambio.cambiar(nuevo.id)}>
             {nuevo?.id === actual.id ? t.actualBoton : extra > 0 ? t.cambiarDescargar(fmt(extra)) : t.cambiar}
           </button></>}>
         <DondeCorre />
@@ -356,15 +360,15 @@ export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpe
         {cambio.error && <div className="error" role="alert">{cambio.error}</div>}
         {cambio.sobrantes.length > 0 && (
           <div className="fila">
-            <button type="button" className="btn" disabled={cambio.borrando || cambio.cambiando} onClick={() => void cambio.borrar()}>{cambio.borrando ? t.borrando : t.borrar(fmt(cambio.sobrantes.reduce((a, s) => a + s.gb, 0)))}</button>
+            <button type="button" className="btn" disabled={cambio.borrando || cambio.cambiando || reparando} onClick={() => void cambio.borrar()}>{cambio.borrando ? t.borrando : t.borrar(fmt(cambio.sobrantes.reduce((a, s) => a + s.gb, 0)))}</button>
           </div>
         )}
         <Tarjetas evaluacion={evaluacion} seleccionado={elegido} confirmado={confirmado} onConfirmar={setConfirmado}
-          onCambiarCarpeta={carpeta.mover} moviendo={carpeta.moviendo}
+          onCambiarCarpeta={carpeta.mover} moviendo={carpeta.moviendo} desactivado={reparando}
           onSeleccionar={(id) => { setConfirmado(false); setElegido(id) }} />
-        {rutas && <CarpetaIa ruta={rutas.ia} accion={t.moverCarpeta} moviendo={carpeta.moviendo} error={carpeta.error} onMover={carpeta.mover} desactivado={cambio.cambiando} />}
+        {rutas && <CarpetaIa ruta={rutas.ia} accion={t.moverCarpeta} moviendo={carpeta.moviendo} error={carpeta.error} onMover={carpeta.mover} desactivado={cambio.cambiando || reparando} />}
         <ControlUsoCpu uso={config.usoCpu} hilos={config.equipo?.hilos ?? 4} onCambiar={(usoCpu) => actualizar({ usoCpu })} desactivado={cambio.cambiando} />
-        <Reparar alTerminar={(r) => actualizar({ modelosDescargados: r.modelos })} desactivado={cambio.cambiando} />
+        <Reparar alTerminar={(r) => actualizar({ modelosDescargados: r.modelos })} alReparar={setReparando} desactivado={cambio.cambiando} />
         <CopiarInforme />
         {nuevo && nuevo.descargaGb < actual.descargaGb && <p className="peq tenue">{t.liberar(nuevo.nombre, fmt(actual.descargaGb - nuevo.descargaGb))}</p>}
       </Pagina>

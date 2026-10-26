@@ -41,6 +41,7 @@ export function useEsperaRed(esperas: readonly number[] = ESPERAS_RED_S): Espera
   const pendiente = useRef<(() => void) | null>(null)
   const fallos = useRef(0)
   const maxHecho = useRef(new Map<string, number>())
+  const montado = useRef(false)
   const escalera = useRef(esperas)
   escalera.current = esperas
 
@@ -60,6 +61,8 @@ export function useEsperaRed(esperas: readonly number[] = ESPERAS_RED_S): Espera
     return true
   }, [])
   const programar = useCallback((reintentar: () => void) => {
+    // Un error de red que llega con la pantalla ya cerrada no deja ningún reintento sin pantalla.
+    if (!montado.current) return
     parar()
     const segundos = escalera.current[Math.min(fallos.current, escalera.current.length - 1)]
     fallos.current++
@@ -81,8 +84,11 @@ export function useEsperaRed(esperas: readonly number[] = ESPERAS_RED_S): Espera
     const id = setInterval(() => setAhora(Date.now()), 1000)
     return () => clearInterval(id)
   }, [reintentoEn])
-  // Al desmontar no queda ningún reintento vivo.
-  useEffect(() => parar, [parar])
+  // Al desmontar no queda ningún reintento vivo, ni se programa ninguno después.
+  useEffect(() => {
+    montado.current = true
+    return () => { montado.current = false; parar() }
+  }, [parar])
 
   const segundos = reintentoEn === null ? null : Math.max(0, Math.ceil((reintentoEn - ahora) / 1000))
   return { segundos, progreso, programar, reintentarAhora, cancelar, reiniciar }

@@ -859,4 +859,65 @@ describe('autopausa por red al cambiar de perfil y al reparar (INS-42)', () => {
     await pasar(70000)
     expect(cambiar).toHaveBeenCalledTimes(1)
   }), 30000)
+
+  /** Una llamada que la prueba resuelve a mano: `fallar` la hace fallar como un corte de red. */
+  const llamadaEnVuelo = () => {
+    let fallar: () => void = () => {}
+    const promesa = new Promise<never>((_, rechazar) => { fallar = () => rechazar(new ErrorIa('Sin conexión.', true)) })
+    return { promesa, fallar }
+  }
+
+  it('un corte de red que llega con Reparar ya desmontada no programa ningún reintento', () => conRelojFalso(async () => {
+    const { promesa, fallar } = llamadaEnVuelo()
+    const reparar = vi.spyOn(ejemplo, 'reparar').mockImplementation(() => promesa)
+    render(<Reparar />)
+    fireEvent.click(await boton('Reparar'))
+    await waitFor(() => expect(reparar).toHaveBeenCalledTimes(1))
+    cleanup()
+    await act(async () => { fallar(); await promesa.catch(() => {}) })
+    await pasar(70000)
+    expect(reparar).toHaveBeenCalledTimes(1)
+  }), 30000)
+
+  it('un corte de red que llega con Ajustes ya desmontada no reintenta el cambio de perfil', () => conRelojFalso(async () => {
+    const { promesa, fallar } = llamadaEnVuelo()
+    const cambiar = vi.spyOn(ejemplo, 'cambiarPerfil').mockImplementation(() => promesa)
+    await cambiarALigero()
+    await waitFor(() => expect(cambiar).toHaveBeenCalledTimes(1))
+    cleanup()
+    await act(async () => { fallar(); await promesa.catch(() => {}) })
+    await pasar(70000)
+    expect(cambiar).toHaveBeenCalledTimes(1)
+  }), 30000)
+
+  it('Pausar y que la llamada falle a la vez con un corte de red deja «pausado», sin reintento', () => conRelojFalso(async () => {
+    const { promesa, fallar } = llamadaEnVuelo()
+    const cambiar = vi.spyOn(ejemplo, 'cambiarPerfil').mockImplementation(() => promesa)
+    const reemplazar = await cambiarALigero()
+    await waitFor(() => expect(cambiar).toHaveBeenCalledTimes(1))
+    fireEvent.click(await boton('Pausar'))
+    await act(async () => { fallar(); await promesa.catch(() => {}) })
+    expect(await screen.findByText(/^Cambio pausado/)).toBeTruthy()
+    expect(screen.queryByText(/Esperando conexión/)).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+    await pasar(70000)
+    expect(cambiar).toHaveBeenCalledTimes(1)
+    expect(reemplazar).not.toHaveBeenCalled()
+  }), 30000)
+
+  it('mientras Reparar espera la red, Ajustes no deja cambiar de perfil ni tocar las tarjetas, y vuelve a dejar al cancelar', () => conRelojFalso(async () => {
+    fijarSinRed(1)
+    render(<Ajustes config={config} evaluacion={e} rutas={null} cambiarCarpeta={async () => {}} actualizar={() => {}}
+      reemplazarConfig={vi.fn()} reanalizar={async () => {}} volver={() => {}} />)
+    fireEvent.click(await boton(/^Ligero/))
+    expect(await boton(/^Cambiar/)).toHaveProperty('disabled', false)
+    fireEvent.click(await boton('Reparar'))
+    await screen.findByText(linea, {}, { timeout: 3000 })
+    expect(screen.getByRole('button', { name: /^Cambiar/ })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: /^Ligero/ })).toHaveProperty('disabled', true)
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    await screen.findByText(/^Reparación cancelada/)
+    expect(screen.getByRole('button', { name: /^Cambiar/ })).toHaveProperty('disabled', false)
+    expect(screen.getByRole('button', { name: /^Ligero/ })).toHaveProperty('disabled', false)
+  }), 30000)
 })
