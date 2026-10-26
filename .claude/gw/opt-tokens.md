@@ -44,6 +44,12 @@ antes de la `/retro`; todo en español, y solo lo que confirme la usuaria entra 
   procesos, y en un subagente.
 - **El ejemplo `motor`** descarga el motor y varios GB de modelos: nunca en la sesión principal ni sin necesidad.
 - **Leer el repo del juego**: cuando la tarea cruza con él, se lee con búsquedas estrechas o en un subagente.
+- **Medidas de referencia** (opt-tokens de `FLU-6`): tras un `/clear`, cada llamada parte de ~90k de contexto fijo
+  (instrucciones, herramientas, skills), así que una tarea pequeña cuesta sobre todo por número de llamadas;
+  `/code-review` de un diff de 26 líneas, ~1 M (subagente de 13 llamadas). No se abarata: su contexto limpio
+  encontró tres medios que la sesión no vio.
+- **Leer la bitácora al empezar** (opt-tokens de `FLU-6`): 80 líneas leídas con la fila ya dada por el gancho
+  arrastraron ~70k; el paso 1 de «Al empezar» de `AGENTS.md` pide solo la fila.
 - **Páginas de documentación largas** (`QA-176`): un WebFetch con pregunta estrecha o un subagente que devuelva
   solo lo que se busca.
 - **Documentos largos del repo** (retro del 2026-10-21): el plan y el `README` fueron lo que más arrastró en

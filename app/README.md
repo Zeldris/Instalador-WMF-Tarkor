@@ -18,7 +18,7 @@ release.
 
 ## Requisitos
 
-- Node 22 y Rust estable.
+- Node 22 y el Rust que fija [`rust-toolchain.toml`](rust-toolchain.toml) (rustup lo instala solo).
 - Linux: `libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libxdo-dev libssl-dev`.
 - Windows: WebView2 (viene con Windows 10/11).
 

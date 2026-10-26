@@ -2,7 +2,7 @@
 name = "tarkor-nucleo"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.94"
+rust-version.workspace = true
 description = "Lógica sin interfaz del instalador de Tarkor: detección de equipo, perfiles de IA, configuración, procesos y motor de IA."
 publish = false
 

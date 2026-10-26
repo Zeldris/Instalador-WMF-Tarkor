@@ -12,9 +12,9 @@ cada commit.**
 |---|---|
 | **Actualizado** | 2026-10-26 |
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
-| **Último commit en `main`** | Fusión del PR #9 (2026-10-26, `b4450fe`): `INS-42`, con la confirmación de la usuaria. La CI de GitHub no arrancó (sin cuota); `ci-local` en verde, Windows sin cubrir (pendiente de `INS-8`). |
+| **Último commit en `main`** | Fusión del PR #10 (2026-10-26, `76acfb3`): `FLU-5`, con la confirmación de la usuaria. La CI de GitHub no arrancó (sin cuota); `ci-local` en verde sobre `4641939`, Windows sin cubrir (pendiente de `INS-8`). |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-10-26: `FLU-5` hecha; la usuaria pide llevarla a `main` con el CI local (GitHub sin cuota). Las tres fases hechas ([retro](retro-2026-10-26-flu5.md): O1 aplicada, R3 → `FLU-6`, R1 y R2 al flujo); marca de revisión `4641939` y [CI local](ci-local.md) en verde sobre ella (11 pasos; Windows sin cubrir). Presupuesto: 0 compactaciones (1 desde la fusión). Siguiente: PR a `main` y fusión. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-10-26: `FLU-6` hecha; fases 1 y 2 de `AGENTS.md` cerradas ([retro](retro-2026-10-26-flu6.md) aprobada). Fase 3: arreglos del test subidos (`rust-version` en `[workspace.package]`); CI local en verde sobre `f59202b` (Windows sin cubrir). Siguiente: `revisado.sh` y PR a `main` con la skill `pr`. |
 | **Tests** | 2026-10-26: núcleo `cargo test -p tarkor-nucleo` 116, `cargo fmt --all --check` en verde, clippy 0 avisos, `tsc -b` 0, `cargo check` del núcleo y la app para Windows (mingw) en verde. Asistente `vitest` 27 y E2E con el Ollama falso: último verde el 2026-10-25. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -72,9 +72,14 @@ cada commit.**
      motor sano (las tres, ya en `main`); el test de dos arranques copia la forma de `asegurar` en vez de llamarlo (el
      tipo lo cubre: sin turno no se llama a `arrancar_con_turno`); `coger` reserva memoria para la guarda.
 10. Pendientes leves de la revisión de `FLU-5` (no vuelven a revisarse en su PR): el commit de formato `a27489f` no
-    actualizó la bitácora (se hizo en los siguientes); la versión de Rust sin fijar pasa a `FLU-6`
-    (retro de `FLU-5`).
-11. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
+    actualizó la bitácora (se hizo en los siguientes). La versión de Rust la fija `FLU-6` (2026-10-26); el CI de
+    GitHub con ella está sin probar hasta que vuelva la cuota.
+11. Pendientes leves de la revisión de `FLU-6` (no vuelven a revisarse en su PR): `Swatinem/rust-cache` saca la
+    clave de `rustc -vV` en la raíz, donde manda el stable del runner y no la versión fijada (caché desperdiciada,
+    nunca un fallo); el job de Windows baja también rustfmt, clippy y el destino de Windows, que no usa; el test de
+    la versión de Rust no entiende un `channel` que no sea número (`nightly-…`); `scout-updates` no lee `rust-toolchain.toml`, así que nadie avisa
+    cuando la 1.94.1 se queda vieja.
+12. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
 
 ## Decisiones de la usuaria que bloquean algo
 
@@ -103,6 +108,8 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 
 Dos líneas cada una como mucho; el detalle está en el commit y la más antigua sale cuando hay más de 5.
 
+- ~~`FLU-6` · Versión de Rust fijada~~ (2026-10-26): Rust 1.94.1 en `app/rust-toolchain.toml`, con rustfmt, clippy
+  y el destino de Windows; el CI y `instalar-entorno.sh` lo instalan de ahí.
 - ~~`FLU-5` · `cargo fmt` en el check~~ (2026-10-26): workspace formateado a 120 columnas en commits aparte
   (`a27489f` y `9b0035c`, ignorados por `git blame`) y `cargo fmt --all --check` en el check y en el CI.
 - ~~`INS-42` · Asistente real de punta a punta~~ (2026-10-26): autopausa por red con espera creciente en la
@@ -111,5 +118,3 @@ Dos líneas cada una como mucho; el detalle está en el commit y la más antigua
   borrado de sobrantes, «Copiar informe» y pantalla del motor detenido con vigilancia en Rust.
 - ~~`INS-49` · Reparar~~ (2026-10-25): suma de cada archivo del motor y de cada capa de los modelos; reinstala o
   vuelve a pedir solo lo dañado, desde Ajustes y desde la comprobación.
-- ~~`INS-48` · Carpeta de la IA elegible y movible~~ (2026-10-25): espacio necesario frente a libre en cada
-  tarjeta, «Cambiar carpeta» en el paso 4 y «Mover a otra carpeta» en Ajustes.
