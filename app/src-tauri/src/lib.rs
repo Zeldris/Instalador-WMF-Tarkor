@@ -7,7 +7,6 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::future::Future;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tarkor_nucleo::carpetas::{espacio_libre_mb, mover_carpeta};
@@ -20,7 +19,6 @@ use tarkor_nucleo::perfiles::{self, Evaluacion, UsoCpu};
 use tarkor_nucleo::procesos::{self, Especificacion, MotorDetenido, Proceso};
 use tarkor_nucleo::rendimiento::{self, Ajustes};
 use tarkor_nucleo::{modelos, motor, rendimiento::hilos_para_ia};
-use tauri::async_runtime::Mutex as MutexAsincrono;
 use tauri::ipc::Channel;
 use tauri::{Emitter, Manager, RunEvent, State};
 
@@ -49,13 +47,46 @@ struct Estado {
     /// puesto, su `Drop` lo mataría y lo que lo usara (calentar el narrador) fallaría. Quien para el motor para
     /// trabajar y volver a arrancarlo (Reparar, mover la carpeta, reintentar, cambiar de perfil) lo tiene cogido todo
     /// ese tramo, para que `asegurar_motor` no arranque un motor en mitad de la obra; y dentro arranca con
-    /// `arrancar_sin_candado`, nunca con `arrancar_motor` (que lo coge y se bloquearía).
-    arranque: MutexAsincrono<()>,
+    /// `arrancar_con_turno`, nunca con `arrancar_motor` (que lo coge y se bloquearía).
+    arranque: Candado,
 }
 
-/// El candado `Estado::arranque` cogido. `arrancar_sin_candado` lo pide como argumento: arrancar sin tenerlo no
-/// compila.
-type Turno<'a> = tokio::sync::MutexGuard<'a, ()>;
+mod arranque {
+    use std::future::Future;
+    use tauri::async_runtime::Mutex;
+
+    /// El candado de `Estado::arranque`.
+    #[derive(Default)]
+    pub struct Candado(Mutex<()>);
+
+    /// `Estado::arranque` cogido. Solo lo da `Candado::coger`, y `arrancar_con_turno`, `sacar_motor` y `poner_motor` lo
+    /// piden: arrancar o parar el motor sin el candado no compila. La guarda va como `dyn` para no nombrar el tipo de
+    /// tokio.
+    pub struct Turno<'a> {
+        _guarda: Box<dyn Send + Sync + 'a>,
+    }
+
+    impl Candado {
+        pub async fn coger(&self) -> Turno<'_> {
+            Turno { _guarda: Box::new(self.0.lock().await) }
+        }
+
+        /// El turno solo si hay que arrancar: con el candado cogido pregunta `en_marcha`, y si ya corre lo suelta. La
+        /// comprobación y el arranque no se separan; quien recibe el turno lo tiene hasta acabar de arrancar.
+        pub async fn turno_si_parado<F: Future<Output = bool>>(
+            &self,
+            en_marcha: impl FnOnce() -> F,
+        ) -> Option<Turno<'_>> {
+            let turno = self.coger().await;
+            if en_marcha().await {
+                None
+            } else {
+                Some(turno)
+            }
+        }
+    }
+}
+use arranque::{Candado, Turno};
 
 /// Registro del motor de IA, dentro de `Rutas::registros`.
 const REGISTRO_MOTOR: &str = "motor-ia.log";
@@ -106,15 +137,15 @@ impl Estado {
         url.map(Cliente::new).ok_or_else(|| "El motor de IA no está en marcha.".to_string())
     }
 
-    /// Saca el motor propio del `Mutex` (y su URL) para pararlo o sustituirlo.
-    fn sacar_motor(&self) -> Option<Proceso> {
+    /// Saca el motor propio del `Mutex` (y su URL) para pararlo o sustituirlo, con el candado de arranque cogido.
+    fn sacar_motor(&self, _turno: &Turno<'_>) -> Option<Proceso> {
         let p = self.motor.lock().unwrap().take();
         *self.url_motor.lock().unwrap() = None;
         p
     }
 
     /// Pone el motor recién arrancado, con su URL.
-    fn poner_motor(&self, proceso: Proceso) {
+    fn poner_motor(&self, proceso: Proceso, _turno: &Turno<'_>) {
         let url = proceso.url();
         *self.motor.lock().unwrap() = Some(proceso);
         *self.url_motor.lock().unwrap() = Some(url);
@@ -271,42 +302,26 @@ async fn asegurar_motor(app: tauri::AppHandle) -> Res<()> {
 /// Lo que hace `asegurar_motor`; también lo usa `cambiar_perfil` para tener motor antes de descargar.
 async fn asegurar(app: &tauri::AppHandle) -> Res<()> {
     let estado = app.state::<Estado>();
-    asegurar_con(
-        &estado.arranque,
-        || async {
-            let a = app.clone();
-            tauri::async_runtime::spawn_blocking(move || a.state::<Estado>().en_marcha()).await.unwrap_or(false)
-        },
-        |fila| async move { arrancar_sin_candado(app, &fila).await },
-    )
-    .await
-}
-
-/// Toma el candado y arranca solo si `en_marcha` dice que no corre: la comprobación y el arranque no se separan.
-async fn asegurar_con<'a, E, F, A, G>(candado: &'a MutexAsincrono<()>, en_marcha: E, arrancar: A) -> Res<()>
-where
-    E: FnOnce() -> F,
-    F: Future<Output = bool>,
-    A: FnOnce(Turno<'a>) -> G,
-    G: Future<Output = Res<()>>,
-{
-    let fila = candado.lock().await;
-    if en_marcha().await {
+    let en_marcha = || async {
+        let a = app.clone();
+        tauri::async_runtime::spawn_blocking(move || a.state::<Estado>().en_marcha()).await.unwrap_or(false)
+    };
+    let Some(turno) = estado.arranque.turno_si_parado(en_marcha).await else {
         return Ok(());
-    }
-    arrancar(fila).await
+    };
+    arrancar_con_turno(app, &turno).await
 }
 
 /// Lo que hace `iniciar_motor`. En fila con cualquier otro arranque: quien ya tenga `Estado::arranque` cogido usa
-/// `arrancar_sin_candado`.
+/// `arrancar_con_turno`.
 async fn arrancar_motor(app: &tauri::AppHandle) -> Res<()> {
     let estado = app.state::<Estado>();
-    let fila = estado.arranque.lock().await;
-    arrancar_sin_candado(app, &fila).await
+    let turno = estado.arranque.coger().await;
+    arrancar_con_turno(app, &turno).await
 }
 
 /// El arranque en sí: quien lo llama ya tiene `Estado::arranque`, y lo demuestra pasando su `Turno`.
-async fn arrancar_sin_candado(app: &tauri::AppHandle, _turno: &Turno<'_>) -> Res<()> {
+async fn arrancar_con_turno(app: &tauri::AppHandle, turno: &Turno<'_>) -> Res<()> {
     let estado = app.state::<Estado>();
     if estado.ollama_externo.is_some() {
         return Ok(());
@@ -334,14 +349,14 @@ async fn arrancar_sin_candado(app: &tauri::AppHandle, _turno: &Turno<'_>) -> Res
         ruta_salud: "/api/version".into(),
         espera_arranque: Duration::from_secs(30),
     };
-    if let Some(mut viejo) = estado.sacar_motor() {
+    if let Some(mut viejo) = estado.sacar_motor(turno) {
         viejo.parar();
     }
     let proceso = tauri::async_runtime::spawn_blocking(move || Proceso::arrancar(espec))
         .await
         .map_err(|e| e.to_string())?
         .map_err(|e| e.to_string())?;
-    estado.poner_motor(proceso);
+    estado.poner_motor(proceso, turno);
     // Un motor nuevo y sano: el aviso de la parada anterior ya no vale.
     *estado.detenido.lock().unwrap() = None;
     Ok(())
@@ -350,7 +365,7 @@ async fn arrancar_sin_candado(app: &tauri::AppHandle, _turno: &Turno<'_>) -> Res
 /// Vuelve a arrancar el motor tras un error; si no arranca, avisa de la parada. Quien llama ya tiene
 /// `Estado::arranque` y pasa su `Turno`.
 async fn rearrancar_o_avisar(app: &tauri::AppHandle, turno: &Turno<'_>) {
-    if let Err(e) = arrancar_sin_candado(app, turno).await {
+    if let Err(e) = arrancar_con_turno(app, turno).await {
         avisar_parada(app, e);
     }
 }
@@ -374,8 +389,8 @@ async fn cambiar_carpeta_ia(app: tauri::AppHandle, destino: String) -> Res<Rutas
     }
     let _ocupado = Ocupado::tomar(&estado.ocupado)?;
     // Parar, mover y volver a arrancar, sin que `asegurar_motor` arranque un motor en mitad del movimiento.
-    let fila = estado.arranque.lock().await;
-    let parado = estado.sacar_motor();
+    let turno = estado.arranque.coger().await;
+    let parado = estado.sacar_motor(&turno);
     let en_marcha = parado.is_some();
     if let Some(mut p) = parado {
         p.parar();
@@ -387,7 +402,7 @@ async fn cambiar_carpeta_ia(app: tauri::AppHandle, destino: String) -> Res<Rutas
         .and_then(|r| r);
     if let Err(e) = movido {
         if en_marcha {
-            rearrancar_o_avisar(&app, &fila).await;
+            rearrancar_o_avisar(&app, &turno).await;
         }
         return Err(e);
     }
@@ -399,7 +414,7 @@ async fn cambiar_carpeta_ia(app: tauri::AppHandle, destino: String) -> Res<Rutas
         let (a, b) = (nueva.clone(), actual.clone());
         let vuelta = tauri::async_runtime::spawn_blocking(move || mover_carpeta(&a, &b)).await.map_err(|e| e.to_string()).and_then(|r| r);
         if en_marcha {
-            rearrancar_o_avisar(&app, &fila).await;
+            rearrancar_o_avisar(&app, &turno).await;
         }
         return Err(match vuelta {
             Ok(_) => format!("No se pudo guardar el cambio ({e}); la carpeta sigue en {}.", actual.display()),
@@ -410,7 +425,7 @@ async fn cambiar_carpeta_ia(app: tauri::AppHandle, destino: String) -> Res<Rutas
         eprintln!("{aviso}");
     }
     if en_marcha {
-        if let Err(e) = arrancar_sin_candado(&app, &fila).await {
+        if let Err(e) = arrancar_con_turno(&app, &turno).await {
             avisar_parada(&app, e.clone());
             return Err(format!("La carpeta se movió a {}, pero el motor de IA no arranca: {e}", nueva.display()));
         }
@@ -500,16 +515,16 @@ async fn cambiar_perfil(app: tauri::AppHandle, perfil: String, canal: Channel<Pr
     config.perfil = Some(perfil);
     config.modelos_descargados = modelos;
     // Guardar el perfil y reiniciar el motor con él, sin que `asegurar_motor` arranque uno con la config a medias.
-    let fila = estado.arranque.lock().await;
+    let turno = estado.arranque.coger().await;
     config.guardar(&estado.rutas.datos).map_err(|e| ErrorIa::from(format!("No se pudo guardar el perfil nuevo ({e}); sigue el de antes.")))?;
     if estado.ollama_externo.is_none() {
-        if let Err(e) = arrancar_sin_candado(&app, &fila).await {
+        if let Err(e) = arrancar_con_turno(&app, &turno).await {
             // Sin motor con el perfil nuevo no se queda a medias: vuelve el de antes, con su motor.
             let mut vuelta = estado.config();
             vuelta.perfil = antes.perfil.clone();
             vuelta.modelos_descargados = antes.modelos_descargados.clone();
             let guardado = vuelta.guardar(&estado.rutas.datos);
-            let vuelto = arrancar_sin_candado(&app, &fila).await;
+            let vuelto = arrancar_con_turno(&app, &turno).await;
             if let Err(e2) = &vuelto {
                 // Sin motor con ninguno de los dos perfiles: se avisa, para que salga la pantalla
                 // «El motor se ha detenido» con su «Reintentar».
@@ -659,21 +674,21 @@ fn motor_detenido(estado: State<'_, Estado>) -> Option<MotorDetenido> {
 }
 
 /// «Reintentar» de la pantalla «El motor se ha detenido»: saca el motor viejo del `Mutex`, borra el
-/// aviso y vuelve a arrancar con `arrancar_sin_candado` (puerto nuevo y config al día, hasta 30 s). Si
+/// aviso y vuelve a arrancar con `arrancar_con_turno` (puerto nuevo y config al día, hasta 30 s). Si
 /// falla, se vuelve a guardar y emitir el aviso.
 #[tauri::command]
 async fn reintentar_motor(app: tauri::AppHandle) -> Res<()> {
     let estado = app.state::<Estado>();
     let _ocupado = Ocupado::tomar(&estado.ocupado)?;
-    let fila = estado.arranque.lock().await;
+    let turno = estado.arranque.coger().await;
     // Primero se saca el proceso y luego se borra el aviso: la vigilancia no ve un motor caído sin
     // aviso y lo avisa otra vez mientras se reintenta.
-    let viejo = estado.sacar_motor();
+    let viejo = estado.sacar_motor(&turno);
     *estado.detenido.lock().unwrap() = None;
     if let Some(mut v) = viejo {
         v.parar();
     }
-    match arrancar_sin_candado(&app, &fila).await {
+    match arrancar_con_turno(&app, &turno).await {
         Ok(()) => Ok(()),
         Err(motivo) => {
             avisar_parada(&app, motivo.clone());
@@ -707,9 +722,9 @@ async fn reparar(app: tauri::AppHandle, canal_motor: Channel<motor::Progreso>, c
     let (mut motor_reinstalado, mut capas_repuestas) = (false, 0);
     if estado.ollama_externo.is_none() {
         // Parar, reparar y volver a arrancar, sin que `asegurar_motor` arranque un motor en mitad de la reparación.
-        let fila = estado.arranque.lock().await;
+        let turno = estado.arranque.coger().await;
         // Parado, ningún archivo está en uso: en Windows no se podría reponer ni borrar.
-        if let Some(mut p) = estado.sacar_motor() {
+        if let Some(mut p) = estado.sacar_motor(&turno) {
             p.parar();
         }
         let (ia, m, cancelar, lista) = (config.ia_efectiva(&estado.rutas), estado.catalogo.motor.clone(), estado.cancelar.clone(), modelos.clone());
@@ -729,7 +744,7 @@ async fn reparar(app: tauri::AppHandle, canal_motor: Channel<motor::Progreso>, c
         .map_err(|e| ErrorIa::from(e.to_string()))
         .and_then(|r| r);
         // Con lo que haya (el motor de antes si no se pudo reponer), el motor vuelve a arrancar.
-        let arrancado = arrancar_sin_candado(&app, &fila).await;
+        let arrancado = arrancar_con_turno(&app, &turno).await;
         if let Err(e) = &arrancado {
             // Sin motor no se queda callado: sale la pantalla «El motor se ha detenido».
             avisar_parada(&app, e.clone());
@@ -827,7 +842,7 @@ pub fn run() {
             ocupado: AtomicBool::new(false),
             detenido: Mutex::new(None),
             ultimo_motivo_parada: Mutex::new(None),
-            arranque: MutexAsincrono::new(()),
+            arranque: Candado::default(),
         })
         .invoke_handler(tauri::generate_handler![
             rutas,
@@ -876,48 +891,33 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::future::Future;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
     #[test]
-    fn asegurar_arranca_si_no_corre_y_no_reinicia_si_corre() {
-        let candado = MutexAsincrono::new(());
-        let arranques = AtomicUsize::new(0);
-        let arrancar = |_turno| async {
-            arranques.fetch_add(1, Ordering::SeqCst);
-            Ok(())
-        };
-        tauri::async_runtime::block_on(asegurar_con(&candado, || async { false }, arrancar)).unwrap();
-        assert_eq!(arranques.load(Ordering::SeqCst), 1, "parado: arranca");
-        tauri::async_runtime::block_on(asegurar_con(&candado, || async { true }, arrancar)).unwrap();
-        assert_eq!(arranques.load(Ordering::SeqCst), 1, "en marcha: no lo reinicia");
+    fn turno_si_parado_solo_cuando_no_corre() {
+        let candado = Candado::default();
+        assert!(tauri::async_runtime::block_on(candado.turno_si_parado(|| async { false })).is_some(), "parado: turno");
+        assert!(tauri::async_runtime::block_on(candado.turno_si_parado(|| async { true })).is_none(), "en marcha: no");
     }
 
     #[test]
     fn dos_asegurar_a_la_vez_arrancan_una_sola_vez() {
-        let candado = MutexAsincrono::new(());
+        let candado = Candado::default();
         let en_marcha = AtomicBool::new(false);
         let arranques = AtomicUsize::new(0);
-        let (arranques, en_marcha) = (&arranques, &en_marcha);
-        let uno = || {
-            asegurar_con(
-                &candado,
-                || async { en_marcha.load(Ordering::SeqCst) },
-                |turno| async move {
-                    // El turno se queda en el arranque, como en `asegurar`: el candado no se suelta hasta acabar.
-                    let _turno = turno;
-                    arranques.fetch_add(1, Ordering::SeqCst);
-                    // El arranque tarda: el segundo espera el candado y, al entrar, ya lo ve en marcha.
-                    tauri::async_runtime::spawn_blocking(|| std::thread::sleep(std::time::Duration::from_millis(100)))
-                        .await
-                        .unwrap();
-                    en_marcha.store(true, Ordering::SeqCst);
-                    Ok(())
-                },
-            )
+        let uno = || async {
+            // Como `asegurar`: el turno se tiene hasta acabar de arrancar.
+            if let Some(_turno) = candado.turno_si_parado(|| async { en_marcha.load(Ordering::SeqCst) }).await {
+                arranques.fetch_add(1, Ordering::SeqCst);
+                // El arranque tarda: el segundo espera el candado y, al entrar, ya lo ve en marcha.
+                tauri::async_runtime::spawn_blocking(|| std::thread::sleep(std::time::Duration::from_millis(100)))
+                    .await
+                    .unwrap();
+                en_marcha.store(true, Ordering::SeqCst);
+            }
         };
-        let (a, b) = tauri::async_runtime::block_on(unir(uno(), uno()));
-        a.unwrap();
-        b.unwrap();
+        tauri::async_runtime::block_on(unir(uno(), uno()));
         assert_eq!(arranques.load(Ordering::SeqCst), 1);
     }
 
