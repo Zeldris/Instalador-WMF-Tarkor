@@ -457,7 +457,7 @@ async fn calentar_narrador(app: tauri::AppHandle) -> Result<(), ErrorIa> {
 /// motor no arranca con el perfil nuevo, se vuelve al de antes. Con un Ollama externo descarga y
 /// guarda, sin reiniciar nada. No coincide con Reparar, Mover ni borrar modelos.
 #[tauri::command]
-async fn cambiar_perfil(app: tauri::AppHandle, perfil: String, canal: Channel<ProgresoModelo>) -> Res<Config> {
+async fn cambiar_perfil(app: tauri::AppHandle, perfil: String, canal: Channel<ProgresoModelo>) -> Result<Config, ErrorIa> {
     let estado = app.state::<Estado>();
     let nuevo = estado.catalogo.perfil(&perfil).ok_or_else(|| format!("perfil desconocido: {perfil}"))?.clone();
     let _ocupado = Ocupado::tomar(&estado.ocupado)?;
@@ -483,15 +483,15 @@ async fn cambiar_perfil(app: tauri::AppHandle, perfil: String, canal: Channel<Pr
     }
     let cliente = estado.cliente()?;
     let (cancelar, lista) = (estado.cancelar.clone(), modelos.clone());
+    // Sin pasar por `to_string`: así el frontal sabe si el corte fue de red y espera para reintentar (`INS-42`).
     tauri::async_runtime::spawn_blocking(move || descargar_faltantes(&cliente, &lista, &cancelar, &canal))
         .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())??;
     // Se vuelve a leer: lo que el asistente guardara durante la descarga no se pisa.
     let mut config = estado.config();
     config.perfil = Some(perfil);
     config.modelos_descargados = modelos;
-    config.guardar(&estado.rutas.datos).map_err(|e| format!("No se pudo guardar el perfil nuevo ({e}); sigue el de antes."))?;
+    config.guardar(&estado.rutas.datos).map_err(|e| ErrorIa::from(format!("No se pudo guardar el perfil nuevo ({e}); sigue el de antes.")))?;
     if estado.ollama_externo.is_none() {
         if let Err(e) = arrancar_motor(&app).await {
             // Sin motor con el perfil nuevo no se queda a medias: vuelve el de antes, con su motor.
@@ -505,12 +505,12 @@ async fn cambiar_perfil(app: tauri::AppHandle, perfil: String, canal: Channel<Pr
                 // «El motor se ha detenido» con su «Reintentar».
                 avisar_parada(&app, e2.clone());
             }
-            return Err(match (guardado, vuelto) {
+            return Err(ErrorIa::from(match (guardado, vuelto) {
                 (Ok(()), Ok(())) => format!("El motor de IA no arranca con el perfil nuevo ({e}); sigue el perfil de antes."),
                 (Ok(()), Err(e2)) => format!("El motor de IA no arranca con el perfil nuevo ({e}) ni con el de antes ({e2}); el motor está detenido."),
                 (Err(g), Ok(())) => format!("El motor de IA no arranca con el perfil nuevo ({e}) y no se pudo devolver el perfil de antes ({g})."),
                 (Err(g), Err(e2)) => format!("El motor de IA no arranca con el perfil nuevo ({e}) ni con el de antes ({e2}), y no se pudo devolver el perfil de antes ({g}); el motor está detenido."),
-            });
+            }));
         }
     }
     Ok(config)
@@ -686,7 +686,7 @@ struct Reparacion {
 /// Ollama externo solo se pide de nuevo cada modelo: ni su motor ni su carpeta son de la app.
 /// Si falla después de parar el motor, lo vuelve a arrancar antes de devolver el error.
 #[tauri::command]
-async fn reparar(app: tauri::AppHandle, canal_motor: Channel<motor::Progreso>, canal: Channel<ProgresoModelo>) -> Res<Reparacion> {
+async fn reparar(app: tauri::AppHandle, canal_motor: Channel<motor::Progreso>, canal: Channel<ProgresoModelo>) -> Result<Reparacion, ErrorIa> {
     let estado = app.state::<Estado>();
     let _ocupado = Ocupado::tomar(&estado.ocupado)?;
     estado.cancelar.store(false, Ordering::Relaxed);
@@ -701,19 +701,19 @@ async fn reparar(app: tauri::AppHandle, canal_motor: Channel<motor::Progreso>, c
         }
         let (ia, m, cancelar, lista) = (config.ia_efectiva(&estado.rutas), estado.catalogo.motor.clone(), estado.cancelar.clone(), modelos.clone());
         let canal_modelos = canal.clone();
-        let comprobado = tauri::async_runtime::spawn_blocking(move || -> Res<(bool, usize)> {
+        let comprobado = tauri::async_runtime::spawn_blocking(move || -> Result<(bool, usize), ErrorIa> {
+            // `motor::Error::Red` (bajar el motor) llega con `red: true`; el resto, como texto.
             let reinstalado = motor::reparar(&ia, &m, &cancelar, &mut |p| {
                 let _ = canal_motor.send(p);
-            })
-            .map_err(|e| e.to_string())?;
+            })?;
             let capas = modelos::reparar(&modelos::carpeta(&ia), &lista, &cancelar, &mut |hecho, total| {
                 let _ = canal_modelos.send(ProgresoModelo { modelo: String::new(), estado: "verificando".into(), hecho, total });
             })
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| ErrorIa::from(e.to_string()))?;
             Ok((reinstalado, capas))
         })
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| ErrorIa::from(e.to_string()))
         .and_then(|r| r);
         // Con lo que haya (el motor de antes si no se pudo reponer), el motor vuelve a arrancar.
         let arrancado = arrancar_motor(&app).await;
@@ -727,18 +727,16 @@ async fn reparar(app: tauri::AppHandle, canal_motor: Channel<motor::Progreso>, c
     let cliente = estado.cliente()?;
     let cancelar = estado.cancelar.clone();
     let lista = modelos.clone();
-    tauri::async_runtime::spawn_blocking(move || -> Res<()> {
+    tauri::async_runtime::spawn_blocking(move || -> Result<(), ErrorIa> {
         for m in &lista {
-            cliente
-                .descargar_modelo(m, &cancelar, &mut |p| {
-                    let _ = canal.send(p);
-                })
-                .map_err(|e| e.to_string())?;
+            cliente.descargar_modelo(m, &cancelar, &mut |p| {
+                let _ = canal.send(p);
+            })?;
         }
         Ok(())
     })
     .await
-    .map_err(|e| e.to_string())??;
+    .map_err(|e| ErrorIa::from(e.to_string()))??;
     Ok(Reparacion { motor_reinstalado, capas_repuestas, modelos })
 }
 

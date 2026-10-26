@@ -1,7 +1,8 @@
 // Pantallas del asistente de primer arranque (docs/11-diseno-del-frontal.md).
 
 import { useEffect, useRef, useState } from 'react'
-import { api } from './api'
+import { api, ErrorIa } from './api'
+import { textoEspera, useEsperaRed } from './esperaRed'
 import { CarpetaIa, CopiarInforme, ControlUsoCpu, DetallesTecnicos, Marco, Medidor, Pagina, Reparar, Tarjetas, textoModelo, useMoverCarpeta } from './componentes'
 import * as tx from './textos'
 import type { Config, Equipo, Evaluacion, PerfilId, Rutas, Sobrante, UsoIa } from './tipos'
@@ -243,7 +244,10 @@ function DondeCorre() {
   )
 }
 
-/** «Cambiar y descargar» (`INS-43`): llama a `cambiar_perfil`, que da el progreso y devuelve el `Config` guardado. */
+/**
+ * «Cambiar y descargar» (`INS-43`): llama a `cambiar_perfil`, que da el progreso y devuelve el `Config` guardado.
+ * Si se pierde la red (`ErrorIa.red`, `INS-42`) espera y vuelve a llamar sola, como la Descarga; con otro error, lo muestra.
+ */
 function useCambiarPerfil(reemplazarConfig: (c: Config) => void) {
   const [cambiando, setCambiando] = useState(false)
   const [estado, setEstado] = useState('')
@@ -251,24 +255,47 @@ function useCambiarPerfil(reemplazarConfig: (c: Config) => void) {
   const [borrando, setBorrando] = useState(false)
   const [sobrantes, setSobrantes] = useState<Sobrante[]>([])
   const pausando = useRef(false)
+  const espera = useEsperaRed()
+  // Mientras espera a la red el cambio sigue «en marcha»: Ajustes no deja tocar nada y se puede pausar o reintentar ya.
+  const esperando = espera.segundos !== null
   const cambiar = async (perfil: PerfilId) => {
     pausando.current = false
+    espera.cancelar()
     setCambiando(true)
     setError(null)
     setEstado(tx.ajustes.cambiando)
+    let esperaPuesta = false
     try {
-      reemplazarConfig(await api.cambiarPerfil(perfil, (p) => setEstado(textoModelo(p))))
+      reemplazarConfig(await api.cambiarPerfil(perfil, (p) => {
+        if (p.estado !== 'success') espera.progreso(p.modelo, p.hecho)
+        setEstado(textoModelo(p))
+      }))
       setEstado('')
       // Con un Ollama externo el núcleo devuelve una lista vacía: sus modelos no se tocan.
       setSobrantes(await api.modelosSobrantes().catch(() => []))
     } catch (e) {
       if (pausando.current && String(e).startsWith(tx.ajustes.prefijoCancelacion)) setEstado(tx.ajustes.pausado)
-      else { setEstado(''); setError(String(e)) }
+      else if (e instanceof ErrorIa && e.red) {
+        setEstado('')
+        esperaPuesta = true
+        espera.programar(() => void cambiar(perfil))
+      } else { setEstado(''); setError(String(e)) }
     } finally {
-      setCambiando(false)
+      // Con la espera puesta, `cambiando` lo quita el reintento (que vuelve a ponerlo) o la pausa.
+      if (!esperaPuesta) setCambiando(false)
     }
   }
-  const pausar = () => { pausando.current = true; void api.cancelarDescargas() }
+  const pausar = () => {
+    if (esperando) {
+      // No hay descarga en curso: basta con cancelar el reintento programado.
+      espera.cancelar()
+      setCambiando(false)
+      setEstado(tx.ajustes.pausado)
+      return
+    }
+    pausando.current = true
+    void api.cancelarDescargas()
+  }
   const borrar = async () => {
     setError(null)
     setBorrando(true)
@@ -281,7 +308,7 @@ function useCambiarPerfil(reemplazarConfig: (c: Config) => void) {
       setBorrando(false)
     }
   }
-  return { cambiando, borrando, estado, error, sobrantes, cambiar, pausar, borrar }
+  return { cambiando, borrando, estado, error, sobrantes, cambiar, pausar, borrar, segundosEspera: espera.segundos, reintentarAhora: espera.reintentarAhora }
 }
 
 export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpeta, actualizar, reemplazarConfig, reanalizar, alCambiar, volver }: {
@@ -317,12 +344,15 @@ export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpe
         barra={<><button type="button" className="btn" disabled={cambio.cambiando} onClick={volver}>{t.volver}</button>
           <button type="button" className="btn" disabled={cambio.cambiando} onClick={reanalizar}>{t.reanalizar}</button><span className="hueco" />
           {cambio.cambiando && <button type="button" className="btn" onClick={cambio.pausar}>{t.pausar}</button>}
+          {cambio.segundosEspera !== null && <button type="button" className="btn" onClick={cambio.reintentarAhora}>{tx.descarga.reintentarAhora}</button>}
           <button type="button" className="btn pri" disabled={cambio.cambiando || !nuevo || nuevo.id === actual.id || bloqueado(evaluacion, nuevo, confirmado)} onClick={() => nuevo && void cambio.cambiar(nuevo.id)}>
             {nuevo?.id === actual.id ? t.actualBoton : extra > 0 ? t.cambiarDescargar(fmt(extra)) : t.cambiar}
           </button></>}>
         <DondeCorre />
         <Medidor evaluacion={evaluacion} />
-        {cambio.estado && <p className="peq tenue" aria-live="polite">{cambio.estado}</p>}
+        {cambio.segundosEspera !== null
+          ? <p className="peq tenue" role="status">{textoEspera(cambio.segundosEspera)}</p>
+          : cambio.estado && <p className="peq tenue" aria-live="polite">{cambio.estado}</p>}
         {cambio.error && <div className="error" role="alert">{cambio.error}</div>}
         {cambio.sobrantes.length > 0 && (
           <div className="fila">

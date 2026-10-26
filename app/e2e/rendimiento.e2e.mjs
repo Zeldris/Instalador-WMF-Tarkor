@@ -8,7 +8,8 @@
 // app y comprueba, por este orden:
 //   0. (el final del asistente, para arrancar el motor y dejar un modelo cargado)
 //   1. Ajustes dice dónde corre la IA (modelo cargado a medias en la gráfica: «Repartida: …»).
-//   2. Cambiar a otro perfil enseña el progreso y, al acabar, el perfil nuevo (y se guarda).
+//   2. Cambiar a otro perfil enseña el progreso y, al acabar, el perfil nuevo (y se guarda). Con FALSO_CORTES_PULL, la
+//      primera descarga se corta como sin internet y Ajustes enseña «Esperando conexión» y sigue sola.
 //   3. Sobran modelos: «Borrar modelos que ya no uso (X GB)» y al pulsarlo desaparece (y se borran).
 //   4. «Ver detalles» del informe enseña `~` en vez de la carpeta personal y sin el nombre de usuario.
 //   5. Matar el motor dos veces agota el reinicio automático: sale «El motor de IA se ha detenido».
@@ -198,6 +199,12 @@ async function recorrido() {
   // 2. Cambiar de perfil: progreso y perfil nuevo.
   await pulsar(`//button[.//span[@class="nombre"][normalize-space()="Ligero"]]`)
   await pulsar(boton('Cambiar y descargar'))
+  if (Number(process.env.FALSO_CORTES_PULL ?? 0) > 0) {
+    // El Ollama falso corta la primera descarga como sin internet: Ajustes espera y reintenta sola (INS-42, trozo C).
+    const espera = await veTexto(/Esperando conexión · Reintentando en \d+ s\./, 30000)
+    comprobar(/Esperando conexión/.test(espera), '2. sin red, el cambio de perfil espera y reintenta solo («Esperando conexión · Reintentando en N s»)')
+    await captura('cambiando-esperando')
+  }
   const progreso = await veTexto(/Descargando lo que falta de qwen3\.5:2b \(\d+ %\)/, 30000)
   comprobar(progreso.includes('qwen3.5:2b'), '2. el cambio enseña el progreso de la descarga (qwen3.5:2b)')
   await captura('cambiando')

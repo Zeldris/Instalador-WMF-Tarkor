@@ -73,6 +73,10 @@ for prueba in "${pruebas[@]}"; do
       export TARKOR_OLLAMA_URL="http://127.0.0.1:$puerto_falso" E2E_FALSO=1
       # La primera descarga de un modelo se corta como sin internet: el asistente espera y reintenta solo (INS-42).
       export FALSO_CORTES_PULL="${FALSO_CORTES_PULL:-1}"
+    elif [ "$nombre" = "rendimiento" ]; then
+      # Los modelos del perfil Mínimo ya están en disco: la primera descarga es la del cambio de perfil en Ajustes, que se
+      # corta como sin internet y espera y reintenta sola (INS-42, trozo C).
+      export FALSO_CORTES_PULL="${FALSO_CORTES_PULL:-1}"
     fi
     cd "$raiz/app"
     # Las rutas van por el entorno (no dentro de la orden) para que un espacio o una comilla no la rompan, y se espera

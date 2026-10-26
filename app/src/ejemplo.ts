@@ -90,7 +90,10 @@ let sinRedCortes = 0
 let sinRedAntes: ProgresoModelo[] | ((corte: number) => ProgresoModelo[]) | null = null
 /** El motor simulado se «instala» una vez, como el real: un reintento de la Descarga ya no lo repite. */
 let motorInstalado = false
-/** Para los tests: las `n` siguientes llamadas a `descargarModelos` fallan por falta de red (un `ErrorIa` con `red`), como el núcleo. */
+/**
+ * Para los tests: las `n` siguientes llamadas que descargan (`descargarModelos`, `cambiarPerfil` con modelos que faltan y
+ * `reparar`) fallan por falta de red (un `ErrorIa` con `red`), como el núcleo.
+ */
 export const fijarSinRed = (n: number, antes: typeof sinRedAntes = null) => { sinRedRestantes = n; sinRedCortes = 0; sinRedAntes = antes }
 export const reiniciarModelos = () => { motorEnMarcha = false; arranquesMotor = 0; calentarResultado = 'ok'; tokensPorSegundoPrueba = 12; sinRedRestantes = 0; sinRedCortes = 0; sinRedAntes = null; motorInstalado = false; errorCambioPerfil = null; retardoCambioPerfil = 0; sobrantes = []; usoSimulado = { porcentajeGpu: 100, memoriaMb: 5400 } }
 const modelosDe = (id: string | null) => {
@@ -129,6 +132,20 @@ export const fijarTokensPorSegundo = (n: number) => { tokensPorSegundoPrueba = n
 let cancelado = false
 const pausa = (ms: number) => new Promise((ok) => setTimeout(ok, ms))
 
+/** Si toca un corte de red (`fijarSinRed`), lo da: informa de lo que dijo Ollama antes de cortarse y falla con un `ErrorIa` de red. */
+async function cortarSinRed(modelos: string[], progreso: (p: ProgresoModelo) => void) {
+  if (sinRedRestantes <= 0) return
+  sinRedRestantes--
+  // Como Ollama: empieza por el manifiesto (sin bytes) y ahí se corta. Con `antes`, informa de eso en cada corte
+  // (`corte` cuenta desde 0): un modelo que ya estaba en disco, o los bytes que ya tenía al reanudar.
+  progreso({ modelo: modelos[0], estado: 'pulling manifest', hecho: 0, total: 0 })
+  const extra = typeof sinRedAntes === 'function' ? sinRedAntes(sinRedCortes) : (sinRedAntes ?? [])
+  sinRedCortes++
+  extra.forEach(progreso)
+  await pausa(30)
+  throw new ErrorIa('No se pudo conectar con el servidor de modelos. Comprueba tu conexión a internet y vuelve a intentarlo; lo ya descargado se conserva.', true)
+}
+
 /** Descarga simulada en `pasos` avisos; se detiene si se cancela. */
 async function simular(total: number, pasos: number, aviso: (hecho: number) => void) {
   for (let i = 1; i <= pasos; i++) {
@@ -166,17 +183,7 @@ export const ejemplo: Api = {
     cancelado = false
     const perfil = catalogo.perfiles.find((p) => p.id === guardada.perfil) ?? catalogo.perfiles[0]
     const modelos = [...new Set([perfil.narrador, perfil.cronista, perfil.sugerencias, perfil.embeddings])]
-    if (sinRedRestantes > 0) {
-      sinRedRestantes--
-      // Como Ollama: empieza por el manifiesto (sin bytes) y ahí se corta. Con `antes`, informa de eso en cada corte
-      // (`corte` cuenta desde 0): un modelo que ya estaba en disco, o los bytes que ya tenía al reanudar.
-      progreso({ modelo: modelos[0], estado: 'pulling manifest', hecho: 0, total: 0 })
-      const extra = typeof sinRedAntes === 'function' ? sinRedAntes(sinRedCortes) : (sinRedAntes ?? [])
-      sinRedCortes++
-      extra.forEach(progreso)
-      await pausa(30)
-      throw new ErrorIa('No se pudo conectar con el servidor de modelos. Comprueba tu conexión a internet y vuelve a intentarlo; lo ya descargado se conserva.', true)
-    }
+    await cortarSinRed(modelos, progreso)
     for (const modelo of modelos) {
       const total = (catalogo.modelos[modelo]?.descargaGb ?? 1) * 1024 ** 3
       await simular(total, 8, (hecho) => progreso({ modelo, estado: 'pulling', hecho, total }))
@@ -198,6 +205,7 @@ export const ejemplo: Api = {
     motor({ fase: 'listo' })
     const perfil = catalogo.perfiles.find((p) => p.id === guardada.perfil) ?? catalogo.perfiles[0]
     const modelos = [...new Set([perfil.narrador, perfil.cronista, perfil.sugerencias, perfil.embeddings])]
+    await cortarSinRed(modelos, progreso)
     modelos.forEach((_, i) => progreso({ modelo: '', estado: 'verificando', hecho: i, total: modelos.length }))
     const capasRepuestas = modelosDanados ? 1 : 0
     if (modelosDanados) {
@@ -226,6 +234,7 @@ export const ejemplo: Api = {
     const antes = modelosDe(guardada.perfil)
     const nuevos = modelosDe(perfil)
     const faltan = nuevos.filter((m) => !guardada.modelosDescargados.includes(m))
+    if (faltan.length > 0) await cortarSinRed(faltan, progreso)
     for (const modelo of faltan) {
       const total = (catalogo.modelos[modelo]?.descargaGb ?? 1) * 1024 ** 3
       await simular(total, 8, (hecho) => progreso({ modelo, estado: 'pulling', hecho, total }))

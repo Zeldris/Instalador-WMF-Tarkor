@@ -33,7 +33,10 @@ export interface Api {
    * Falla con un `ErrorIa`: `sinMemoria` si no cupo, y entonces se ofrece un perfil más ligero.
    */
   calentarNarrador(): Promise<void>
-  /** Comprueba el motor y los modelos del perfil y repone lo que falte o esté dañado. */
+  /**
+   * Comprueba el motor y los modelos del perfil y repone lo que falte o esté dañado.
+   * Falla con un `ErrorIa`: `red` si se perdió internet (Reparar espera y repite sola).
+   */
   reparar(motor: (p: ProgresoMotor) => void, modelos: (p: ProgresoModelo) => void): Promise<Reparacion>
   comprobar(id: string): Promise<Comprobacion>
   /** Diálogo de carpeta del sistema; null si se cancela. */
@@ -42,7 +45,10 @@ export interface Api {
   cambiarCarpetaIa(destino: string): Promise<Rutas>
   /** Dónde corre la IA ahora; falla si el motor no está en marcha. */
   usoIa(): Promise<UsoIa>
-  /** Descarga lo que falte del perfil nuevo (se pausa con `cancelarDescargas`) y devuelve el `Config` ya guardado. */
+  /**
+   * Descarga lo que falte del perfil nuevo (se pausa con `cancelarDescargas`) y devuelve el `Config` ya guardado.
+   * Falla con un `ErrorIa`: `red` si se perdió internet (Ajustes espera y reintenta solo).
+   */
   cambiarPerfil(perfil: string, progreso: (p: ProgresoModelo) => void): Promise<Config>
   /** Modelos del motor propio que no son del perfil actual; vacío con un Ollama externo. */
   modelosSobrantes(): Promise<Sobrante[]>
@@ -78,7 +84,7 @@ const tauri: Api = {
   descargarModelos: (progreso) => invoke<string[]>('descargar_modelos', { canal: canal(progreso) }).catch((e) => { throw aErrorIa(e) }),
   cancelarDescargas: () => invoke('cancelar_descargas'),
   calentarNarrador: () => invoke<void>('calentar_narrador').catch((e) => { throw aErrorIa(e) }),
-  reparar: (motor, modelos) => invoke('reparar', { canalMotor: canal(motor), canal: canal(modelos) }),
+  reparar: (motor, modelos) => invoke<Reparacion>('reparar', { canalMotor: canal(motor), canal: canal(modelos) }).catch((e) => { throw aErrorIa(e) }),
   comprobar: (id) => invoke('comprobar', { id }),
   elegirCarpeta: async () => {
     const r = await open({ directory: true })
@@ -86,7 +92,7 @@ const tauri: Api = {
   },
   cambiarCarpetaIa: (destino) => invoke('cambiar_carpeta_ia', { destino }),
   usoIa: () => invoke('uso_ia'),
-  cambiarPerfil: (perfil, progreso) => invoke('cambiar_perfil', { perfil, canal: canal(progreso) }),
+  cambiarPerfil: (perfil, progreso) => invoke<Config>('cambiar_perfil', { perfil, canal: canal(progreso) }).catch((e) => { throw aErrorIa(e) }),
   modelosSobrantes: () => invoke('modelos_sobrantes'),
   borrarModelos: (modelos) => invoke('borrar_modelos', { modelos }),
   informe: () => invoke('informe'),
