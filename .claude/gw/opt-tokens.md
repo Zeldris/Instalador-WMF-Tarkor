@@ -31,6 +31,10 @@ antes de la `/retro`; todo en español, y solo lo que confirme la usuaria entra 
   la bitácora; las de toda la sesión sumaban tareas anteriores.
 - **Arreglos al mismo subagente y revisores acotados** (opt-tokens de `INS-43`): en
   [`orchestrate-dealer.md`](orchestrate-dealer.md).
+- **Check en una llamada y encargos por tramos** (opt-tokens de `INS-42`): en
+  [`orchestrate-dealer.md`](orchestrate-dealer.md), «Encargo del implementador».
+- **La fila de la bitácora, sola** (opt-tokens de `INS-42`): `python3 .claude/gw/scripts/recuperar.py --estado` la da (o
+  `grep -n '<rama>' docs/registros/traspaso.md`), y se escribe con un reemplazo de texto. La bitácora entera se leyó 16 veces en `INS-42`.
 
 ## Costes conocidos
 
@@ -73,3 +77,6 @@ antes de la `/retro`; todo en español, y solo lo que confirme la usuaria entra 
   Lo más caro: 7 revisores con Opus (4,7M, 17-21 llamadas cada uno), 4 rondas de arreglos con un subagente nuevo
   (~1,5M cada una) y el primer E2E (40 llamadas, 4,2M, buscando cómo correrlo; el segundo, con el README al día, 8).
   Acordado: arreglos al mismo subagente, revisores acotados y compactaciones de la tarea en `recuperar.py`.
+- **2026-10-26, `INS-42`** (desde `f399a63`): sesión principal 87 llamadas, contexto medio 114k, 2 compactaciones;
+  8 subagentes, 245 llamadas y 23,8M de entrada de 33,6M (71 %), de 52k al arrancar a ~100k de media. Acordado: el
+  check con `ci-local.py`, encargos por tramos y la fila de la bitácora con `recuperar.py --estado`.

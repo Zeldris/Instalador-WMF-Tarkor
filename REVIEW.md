@@ -60,6 +60,10 @@ aquí con su `FLU-n` o `INS-n`.
   `0.0.0.0`: el motor y el backend no se exponen a la red.
 - **Esperas con tope.** Una espera (health-check, descarga, `/api/pull`) tiene límite y se puede
   cancelar; el asistente nunca se queda colgado sin decir qué pasa.
+- **Una invariante nueva, en todos sus sitios.** Si el diff añade una regla que otros sitios deben cumplir (un
+  candado, una clase de error), busca con `grep` esos sitios aunque no estén en el diff. En `INS-42` el candado de
+  arranque llegó a `arrancar_motor` y `asegurar_motor`, pero no a Reparar, mover la carpeta, reintentar ni cambiar
+  de perfil (retro de `INS-42`). Si se puede, que lo imponga el tipo (`Turno` en `lib.rs`).
 
 ## Descargas e integridad
 

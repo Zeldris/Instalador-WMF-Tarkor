@@ -20,6 +20,17 @@ entrada de la tarea, 17,2M fueron de subagentes, con 52k de arranque cada uno.
   ~95k; el de los arreglos de la fase 1, con ese encargo, 7.
 - La revisión completa de la rama (fase 1 de `AGENTS.md`) no se acota: es el contrapeso de las cortas.
 
+## Encargo del implementador
+
+Retro de `INS-42` (los subagentes, el 71 % de la entrada, de 52k al arrancar a ~100k de media):
+
+- **El check, en una llamada:** `python3 tools/qa/ci-local.py`, que corre los jobs de Ubuntu del CI y solo imprime
+  lo que falla. No listar las órdenes una a una. Tras un fallo, se repite solo esa orden. Los E2E, aparte.
+- **Los tramos que tocar:** la sesión principal da en el encargo los `grep -n` de las funciones del trozo; el
+  subagente lee por tramos (`sed -n`) y busca el nombre con `grep -n` antes de editar, para ver sus llamadores.
+- **El trozo que cierra una tarea** pide también su línea en «Hecho» de la bitácora: sin ella el pre-push rechaza
+  la subida (trozo C de `INS-42`; `R4` de la retro de `INS-43`, propuesto al flujo).
+
 ## Arreglos de un patrón
 
 - Al encargo de un arreglo se añade: «Si el fallo es de un patrón (una forma de escribir que falla en más sitios),
