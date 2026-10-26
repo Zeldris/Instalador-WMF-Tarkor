@@ -124,7 +124,9 @@ pub enum Origen {
     Incrustado,
     Externo,
     /// Había un `catalogo.json` externo pero no era válido; se usó el incrustado.
-    ExternoInvalido { motivo: String },
+    ExternoInvalido {
+        motivo: String,
+    },
 }
 
 impl Catalogo {
@@ -156,7 +158,12 @@ impl Catalogo {
     }
 
     pub fn descarga_gb(&self, perfil: &Perfil) -> f64 {
-        perfil.modelos().iter().filter_map(|m| self.modelos.get(*m)).map(|m| m.descarga_gb).sum()
+        perfil
+            .modelos()
+            .iter()
+            .filter_map(|m| self.modelos.get(*m))
+            .map(|m| m.descarga_gb)
+            .sum()
     }
 
     /// Modelos que necesitan `think: false`.
@@ -171,7 +178,10 @@ impl Catalogo {
 
     pub fn validar(&self) -> Result<(), String> {
         if self.version != VERSION_CATALOGO {
-            return Err(format!("versión {} no soportada (esta app entiende la {VERSION_CATALOGO})", self.version));
+            return Err(format!(
+                "versión {} no soportada (esta app entiende la {VERSION_CATALOGO})",
+                self.version
+            ));
         }
         if !self.perfiles.iter().any(|p| !p.experimental) {
             return Err("no hay ningún perfil que no sea experimental".into());
@@ -220,7 +230,10 @@ mod tests {
         let ids: Vec<&str> = c.perfiles.iter().map(|p| p.id.as_str()).collect();
         assert_eq!(ids, ["minimo", "ligero", "equilibrado", "maximo", "ultra"]);
         let mem: Vec<f64> = c.perfiles.iter().map(|p| p.memoria_gb).collect();
-        assert!(mem.windows(2).all(|w| w[0] <= w[1]), "los perfiles deben ir de menos a más memoria");
+        assert!(
+            mem.windows(2).all(|w| w[0] <= w[1]),
+            "los perfiles deben ir de menos a más memoria"
+        );
     }
 
     #[test]
@@ -250,7 +263,10 @@ mod tests {
     #[test]
     fn modelos_que_piensan() {
         let c = Catalogo::incrustado();
-        assert_eq!(c.modelos_que_piensan(c.perfil("equilibrado").unwrap()), Vec::<String>::new());
+        assert_eq!(
+            c.modelos_que_piensan(c.perfil("equilibrado").unwrap()),
+            Vec::<String>::new()
+        );
         assert_eq!(c.modelos_que_piensan(c.perfil("ligero").unwrap()), ["qwen3.5:2b"]);
     }
 

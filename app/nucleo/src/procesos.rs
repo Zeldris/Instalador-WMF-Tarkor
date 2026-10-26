@@ -66,7 +66,9 @@ pub enum Estado {
     /// Se cayó y se ha vuelto a arrancar (se gasta el único reinicio automático).
     Reiniciado,
     /// Se cayó otra vez, o no llegó a arrancar.
-    Detenido { motivo: String },
+    Detenido {
+        motivo: String,
+    },
 }
 
 /// Avisa una sola vez de una parada: `Some(motivo)` si el proceso está `Detenido` y todavía no se
@@ -189,15 +191,25 @@ impl Proceso {
     /// Para llamarlo periódicamente: detecta caídas y aplica el único reinicio automático.
     pub fn vigilar(&mut self) -> Estado {
         let caido = match self.hijo.as_mut() {
-            None => return Estado::Detenido { motivo: format!("{} no está en marcha", self.espec.nombre) },
+            None => {
+                return Estado::Detenido {
+                    motivo: format!("{} no está en marcha", self.espec.nombre),
+                }
+            }
             Some(h) => h.try_wait().ok().flatten(),
         };
         let Some(salida) = caido else {
-            return if self.reinicios == 0 { Estado::Funcionando } else { Estado::Reiniciado };
+            return if self.reinicios == 0 {
+                Estado::Funcionando
+            } else {
+                Estado::Reiniciado
+            };
         };
         self.hijo = None;
         if self.reinicios >= 1 {
-            return Estado::Detenido { motivo: format!("{} se ha cerrado dos veces ({salida})", self.espec.nombre) };
+            return Estado::Detenido {
+                motivo: format!("{} se ha cerrado dos veces ({salida})", self.espec.nombre),
+            };
         }
         self.reinicios += 1;
         match self.lanzar() {
@@ -363,7 +375,11 @@ mod tests {
         let inicio = Instant::now();
         let err = Proceso::arrancar(e).err().unwrap();
         assert!(err.to_string().contains("se cerró al arrancar"), "{err}");
-        assert!(inicio.elapsed() < Duration::from_secs(5), "tardó {:?}", inicio.elapsed());
+        assert!(
+            inicio.elapsed() < Duration::from_secs(5),
+            "tardó {:?}",
+            inicio.elapsed()
+        );
     }
 
     #[cfg(unix)]
@@ -397,7 +413,9 @@ mod tests {
             assert!(sin_memoria(linea), "{linea}");
         }
         assert!(!sin_memoria(""));
-        assert!(!sin_memoria("time=2026 level=INFO msg=\"Listening on 127.0.0.1:11500\"\nexit status 2"));
+        assert!(!sin_memoria(
+            "time=2026 level=INFO msg=\"Listening on 127.0.0.1:11500\"\nexit status 2"
+        ));
     }
 
     #[test]
@@ -407,7 +425,10 @@ mod tests {
         );
         assert!(sin_memoria(&log), "el registro entero sí la tiene");
         let ultimo = desde_ultimo_arranque(&log);
-        assert!(ultimo.starts_with(MARCA_ARRANQUE) && ultimo.contains("Listening"), "{ultimo}");
+        assert!(
+            ultimo.starts_with(MARCA_ARRANQUE) && ultimo.contains("Listening"),
+            "{ultimo}"
+        );
         assert!(!sin_memoria(ultimo), "{ultimo}");
         // Si la falta de memoria es del último arranque, sí.
         let log2 = format!("{MARCA_ARRANQUE}x ---\nbien\n{MARCA_ARRANQUE}x ---\nout of memory\n");
@@ -418,7 +439,9 @@ mod tests {
 
     #[test]
     fn avisa_una_sola_vez_de_cada_parada() {
-        let parado = Estado::Detenido { motivo: "se cayó".into() };
+        let parado = Estado::Detenido {
+            motivo: "se cayó".into(),
+        };
         assert_eq!(aviso_nuevo(&parado, false), Some("se cayó"));
         assert_eq!(aviso_nuevo(&parado, true), None);
         assert_eq!(aviso_nuevo(&Estado::Funcionando, false), None);

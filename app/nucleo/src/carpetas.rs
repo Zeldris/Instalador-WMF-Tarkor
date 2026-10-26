@@ -79,7 +79,11 @@ fn tamano_bytes(ruta: &Path) -> io::Result<u64> {
     for entrada in fs::read_dir(ruta)? {
         let entrada = entrada?;
         let meta = entrada.metadata()?;
-        total += if meta.is_dir() { tamano_bytes(&entrada.path())? } else { meta.len() };
+        total += if meta.is_dir() {
+            tamano_bytes(&entrada.path())?
+        } else {
+            meta.len()
+        };
     }
     Ok(total)
 }
@@ -125,7 +129,13 @@ fn copiar_enlace(origen: &Path, destino: &Path) -> io::Result<()> {
 ///   (un archivo bloqueado en Windows): la configuración debe pasar a la carpeta nueva, que es la
 ///   completa. Lo que quede del origen se devuelve como aviso.
 pub fn mover_carpeta(origen: &Path, destino: &Path) -> Result<Option<String>, String> {
-    mover_con(origen, destino, |a, b| fs::rename(a, b), copiar_recursivo, espacio_libre_mb)
+    mover_con(
+        origen,
+        destino,
+        |a, b| fs::rename(a, b),
+        copiar_recursivo,
+        espacio_libre_mb,
+    )
 }
 
 fn mover_con(
@@ -145,7 +155,10 @@ fn mover_con(
     if destino.exists() {
         let vacia = destino.is_dir() && fs::read_dir(destino).map_err(|e| e.to_string())?.next().is_none();
         if !vacia {
-            return Err(format!("La carpeta {} ya existe y no está vacía. Elige otra.", destino.display()));
+            return Err(format!(
+                "La carpeta {} ya existe y no está vacía. Elige otra.",
+                destino.display()
+            ));
         }
     }
     let falla = |e: io::Error| format!("No se pudo preparar la carpeta {}: {e}", destino.display());
@@ -182,10 +195,17 @@ fn mover_con(
         } else {
             let _ = fs::remove_dir_all(destino);
         }
-        return Err(format!("No se pudo copiar a {}: {e}. La carpeta actual sigue como estaba.", destino.display()));
+        return Err(format!(
+            "No se pudo copiar a {}: {e}. La carpeta actual sigue como estaba.",
+            destino.display()
+        ));
     }
     Ok(fs::remove_dir_all(origen).err().map(|e| {
-        format!("Se movió a {}, pero quedó parte de la carpeta anterior ({}): {e}. Puedes borrarla a mano.", destino.display(), origen.display())
+        format!(
+            "Se movió a {}, pero quedó parte de la carpeta anterior ({}): {e}. Puedes borrarla a mano.",
+            destino.display(),
+            origen.display()
+        )
     }))
 }
 
@@ -304,7 +324,10 @@ mod tests {
             Err(io::Error::other("disco desconectado"))
         };
         let e = mover_con(&o, &d, rename_falla, copia_rota, espacio_libre_mb).unwrap_err();
-        assert!(e.contains("No se pudo copiar") && e.contains("sigue como estaba"), "{e}");
+        assert!(
+            e.contains("No se pudo copiar") && e.contains("sigue como estaba"),
+            "{e}"
+        );
         assert!(!d.exists(), "la copia parcial se borra");
         assert_eq!(fs::read_to_string(o.join("a.txt")).unwrap(), "hola");
         assert!(o.join("modelos/sub/b.bin").exists());
@@ -315,7 +338,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let o = con_contenido(dir.path());
         let d = dir.path().join("nueva");
-        assert_eq!(mover_con(&o, &d, |a, b| fs::rename(a, b), copiar_recursivo, |_| Some(0)), Ok(None));
+        assert_eq!(
+            mover_con(&o, &d, |a, b| fs::rename(a, b), copiar_recursivo, |_| Some(0)),
+            Ok(None)
+        );
         assert!(d.join("a.txt").exists() && !o.exists());
     }
 
@@ -338,13 +364,22 @@ mod tests {
         let d = dir.path().join("otro-disco");
         mover_con(&o, &d, rename_falla, copiar_recursivo, espacio_libre_mb).unwrap();
         assert_eq!(fs::read_link(d.join("modelos/sub/b.so")).unwrap(), Path::new("b.bin"));
-        assert_eq!(fs::read_link(d.join("modelos/enlace-a-carpeta")).unwrap(), Path::new("sub"));
+        assert_eq!(
+            fs::read_link(d.join("modelos/enlace-a-carpeta")).unwrap(),
+            Path::new("sub")
+        );
     }
 
     #[test]
     fn quita_el_prefijo_verbatim_de_windows() {
-        assert_eq!(sin_verbatim(PathBuf::from(r"\\?\C:\Users\a")), PathBuf::from(r"C:\Users\a"));
-        assert_eq!(sin_verbatim(PathBuf::from(r"\\?\UNC\srv\c")), PathBuf::from(r"\\?\UNC\srv\c"));
+        assert_eq!(
+            sin_verbatim(PathBuf::from(r"\\?\C:\Users\a")),
+            PathBuf::from(r"C:\Users\a")
+        );
+        assert_eq!(
+            sin_verbatim(PathBuf::from(r"\\?\UNC\srv\c")),
+            PathBuf::from(r"\\?\UNC\srv\c")
+        );
         assert_eq!(sin_verbatim(PathBuf::from("/home/a")), PathBuf::from("/home/a"));
     }
 }

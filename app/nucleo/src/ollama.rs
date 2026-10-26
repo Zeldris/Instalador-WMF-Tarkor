@@ -53,11 +53,19 @@ fn clasificar(e: &str) -> Clase {
     let m = e.to_ascii_lowercase();
     if m.contains("memory") || contiene_palabra(&m, "oom") {
         Clase::SinMemoria
-    } else if m.contains("forbidden") || contiene_numero(&m, "403") || m.contains("proxy") || m.contains("certificate") {
+    } else if m.contains("forbidden") || contiene_numero(&m, "403") || m.contains("proxy") || m.contains("certificate")
+    {
         Clase::RedBloqueada
-    } else if ["dial tcp", "no such host", "connection", "timeout", "unreachable", "max retries exceeded"]
-        .iter()
-        .any(|p| m.contains(p))
+    } else if [
+        "dial tcp",
+        "no such host",
+        "connection",
+        "timeout",
+        "unreachable",
+        "max retries exceeded",
+    ]
+    .iter()
+    .any(|p| m.contains(p))
     {
         Clase::SinRed
     } else if m.contains("no space") {
@@ -76,7 +84,12 @@ fn contiene_palabra(m: &str, p: &str) -> bool {
 /// `n` aparece como número suelto: sin dígitos pegados ni un `:` o un `.` delante («status 403» y «403: x» sí; el
 /// puerto de «1.2.3.4:54031» o de «:403», no).
 fn contiene_numero(m: &str, n: &str) -> bool {
-    coincide_aislado(m, n, |c| c.is_ascii_digit() || c == ':' || c == '.', |c| c.is_ascii_digit())
+    coincide_aislado(
+        m,
+        n,
+        |c| c.is_ascii_digit() || c == ':' || c == '.',
+        |c| c.is_ascii_digit(),
+    )
 }
 
 /// Alguna aparición de `p` en `m` cuyo carácter anterior no cumple `antes` ni el siguiente `despues`.
@@ -166,7 +179,8 @@ pub fn resumen_uso(cargados: &[Cargado]) -> Uso {
 
 /// `nomic-embed-text` aparece en Ollama como `nomic-embed-text:latest`.
 pub fn tiene(hay: &[String], modelo: &str) -> bool {
-    hay.iter().any(|h| h == modelo || h.strip_suffix(":latest") == Some(modelo))
+    hay.iter()
+        .any(|h| h == modelo || h.strip_suffix(":latest") == Some(modelo))
 }
 
 /// Modelos descargados que no son de ninguno de `del_perfil` (con el sufijo `:latest` de `tiene`).
@@ -198,7 +212,9 @@ pub struct Cliente {
 /// Un fallo de `ureq`; el de tiempo de espera lo dice con esas palabras.
 fn sin_conexion(e: ureq::Error) -> Error {
     match e {
-        ureq::Error::Timeout(_) => Error::SinConexion("tiempo de espera agotado: el motor aceptó la conexión pero no respondió".into()),
+        ureq::Error::Timeout(_) => {
+            Error::SinConexion("tiempo de espera agotado: el motor aceptó la conexión pero no respondió".into())
+        }
         e => Error::SinConexion(e.to_string()),
     }
 }
@@ -215,35 +231,73 @@ impl Cliente {
 
     /// Como `con_espera`, con otro tope para cargar el modelo (los tests lo acortan).
     fn con_esperas(base: impl Into<String>, espera: Duration, tope_calentar: Duration) -> Cliente {
-        let base_config = || ureq::Agent::config_builder().proxy(None).http_status_as_error(false).timeout_connect(Some(Duration::from_secs(3)));
-        let agente = base_config().timeout_recv_response(Some(espera)).timeout_recv_body(Some(espera)).build().into();
+        let base_config = || {
+            ureq::Agent::config_builder()
+                .proxy(None)
+                .http_status_as_error(false)
+                .timeout_connect(Some(Duration::from_secs(3)))
+        };
+        let agente = base_config()
+            .timeout_recv_response(Some(espera))
+            .timeout_recv_body(Some(espera))
+            .build()
+            .into();
         let agente_largo = base_config().build().into();
         let agente_calentar = base_config().timeout_global(Some(tope_calentar)).build().into();
-        Cliente { base: base.into().trim_end_matches('/').to_string(), agente, agente_largo, agente_calentar }
+        Cliente {
+            base: base.into().trim_end_matches('/').to_string(),
+            agente,
+            agente_largo,
+            agente_calentar,
+        }
     }
 
     fn get(&self, ruta: &str) -> Result<Value, Error> {
-        let mut r = self.agente.get(format!("{}{ruta}", self.base)).call().map_err(sin_conexion)?;
-        leer_json(r.status().as_u16(), r.body_mut().read_to_string().map_err(sin_conexion)?)
+        let mut r = self
+            .agente
+            .get(format!("{}{ruta}", self.base))
+            .call()
+            .map_err(sin_conexion)?;
+        leer_json(
+            r.status().as_u16(),
+            r.body_mut().read_to_string().map_err(sin_conexion)?,
+        )
     }
 
     fn post(&self, ruta: &str, cuerpo: Value) -> Result<Value, Error> {
         self.post_con(&self.agente_largo, ruta, cuerpo, sin_conexion)
     }
 
-    fn post_con(&self, agente: &ureq::Agent, ruta: &str, cuerpo: Value, error: fn(ureq::Error) -> Error) -> Result<Value, Error> {
-        let mut r = agente.post(format!("{}{ruta}", self.base)).send_json(cuerpo).map_err(error)?;
+    fn post_con(
+        &self,
+        agente: &ureq::Agent,
+        ruta: &str,
+        cuerpo: Value,
+        error: fn(ureq::Error) -> Error,
+    ) -> Result<Value, Error> {
+        let mut r = agente
+            .post(format!("{}{ruta}", self.base))
+            .send_json(cuerpo)
+            .map_err(error)?;
         leer_json(r.status().as_u16(), r.body_mut().read_to_string().map_err(error)?)
     }
 
     pub fn version(&self) -> Result<String, Error> {
-        Ok(self.get("/api/version")?["version"].as_str().unwrap_or_default().to_string())
+        Ok(self.get("/api/version")?["version"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string())
     }
 
     /// Modelos ya descargados, con su etiqueta completa (`qwen2.5:7b`).
     pub fn modelos(&self) -> Result<Vec<String>, Error> {
         let v = self.get("/api/tags")?;
-        Ok(v["models"].as_array().into_iter().flatten().filter_map(|m| m["name"].as_str().map(String::from)).collect())
+        Ok(v["models"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|m| m["name"].as_str().map(String::from))
+            .collect())
     }
 
     /// Modelos descargados con su tamaño en disco, en bytes (`/api/tags`).
@@ -258,7 +312,12 @@ impl Cliente {
     }
 
     /// Descarga un modelo. Ollama reanuda solo lo que falte si se corta.
-    pub fn descargar_modelo(&self, modelo: &str, cancelar: &AtomicBool, progreso: &mut dyn FnMut(ProgresoModelo)) -> Result<(), Error> {
+    pub fn descargar_modelo(
+        &self,
+        modelo: &str,
+        cancelar: &AtomicBool,
+        progreso: &mut dyn FnMut(ProgresoModelo),
+    ) -> Result<(), Error> {
         let r = self
             .agente_largo
             .post(format!("{}/api/pull", self.base))
@@ -277,7 +336,8 @@ impl Cliente {
             if linea.trim().is_empty() {
                 continue;
             }
-            let v: Value = serde_json::from_str(&linea).map_err(|e| Error::Ollama(format!("respuesta no válida: {e}")))?;
+            let v: Value =
+                serde_json::from_str(&linea).map_err(|e| Error::Ollama(format!("respuesta no válida: {e}")))?;
             if let Some(err) = v["error"].as_str() {
                 return Err(Error::Ollama(err.to_string()));
             }
@@ -287,7 +347,12 @@ impl Cliente {
             }
             let (hecho, total) = capas.values().fold((0, 0), |(h, t), (a, b)| (h + a, t + b));
             ultimo = estado.clone();
-            progreso(ProgresoModelo { modelo: modelo.to_string(), estado, hecho, total });
+            progreso(ProgresoModelo {
+                modelo: modelo.to_string(),
+                estado,
+                hecho,
+                total,
+            });
         }
         if estado_http >= 400 {
             return Err(Error::Ollama(format!("HTTP {estado_http}")));
@@ -360,7 +425,9 @@ impl Cliente {
                 Cargado {
                     modelo: m["name"].as_str().unwrap_or_default().to_string(),
                     porcentaje_gpu: if tamano_bytes > 0 {
-                        (vram_bytes as f64 / tamano_bytes as f64 * 100.0).round().clamp(0.0, 100.0) as u8
+                        (vram_bytes as f64 / tamano_bytes as f64 * 100.0)
+                            .round()
+                            .clamp(0.0, 100.0) as u8
                     } else {
                         0
                     },
@@ -431,7 +498,11 @@ mod tests {
             if let Some(fin) = texto.find("\r\n\r\n") {
                 let largo = texto[..fin]
                     .lines()
-                    .find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0)))
+                    .find_map(|l| {
+                        l.to_ascii_lowercase()
+                            .strip_prefix("content-length:")
+                            .map(|v| v.trim().parse::<usize>().unwrap_or(0))
+                    })
                     .unwrap_or(0);
                 if datos.len() >= fin + 4 + largo {
                     return texto;
@@ -461,7 +532,10 @@ mod tests {
     fn descarga_suma_el_progreso_de_todas_las_capas() {
         let c = ollama_falso(PULL_OK);
         let mut avisos = Vec::new();
-        c.descargar_modelo("qwen2.5:7b", &AtomicBool::new(false), &mut |p| avisos.push((p.hecho, p.total))).unwrap();
+        c.descargar_modelo("qwen2.5:7b", &AtomicBool::new(false), &mut |p| {
+            avisos.push((p.hecho, p.total))
+        })
+        .unwrap();
         assert!(avisos.contains(&(50, 100)));
         assert!(avisos.contains(&(350, 400)));
         assert_eq!(avisos.last(), Some(&(400, 400)));
@@ -470,16 +544,27 @@ mod tests {
     #[test]
     fn error_de_red_explicado_al_jugador() {
         let c = ollama_falso("{\"status\":\"pulling manifest\"}\n{\"error\":\"pull model manifest: dial tcp: lookup registry.ollama.ai: no such host\"}\n");
-        let e = c.descargar_modelo("qwen2.5:7b", &AtomicBool::new(false), &mut |_| {}).unwrap_err();
-        assert!(e.to_string().starts_with("No se pudo conectar con el servidor de modelos"), "{e}");
+        let e = c
+            .descargar_modelo("qwen2.5:7b", &AtomicBool::new(false), &mut |_| {})
+            .unwrap_err();
+        assert!(
+            e.to_string()
+                .starts_with("No se pudo conectar con el servidor de modelos"),
+            "{e}"
+        );
     }
 
     #[test]
     fn red_bloqueada_explicada_al_jugador() {
         // Mensaje real de Ollama 0.34.3 detrás de un proxy que bloquea el registro.
         let c = ollama_falso("{\"error\":\"pull model manifest: Get \\\"https://registry.ollama.ai/v2/library/qwen2.5/manifests/1.5b-instruct\\\": Forbidden\"}\n");
-        let e = c.descargar_modelo("qwen2.5:1.5b-instruct", &AtomicBool::new(false), &mut |_| {}).unwrap_err();
-        assert!(e.to_string().starts_with("La red de este equipo no deja descargar"), "{e}");
+        let e = c
+            .descargar_modelo("qwen2.5:1.5b-instruct", &AtomicBool::new(false), &mut |_| {})
+            .unwrap_err();
+        assert!(
+            e.to_string().starts_with("La red de este equipo no deja descargar"),
+            "{e}"
+        );
     }
 
     #[test]
@@ -497,7 +582,12 @@ mod tests {
             assert!(!o(m).sin_memoria(), "{m}");
         }
         // Red bloqueada: reintentar solo no lo arregla, no se autopausa.
-        for m in ["Get \"https://registry.ollama.ai/v2\": Forbidden", "proxyconnect tcp: connection refused", "x509: certificate signed by unknown authority", "unexpected status 403"] {
+        for m in [
+            "Get \"https://registry.ollama.ai/v2\": Forbidden",
+            "proxyconnect tcp: connection refused",
+            "x509: certificate signed by unknown authority",
+            "unexpected status 403",
+        ] {
             assert!(!o(m).es_de_red(), "{m}");
         }
         // Sin memoria (tiene prioridad sobre "connection" en el mismo texto).
@@ -519,12 +609,22 @@ mod tests {
     fn oom_y_403_solo_cuentan_como_palabra_y_numero_sueltos() {
         let o = |m: &str| Error::Ollama(m.to_string());
         // «room», «bloom» o «zoom» no son «oom».
-        for m in ["write /x: no space left on device / no room left", "bloom filter failed", "zoom: no such file"] {
+        for m in [
+            "write /x: no space left on device / no room left",
+            "bloom filter failed",
+            "zoom: no such file",
+        ] {
             assert!(!o(m).sin_memoria(), "{m}");
         }
         assert!(!o("write /x: no space left on device / no room left").es_de_red());
         assert_eq!(clasificar("no room left"), Clase::Otro);
-        for m in ["runner killed by OOM", "oom-killer", "llama runner: oom.", "out of memory", "not enough memory"] {
+        for m in [
+            "runner killed by OOM",
+            "oom-killer",
+            "llama runner: oom.",
+            "out of memory",
+            "not enough memory",
+        ] {
             assert!(o(m).sin_memoria(), "{m}");
         }
         // Un puerto con «403» dentro no es un 403: aquí es una conexión cortada.
@@ -532,7 +632,10 @@ mod tests {
         assert!(corte.es_de_red(), "{corte}");
         for m in ["unexpected status 403", "403 Forbidden", "http 403: nope", "error 403"] {
             assert!(!o(m).es_de_red(), "{m}");
-            assert!(explicar_str(m).starts_with("La red de este equipo no deja descargar"), "{m}");
+            assert!(
+                explicar_str(m).starts_with("La red de este equipo no deja descargar"),
+                "{m}"
+            );
         }
         assert!(!explicar_str("dial tcp 1.2.3.4:403: i/o timeout").starts_with("La red de este equipo no deja"));
     }
@@ -562,18 +665,42 @@ mod tests {
         let ps = c.cargados().unwrap();
         assert_eq!(
             ps,
-            [Cargado { modelo: "qwen2.5:7b".into(), porcentaje_gpu: 75, memoria_mb: 4000, tamano_bytes: 4_194_304_000, vram_bytes: 3_145_728_000 }]
+            [Cargado {
+                modelo: "qwen2.5:7b".into(),
+                porcentaje_gpu: 75,
+                memoria_mb: 4000,
+                tamano_bytes: 4_194_304_000,
+                vram_bytes: 3_145_728_000
+            }]
         );
-        assert_eq!(resumen_uso(&ps), Uso { porcentaje_gpu: Some(75), memoria_mb: 4000 });
+        assert_eq!(
+            resumen_uso(&ps),
+            Uso {
+                porcentaje_gpu: Some(75),
+                memoria_mb: 4000
+            }
+        );
     }
 
     fn cargado(tamano_bytes: u64, vram_bytes: u64) -> Cargado {
-        Cargado { modelo: "m".into(), porcentaje_gpu: 0, memoria_mb: 0, tamano_bytes, vram_bytes }
+        Cargado {
+            modelo: "m".into(),
+            porcentaje_gpu: 0,
+            memoria_mb: 0,
+            tamano_bytes,
+            vram_bytes,
+        }
     }
 
     #[test]
     fn resumen_sin_nada_cargado_no_da_porcentaje() {
-        assert_eq!(resumen_uso(&[]), Uso { porcentaje_gpu: None, memoria_mb: 0 });
+        assert_eq!(
+            resumen_uso(&[]),
+            Uso {
+                porcentaje_gpu: None,
+                memoria_mb: 0
+            }
+        );
         // Un modelo de tamaño 0 (respuesta rara) tampoco: no se divide entre cero.
         assert_eq!(resumen_uso(&[cargado(0, 0)]).porcentaje_gpu, None);
     }
@@ -582,7 +709,13 @@ mod tests {
     fn resumen_pesa_por_tamano_y_no_por_porcentaje() {
         // 100 % de un modelo de 1 MB y 0 % de uno de 3 MB: 25 % en total, no la media (50 %).
         let u = resumen_uso(&[cargado(MB, MB), cargado(3 * MB, 0)]);
-        assert_eq!(u, Uso { porcentaje_gpu: Some(25), memoria_mb: 4 });
+        assert_eq!(
+            u,
+            Uso {
+                porcentaje_gpu: Some(25),
+                memoria_mb: 4
+            }
+        );
         // Redondeo: 2/3 = 66,7 -> 67; y la VRAM nunca cuenta más que el tamaño.
         assert_eq!(resumen_uso(&[cargado(3 * MB, 2 * MB)]).porcentaje_gpu, Some(67));
         assert_eq!(resumen_uso(&[cargado(MB, 5 * MB)]).porcentaje_gpu, Some(100));
@@ -593,20 +726,30 @@ mod tests {
         let c = ollama_falso(PULL_OK);
         assert_eq!(
             c.modelos_con_tamano().unwrap(),
-            [("qwen2.5:7b".to_string(), 4_700_000_000), ("nomic-embed-text:latest".to_string(), 274_000_000)]
+            [
+                ("qwen2.5:7b".to_string(), 4_700_000_000),
+                ("nomic-embed-text:latest".to_string(), 274_000_000)
+            ]
         );
     }
 
     #[test]
     fn sobrantes_respeta_el_sufijo_latest() {
-        let hay = vec![("qwen2.5:7b".to_string(), 5), ("nomic-embed-text:latest".to_string(), 1), ("llama3:8b".to_string(), 7)];
+        let hay = vec![
+            ("qwen2.5:7b".to_string(), 5),
+            ("nomic-embed-text:latest".to_string(), 1),
+            ("llama3:8b".to_string(), 7),
+        ];
         let s = sobrantes(hay.clone(), &["qwen2.5:7b", "nomic-embed-text"]);
         assert_eq!(s, [("llama3:8b".to_string(), 7)]);
         // Con otro perfil, sobran el narrador y el de embeddings.
         let s = sobrantes(hay, &["llama3:8b", "nomic-embed-text"]);
         assert_eq!(s, [("qwen2.5:7b".to_string(), 5)]);
         // Un nombre que solo empieza igual no es el mismo modelo.
-        assert_eq!(sobrantes(vec![("qwen2.5:7b-instruct".to_string(), 1)], &["qwen2.5:7b"]).len(), 1);
+        assert_eq!(
+            sobrantes(vec![("qwen2.5:7b-instruct".to_string(), 1)], &["qwen2.5:7b"]).len(),
+            1
+        );
     }
 
     #[test]
@@ -623,7 +766,11 @@ mod tests {
     #[test]
     fn calentar_tiene_tope_y_dice_que_el_narrador_no_cargo() {
         let l = TcpListener::bind(("127.0.0.1", 0)).unwrap();
-        let c = Cliente::con_esperas(format!("http://127.0.0.1:{}", l.local_addr().unwrap().port()), ESPERA_LECTURA, Duration::from_millis(300));
+        let c = Cliente::con_esperas(
+            format!("http://127.0.0.1:{}", l.local_addr().unwrap().port()),
+            ESPERA_LECTURA,
+            Duration::from_millis(300),
+        );
         // Acepta la conexión y nunca responde: el modelo "sigue cargando".
         let aceptador = thread::spawn(move || {
             let s = l.accept().unwrap();
@@ -632,7 +779,11 @@ mod tests {
         });
         let inicio = std::time::Instant::now();
         let e = c.calentar("qwen2.5:7b").unwrap_err();
-        assert!(inicio.elapsed() < Duration::from_secs(2), "tardó {:?}", inicio.elapsed());
+        assert!(
+            inicio.elapsed() < Duration::from_secs(2),
+            "tardó {:?}",
+            inicio.elapsed()
+        );
         assert!(matches!(e, Error::NarradorSinCargar), "{e:?}");
         assert!(e.to_string().contains("El narrador no terminó de cargarse"), "{e}");
         assert!(!e.es_de_red() && !e.sin_memoria());
@@ -642,7 +793,10 @@ mod tests {
     #[test]
     fn un_motor_que_no_responde_falla_por_tiempo() {
         let l = TcpListener::bind(("127.0.0.1", 0)).unwrap();
-        let c = Cliente::con_espera(format!("http://127.0.0.1:{}", l.local_addr().unwrap().port()), Duration::from_millis(300));
+        let c = Cliente::con_espera(
+            format!("http://127.0.0.1:{}", l.local_addr().unwrap().port()),
+            Duration::from_millis(300),
+        );
         // Acepta la conexión y no contesta; se guarda para que no se cierre.
         let aceptador = thread::spawn(move || {
             let s = l.accept().unwrap();
@@ -651,7 +805,11 @@ mod tests {
         });
         let inicio = std::time::Instant::now();
         let e = c.cargados().unwrap_err();
-        assert!(inicio.elapsed() < Duration::from_secs(2), "tardó {:?}", inicio.elapsed());
+        assert!(
+            inicio.elapsed() < Duration::from_secs(2),
+            "tardó {:?}",
+            inicio.elapsed()
+        );
         match e {
             Error::SinConexion(m) => assert!(m.contains("tiempo de espera"), "{m}"),
             otro => panic!("error inesperado: {otro:?}"),

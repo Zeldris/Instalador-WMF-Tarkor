@@ -52,7 +52,9 @@ pub fn manifiesto(carpeta: &Path, modelo: &str) -> Option<PathBuf> {
         _ => (modelo, "latest"),
     };
     let partes: Vec<&str> = nombre.split('/').collect();
-    let valida = |p: &str| !p.is_empty() && p != "." && p != ".." && p.bytes().all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b));
+    let valida = |p: &str| {
+        !p.is_empty() && p != "." && p != ".." && p.bytes().all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+    };
     if !partes.iter().chain([&etiqueta]).all(|p| valida(p)) {
         return None;
     }
@@ -71,11 +73,18 @@ pub fn manifiesto(carpeta: &Path, modelo: &str) -> Option<PathBuf> {
 /// ilegible o compartidas entre modelos) y se borra la que no coincide. Devuelve cuántos archivos
 /// faltan ahora, cada uno contado una vez: los borrados y las capas que ya faltaban. Un modelo
 /// que no está no es un error: `/api/pull` lo bajará. `progreso` recibe (capas comprobadas, total).
-pub fn reparar(carpeta: &Path, modelos: &[String], cancelar: &AtomicBool, progreso: &mut dyn FnMut(u64, u64)) -> Result<usize, Error> {
+pub fn reparar(
+    carpeta: &Path,
+    modelos: &[String],
+    cancelar: &AtomicBool,
+    progreso: &mut dyn FnMut(u64, u64),
+) -> Result<usize, Error> {
     let mut faltan = 0;
     let mut usadas = BTreeSet::new();
     for modelo in modelos {
-        let Some(ruta) = manifiesto(carpeta, modelo) else { continue };
+        let Some(ruta) = manifiesto(carpeta, modelo) else {
+            continue;
+        };
         let Ok(texto) = fs::read_to_string(&ruta) else { continue };
         match capas(&texto) {
             Some(sumas) => usadas.extend(sumas),
@@ -148,9 +157,18 @@ mod tests {
     fn ruta_del_manifiesto_segun_el_nombre() {
         let c = Path::new("m");
         let m = |r: &str| c.join("manifests").join(r);
-        assert_eq!(manifiesto(c, "qwen2.5:7b"), Some(m("registry.ollama.ai/library/qwen2.5/7b")));
-        assert_eq!(manifiesto(c, "nomic-embed-text"), Some(m("registry.ollama.ai/library/nomic-embed-text/latest")));
-        assert_eq!(manifiesto(c, "usuaria/modelo:q4"), Some(m("registry.ollama.ai/usuaria/modelo/q4")));
+        assert_eq!(
+            manifiesto(c, "qwen2.5:7b"),
+            Some(m("registry.ollama.ai/library/qwen2.5/7b"))
+        );
+        assert_eq!(
+            manifiesto(c, "nomic-embed-text"),
+            Some(m("registry.ollama.ai/library/nomic-embed-text/latest"))
+        );
+        assert_eq!(
+            manifiesto(c, "usuaria/modelo:q4"),
+            Some(m("registry.ollama.ai/usuaria/modelo/q4"))
+        );
         assert_eq!(manifiesto(c, "hf.co/org/modelo"), Some(m("hf.co/org/modelo/latest")));
     }
 
@@ -253,7 +271,12 @@ mod tests {
     fn la_comprobacion_de_los_modelos_se_puede_cancelar() {
         let dir = tempfile::tempdir().unwrap();
         guardar(dir.path(), "qwen2.5:7b");
-        let r = reparar(dir.path(), &["qwen2.5:7b".into()], &AtomicBool::new(true), &mut |_, _| {});
+        let r = reparar(
+            dir.path(),
+            &["qwen2.5:7b".into()],
+            &AtomicBool::new(true),
+            &mut |_, _| {},
+        );
         assert!(matches!(r, Err(Error::Cancelado)), "{r:?}");
     }
 }

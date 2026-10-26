@@ -45,7 +45,8 @@ pub fn hilos_para_ia(uso: UsoCpu, hilos_equipo: usize) -> usize {
 
 pub fn calcular(catalogo: &Catalogo, perfil: &Perfil, equipo: Option<&Equipo>, uso: UsoCpu) -> Ajustes {
     // Sin análisis no sabemos el margen: se asume justo, que es lo seguro.
-    let margen_justo = equipo.is_none_or(|e| memoria_para_ia_gb(&catalogo.reglas, e) - perfil.memoria_gb < MARGEN_JUSTO_GB);
+    let margen_justo =
+        equipo.is_none_or(|e| memoria_para_ia_gb(&catalogo.reglas, e) - perfil.memoria_gb < MARGEN_JUSTO_GB);
     let gpu_dedicada = equipo.and_then(|e| e.gpu_dedicada()).is_some();
     let hilos = hilos_para_ia(uso, equipo.map_or(4, |e| e.hilos));
     let cache = if margen_justo { "q4_0" } else { "q8_0" };
@@ -84,14 +85,22 @@ pub fn calcular(catalogo: &Catalogo, perfil: &Perfil, equipo: Option<&Equipo>, u
         ("TARKOR_NUM_THREAD", hilos.to_string()),
         ("TARKOR_NUM_BATCH", if margen_justo { "256" } else { "512" }.into()),
         ("TARKOR_NUM_CTX_NARRADOR", catalogo.reglas.contexto_narrador.to_string()),
-        ("TARKOR_MODELOS_SIN_PENSAR", catalogo.modelos_que_piensan(perfil).join(",")),
+        (
+            "TARKOR_MODELOS_SIN_PENSAR",
+            catalogo.modelos_que_piensan(perfil).join(","),
+        ),
     ];
 
     let a_string = |v: Vec<(&str, String)>| v.into_iter().map(|(k, x)| (k.to_string(), x)).collect();
     Ajustes {
         ollama: a_string(ollama),
         backend: a_string(backend),
-        resumen: Resumen { hilos, cache_contexto: cache, usa_gpu_dedicada: gpu_dedicada, margen_justo },
+        resumen: Resumen {
+            hilos,
+            cache_contexto: cache,
+            usa_gpu_dedicada: gpu_dedicada,
+            margen_justo,
+        },
     }
 }
 

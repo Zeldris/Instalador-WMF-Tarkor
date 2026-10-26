@@ -4,9 +4,9 @@
 //! equipo. Cuando la detección de gráfica no es fiable se devuelve la gráfica sin VRAM y el cálculo
 //! de perfiles la ignora: tirar a la baja es el comportamiento seguro.
 
+use crate::carpetas::espacio_libre_mb;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use crate::carpetas::espacio_libre_mb;
 use sysinfo::System;
 
 const MB: u64 = 1024 * 1024;
@@ -110,8 +110,7 @@ pub fn analizar(carpeta_datos: &Path) -> Equipo {
 
 /// Clasifica una gráfica a partir de lo leído del sistema.
 pub fn clasificar_gpu(fabricante: Fabricante, nombre: String, vram_mb: Option<u64>) -> Gpu {
-    let integrada = fabricante == Fabricante::Intel
-        || vram_mb.is_none_or(|v| v < VRAM_MINIMA_DEDICADA_MB);
+    let integrada = fabricante == Fabricante::Intel || vram_mb.is_none_or(|v| v < VRAM_MINIMA_DEDICADA_MB);
     Gpu {
         nombre,
         fabricante,
@@ -145,7 +144,9 @@ mod linux {
     /// propietario no, así que se consulta `nvidia-smi` si está instalado.
     pub fn gpus() -> Vec<Gpu> {
         let mut out = Vec::new();
-        let Ok(entradas) = fs::read_dir("/sys/class/drm") else { return out };
+        let Ok(entradas) = fs::read_dir("/sys/class/drm") else {
+            return out;
+        };
         let mut nvidia = None;
         for e in entradas.flatten() {
             let nombre = e.file_name().to_string_lossy().into_owned();
@@ -154,7 +155,9 @@ mod linux {
                 continue;
             }
             let dev = e.path().join("device");
-            let Some(vendor) = leer_hex(&dev.join("vendor")) else { continue };
+            let Some(vendor) = leer_hex(&dev.join("vendor")) else {
+                continue;
+            };
             let fabricante = Fabricante::desde_vendor_id(vendor);
             let device = leer_hex(&dev.join("device")).unwrap_or(0);
             let mut vram_mb = fs::read_to_string(dev.join("mem_info_vram_total"))
@@ -199,25 +202,35 @@ mod linux {
 #[cfg(windows)]
 mod windows_dxgi {
     use super::{clasificar_gpu, Fabricante, Gpu, MB};
-    use windows::Win32::Graphics::Dxgi::{
-        CreateDXGIFactory1, IDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE,
-    };
+    use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE};
 
     /// DXGI da la VRAM dedicada real (a diferencia de WMI, que la corta en 4 GB).
     pub fn gpus() -> Vec<Gpu> {
         let mut out = Vec::new();
-        let Ok(factory) = (unsafe { CreateDXGIFactory1::<IDXGIFactory1>() }) else { return out };
+        let Ok(factory) = (unsafe { CreateDXGIFactory1::<IDXGIFactory1>() }) else {
+            return out;
+        };
         let mut i = 0;
         while let Ok(adapter) = unsafe { factory.EnumAdapters1(i) } {
             i += 1;
-            let Ok(desc) = (unsafe { adapter.GetDesc1() }) else { continue };
+            let Ok(desc) = (unsafe { adapter.GetDesc1() }) else {
+                continue;
+            };
             if desc.Flags & (DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32) != 0 {
                 continue; // "Microsoft Basic Render Driver"
             }
-            let fin = desc.Description.iter().position(|&c| c == 0).unwrap_or(desc.Description.len());
+            let fin = desc
+                .Description
+                .iter()
+                .position(|&c| c == 0)
+                .unwrap_or(desc.Description.len());
             let nombre = String::from_utf16_lossy(&desc.Description[..fin]);
             let vram = desc.DedicatedVideoMemory as u64 / MB;
-            out.push(clasificar_gpu(Fabricante::desde_vendor_id(desc.VendorId), nombre, Some(vram)));
+            out.push(clasificar_gpu(
+                Fabricante::desde_vendor_id(desc.VendorId),
+                nombre,
+                Some(vram),
+            ));
         }
         out
     }

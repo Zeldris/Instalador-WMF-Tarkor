@@ -32,13 +32,22 @@ fn main() {
         otro => println!("  motor: {otro:?}"),
     })
     .unwrap_or_else(|e| panic!("{e}"));
-    println!("Motor instalado en {:.0} s: {}", t.elapsed().as_secs_f64(), exe.display());
+    println!(
+        "Motor instalado en {:.0} s: {}",
+        t.elapsed().as_secs_f64(),
+        exe.display()
+    );
 
     let ajustes = rendimiento::calcular(&catalogo, &perfil, Some(&e), UsoCpu::Moderado);
     let puerto = procesos::puerto_libre().unwrap();
     let mut entorno: BTreeMap<String, String> = ajustes.ollama.into_iter().collect();
     entorno.insert("OLLAMA_HOST".into(), format!("127.0.0.1:{puerto}"));
-    entorno.insert("OLLAMA_MODELS".into(), tarkor_nucleo::modelos::carpeta(&rutas.ia).to_string_lossy().into_owned());
+    entorno.insert(
+        "OLLAMA_MODELS".into(),
+        tarkor_nucleo::modelos::carpeta(&rutas.ia)
+            .to_string_lossy()
+            .into_owned(),
+    );
     let t = Instant::now();
     let proceso = Proceso::arrancar(Especificacion {
         nombre: "El motor de IA".into(),
@@ -52,7 +61,11 @@ fn main() {
     })
     .unwrap_or_else(|e| panic!("{e}"));
     let c = Cliente::new(proceso.url());
-    println!("Motor en marcha en {:.1} s: Ollama {}", t.elapsed().as_secs_f64(), c.version().unwrap_or_else(|e| e.to_string()));
+    println!(
+        "Motor en marcha en {:.1} s: Ollama {}",
+        t.elapsed().as_secs_f64(),
+        c.version().unwrap_or_else(|e| e.to_string())
+    );
 
     for m in perfil.modelos() {
         let r = c.descargar_modelo(m, &AtomicBool::new(false), &mut |p| {
@@ -69,8 +82,15 @@ fn main() {
         }
     }
     let piensa = catalogo.modelos.get(&perfil.narrador).is_some_and(|m| m.piensa);
-    match c.probar(&perfil.narrador, piensa, rendimiento::hilos_para_ia(UsoCpu::Moderado, e.hilos)) {
-        Ok(p) => println!("Narración de prueba: «{}» · {:.1} tokens/s", p.texto, p.tokens_por_segundo),
+    match c.probar(
+        &perfil.narrador,
+        piensa,
+        rendimiento::hilos_para_ia(UsoCpu::Moderado, e.hilos),
+    ) {
+        Ok(p) => println!(
+            "Narración de prueba: «{}» · {:.1} tokens/s",
+            p.texto, p.tokens_por_segundo
+        ),
         Err(e) => println!("Narración de prueba: {e}"),
     }
     if let Ok(cargados) = c.cargados() {
