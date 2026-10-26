@@ -14,7 +14,7 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #11 (2026-10-26, `a73f881`): `FLU-6`, con la confirmación de la usuaria. La CI de GitHub no arrancó (sin cuota); `ci-local` en verde sobre `f59202b`, Windows sin cubrir (pendiente de `INS-8`). |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-10-26: `INS-33` hecha en la rama del juego `claude/ins-33-frontend-sin-admin` (`2455ecac`), revisada y con los tests comprobados desde aquí. La usuaria dejó a criterio el orden: se cierra `INS-33` antes de `INS-34`. Encargada a la sesión del juego `session_01Q7LE93pShNZKqvoGPWTAZc`: merge de `main`, los tres leves (pendiente 13), PR en borrador, fase 1, opt-tokens y retro escritas, CI local, y parada antes de `revisado.sh`. Siguiente: revisar su informe con `get_session`, presentar la retro a la usuaria y, con su confirmación, llevar `INS-33` a `main` del juego (`QA-215`, `QA-238`). |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-10-26: `INS-33` en la rama del juego `claude/ins-33-frontend-sin-admin` (`180027a6`, ya contiene `main` `88a7299d`): los tres leves arreglados (pendiente 13), fase 1 sin graves ni medios, retro y opt-tokens escritas (`docs/registros/retro-2026-10-26-ins-33.md`, sin decidir) y CI local en verde salvo Chromium (proxy; backend 3953, frontend 798). Sin PR: va a `main` sin PR por `QA-215`. Revisado desde aquí. Siguiente: la usuaria decide la retro (tres propuestas) y confirma; entonces una sesión del juego aplica lo aprobado, corre `revisado.sh` y sube a `main`. |
 | **Tests** | 2026-10-26: núcleo `cargo test -p tarkor-nucleo` 116, `cargo fmt --all --check` en verde, clippy 0 avisos, `tsc -b` 0, `cargo check` del núcleo y la app para Windows (mingw) en verde. Asistente `vitest` 27 y E2E con el Ollama falso: último verde el 2026-10-25. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -82,10 +82,8 @@ cada commit.**
 12. Pendientes leves de `INS-31` (en `main` del juego): con `VITE_API_URL=""` la base queda vacía (igual que antes);
     el aviso de `useReconnectionPolling.ts` no dice qué URL probó (útil para `INS-41`). El comentario de los tests y
     `15-instalacion.md` ya se arreglaron allí.
-13. Pendientes leves de `INS-33` (rama del juego): en `api.ts` el `import` de `leerTarkor` queda a mitad de archivo,
-    entre el comentario de `apiBaseUrl()` y la función; el comentario `INS-33` de `modoDesarrollador.ts` está encima de
-    `HerramientasAdminContext` en vez del hook; empaquetado, una URL `/admin/*` escrita a mano da pantalla en blanco
-    (no hay ruta comodín).
+13. Pendiente leve de `INS-33` (rama del juego): la pestaña `custom` de `CharacterSelect` y su formulario quedan sin
+    alcanzar, a propósito, para retomar «Crear desde cero». Los tres leves anteriores, arreglados en `2a91903b`.
 14. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
 
 ## Decisiones de la usuaria que bloquean algo
