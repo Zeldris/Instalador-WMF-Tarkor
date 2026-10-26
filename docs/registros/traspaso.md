@@ -111,6 +111,8 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 
 Dos líneas cada una como mucho; el detalle está en el commit y la más antigua sale cuando hay más de 5.
 
+- ~~`INS-32` · Fuentes Cinzel e Inter en local~~ (2026-10-26): ya hecho en `main` del juego por su `BAS-1`
+  (`4a150259`, `frontend/src/assets/fonts/` con licencias OFL); sin cambios.
 - ~~`INS-31` · URL del backend en tiempo de ejecución~~ (2026-10-26): `apiBaseUrl()` en el `api.ts` del juego con
   `window.__TARKOR__.apiUrl`; en `main` del juego (`b76c66b2`, sin PR, CI local).
 - ~~`FLU-6` · Versión de Rust fijada~~ (2026-10-26): Rust 1.94.1 en `app/rust-toolchain.toml`, con rustfmt, clippy
@@ -119,5 +121,3 @@ Dos líneas cada una como mucho; el detalle está en el commit y la más antigua
   (`a27489f` y `9b0035c`, ignorados por `git blame`) y `cargo fmt --all --check` en el check y en el CI.
 - ~~`INS-42` · Asistente real de punta a punta~~ (2026-10-26): autopausa por red con espera creciente en la
   Descarga, Ajustes y Reparar; calentar el narrador al entrar; perfil más ligero si falta memoria o narra lento.
-- ~~`INS-43` · Rendimiento de la IA y motor detenido~~ (2026-10-25): dónde corre la IA, cambiar de perfil con
-  borrado de sobrantes, «Copiar informe» y pantalla del motor detenido con vigilancia en Rust.
