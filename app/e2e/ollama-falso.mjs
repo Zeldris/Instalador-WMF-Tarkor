@@ -10,6 +10,8 @@
 //    modelos y cuál está cargado en OLLAMA_MODELS/falso.json, para sobrevivir a los reinicios.
 //    `/api/delete` borra de verdad y `/api/ps` da `size` y `size_vram` (60 % en la gráfica).
 //    FALSO_PASO_MS alarga el progreso de `/api/pull` (80 ms por paso por defecto).
+//    FALSO_CORTES_PULL=n hace que las n primeras `/api/pull` respondan con el error de «sin internet»
+//    del registro (no such host), como Ollama sin red; las siguientes, con normalidad.
 
 import { createServer } from 'node:http'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -20,6 +22,7 @@ const [host, puertoPropio] = (process.env.OLLAMA_HOST ?? '127.0.0.1:11499').spli
 const puerto = propio ? Number(puertoPropio) : Number(process.argv[2] ?? 11499)
 const esperar = (ms) => new Promise((ok) => setTimeout(ok, ms))
 const pasoMs = Number(process.env.FALSO_PASO_MS ?? 80)
+let cortesPull = Number(process.env.FALSO_CORTES_PULL ?? 0)
 // Tamaños en disco (bytes) parecidos a los reales; el resto, 500 MB.
 const TAMANOS = { 'qwen2.5:7b': 4.7e9, 'qwen2.5:1.5b-instruct': 1.0e9, 'qwen3.5:2b': 2.7e9, 'nomic-embed-text:latest': 2.74e8 }
 const tamano = (m) => TAMANOS[m] ?? 5e8
@@ -64,6 +67,11 @@ createServer(async (req, res) => {
     const { model } = await cuerpo(req)
     res.writeHead(200, { 'content-type': 'application/x-ndjson' })
     res.write(JSON.stringify({ status: 'pulling manifest' }) + '\n')
+    if (cortesPull > 0) {
+      cortesPull--
+      res.write(JSON.stringify({ error: `pull model manifest: Get "https://registry.ollama.ai/v2/library/${model.split(':')[0]}/manifests/${model.split(':')[1] ?? 'latest'}": dial tcp: lookup registry.ollama.ai: no such host` }) + '\n')
+      return res.end()
+    }
     for (let i = 1; i <= 5; i++) {
       await esperar(pasoMs)
       res.write(JSON.stringify({ status: `pulling ${model}`, digest: `sha256:${model}`, total: 500, completed: i * 100 }) + '\n')

@@ -1,11 +1,12 @@
 // Pantallas del asistente de primer arranque (docs/11-diseno-del-frontal.md).
 
 import { useEffect, useRef, useState } from 'react'
-import { api } from './api'
+import { api, ErrorIa } from './api'
+import { textoEspera, useEsperaRed } from './esperaRed'
 import { CarpetaIa, CopiarInforme, ControlUsoCpu, DetallesTecnicos, Marco, Medidor, Pagina, Reparar, Tarjetas, textoModelo, useMoverCarpeta } from './componentes'
 import * as tx from './textos'
 import type { Config, Equipo, Evaluacion, PerfilId, Rutas, Sobrante, UsoIa } from './tipos'
-import { bloqueado, perfilDe } from './tipos'
+import { aErrorIa, bloqueado, perfilDe } from './tipos'
 import { fmt, gbDeMb } from './formato'
 
 interface Nav {
@@ -164,14 +165,60 @@ export function Listo({ config, evaluacion, rutas, jugar }: { config: Config; ev
   )
 }
 
-export function Juego({ abrirAjustes, repetir }: { abrirAjustes: () => void; repetir: () => void }) {
+type EstadoNarrador = { fase: 'preparando' | 'listo' } | { fase: 'error'; mensaje: string; sinMemoria: boolean }
+
+/**
+ * Carga el narrador en memoria al entrar en el juego (docs/12 «Calentar el narrador», INS-42), para que el primer
+ * turno no espere. Arranca el motor si no corre (`iniciarMotor` reinicia uno en marcha: por eso se mira antes).
+ * Si no cabe en memoria y hay un perfil más ligero, lo ofrece; cualquier otro fallo es una línea discreta que no bloquea.
+ */
+function CalentarNarrador({ masLigero, irAAjustes }: { masLigero: PerfilId | null; irAAjustes: (perfil: PerfilId) => void }) {
+  const t = tx.juego
+  const [estado, setEstado] = useState<EstadoNarrador>({ fase: 'preparando' })
+  useEffect(() => {
+    let vivo = true
+    void (async () => {
+      try {
+        await api.asegurarMotor()
+        if (!vivo) return
+        await api.calentarNarrador()
+        if (vivo) setEstado({ fase: 'listo' })
+      } catch (e) {
+        const error = aErrorIa(e)
+        // Sin memoria el mensaje del núcleo ya lo explica; en otro fallo, la frase dice qué se pierde y el motivo va entre paréntesis.
+        if (vivo) setEstado({ fase: 'error', mensaje: error.sinMemoria ? error.message : t.noCalento(error.message), sinMemoria: error.sinMemoria })
+      }
+    })()
+    return () => { vivo = false }
+  }, [])
+  if (estado.fase === 'error') {
+    if (estado.sinMemoria && masLigero) {
+      return (
+        <div className="error" role="alert">
+          <p>{estado.mensaje}</p>
+          <div className="fila"><button type="button" className="btn" onClick={() => irAAjustes(masLigero)}>{t.masLigero}</button></div>
+        </div>
+      )
+    }
+    return <p className="peq tenue" role="status">{estado.mensaje}</p>
+  }
+  return <p className="peq tenue" role="status">{estado.fase === 'listo' ? t.listo : t.preparando}</p>
+}
+
+export function Juego({ abrirAjustes, repetir, masLigero, irAAjustes }: {
+  abrirAjustes: () => void
+  repetir: () => void
+  /** El siguiente perfil de menos memoria, o null si ya es el más ligero. */
+  masLigero: PerfilId | null
+  irAAjustes: (perfil: PerfilId) => void
+}) {
   const t = tx.juego
   return (
     <div className="ventana">
       <Pagina sola titulo={t.titulo} lead={t.lead}
         barra={<><button type="button" className="btn" onClick={repetir}>{t.repetir}</button><span className="hueco" />
           <button type="button" className="btn pri" onClick={abrirAjustes}>{t.ajustes}</button></>}>
-        <span />
+        <CalentarNarrador masLigero={masLigero} irAAjustes={irAAjustes} />
       </Pagina>
     </div>
   )
@@ -198,7 +245,10 @@ function DondeCorre() {
   )
 }
 
-/** «Cambiar y descargar» (`INS-43`): llama a `cambiar_perfil`, que da el progreso y devuelve el `Config` guardado. */
+/**
+ * «Cambiar y descargar» (`INS-43`): llama a `cambiar_perfil`, que da el progreso y devuelve el `Config` guardado.
+ * Si se pierde la red (`ErrorIa.red`, `INS-42`) espera y vuelve a llamar sola, como la Descarga; con otro error, lo muestra.
+ */
 function useCambiarPerfil(reemplazarConfig: (c: Config) => void) {
   const [cambiando, setCambiando] = useState(false)
   const [estado, setEstado] = useState('')
@@ -206,24 +256,49 @@ function useCambiarPerfil(reemplazarConfig: (c: Config) => void) {
   const [borrando, setBorrando] = useState(false)
   const [sobrantes, setSobrantes] = useState<Sobrante[]>([])
   const pausando = useRef(false)
+  const espera = useEsperaRed()
+  // Mientras espera a la red el cambio sigue «en marcha»: Ajustes no deja tocar nada y se puede pausar o reintentar ya.
+  const esperando = espera.segundos !== null
   const cambiar = async (perfil: PerfilId) => {
     pausando.current = false
+    espera.cancelar()
     setCambiando(true)
     setError(null)
     setEstado(tx.ajustes.cambiando)
+    let esperaPuesta = false
     try {
-      reemplazarConfig(await api.cambiarPerfil(perfil, (p) => setEstado(textoModelo(p))))
+      reemplazarConfig(await api.cambiarPerfil(perfil, (p) => {
+        if (p.estado !== 'success') espera.progreso(p.modelo, p.hecho)
+        setEstado(textoModelo(p))
+      }))
       setEstado('')
       // Con un Ollama externo el núcleo devuelve una lista vacía: sus modelos no se tocan.
       setSobrantes(await api.modelosSobrantes().catch(() => []))
     } catch (e) {
-      if (pausando.current && String(e).startsWith(tx.ajustes.prefijoCancelacion)) setEstado(tx.ajustes.pausado)
-      else { setEstado(''); setError(String(e)) }
+      // Pausar manda sobre un corte de red que llega a la vez (sin reintento ni error). Otro fallo sí se enseña: p. ej. el
+      // motor que no arranca con el perfil nuevo, ya descargado, no es una pausa.
+      if (pausando.current && (String(e).startsWith(tx.ajustes.prefijoCancelacion) || (e instanceof ErrorIa && e.red))) setEstado(tx.ajustes.pausado)
+      else if (e instanceof ErrorIa && e.red) {
+        setEstado('')
+        esperaPuesta = true
+        espera.programar(() => void cambiar(perfil))
+      } else { setEstado(''); setError(String(e)) }
     } finally {
-      setCambiando(false)
+      // Con la espera puesta, `cambiando` lo quita el reintento (que vuelve a ponerlo) o la pausa.
+      if (!esperaPuesta) setCambiando(false)
     }
   }
-  const pausar = () => { pausando.current = true; void api.cancelarDescargas() }
+  const pausar = () => {
+    if (esperando) {
+      // No hay descarga en curso: basta con cancelar el reintento programado.
+      espera.cancelar()
+      setCambiando(false)
+      setEstado(tx.ajustes.pausado)
+      return
+    }
+    pausando.current = true
+    void api.cancelarDescargas()
+  }
   const borrar = async () => {
     setError(null)
     setBorrando(true)
@@ -236,7 +311,7 @@ function useCambiarPerfil(reemplazarConfig: (c: Config) => void) {
       setBorrando(false)
     }
   }
-  return { cambiando, borrando, estado, error, sobrantes, cambiar, pausar, borrar }
+  return { cambiando, borrando, estado, error, sobrantes, cambiar, pausar, borrar, segundosEspera: espera.segundos, reintentarAhora: espera.reintentarAhora }
 }
 
 export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpeta, actualizar, reemplazarConfig, reanalizar, alCambiar, volver }: {
@@ -259,6 +334,10 @@ export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpe
   const [confirmado, setConfirmado] = useState(false)
   const carpeta = useMoverCarpeta(cambiarCarpeta)
   const cambio = useCambiarPerfil(reemplazarConfig)
+  // Reparar y el cambio de perfil usan el mismo motor (en Rust, `Ocupado`): mientras uno trabaja o espera la red, el otro no se toca.
+  const [reparando, setReparando] = useState(false)
+  // Con el motor ocupado (cambio de perfil, reparación o mover la carpeta) no se sale ni se cambia el uso del procesador.
+  const ocupado = cambio.cambiando || reparando || carpeta.moviendo
   useEffect(() => { alCambiar?.(cambio.cambiando) }, [alCambiar, cambio.cambiando])
   useEffect(() => () => alCambiar?.(false), [alCambiar])
   // Un perfil guardado que ya no está en la evaluación cuenta como el recomendado.
@@ -269,27 +348,30 @@ export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpe
   return (
     <div className="ventana">
       <Pagina sola titulo={t.titulo} lead={t.actual(actual.nombre, fmt(actual.memoriaGb), fmt(actual.descargaGb))}
-        barra={<><button type="button" className="btn" disabled={cambio.cambiando} onClick={volver}>{t.volver}</button>
-          <button type="button" className="btn" disabled={cambio.cambiando} onClick={reanalizar}>{t.reanalizar}</button><span className="hueco" />
+        barra={<><button type="button" className="btn" disabled={ocupado} onClick={volver}>{t.volver}</button>
+          <button type="button" className="btn" disabled={ocupado} onClick={reanalizar}>{t.reanalizar}</button><span className="hueco" />
           {cambio.cambiando && <button type="button" className="btn" onClick={cambio.pausar}>{t.pausar}</button>}
-          <button type="button" className="btn pri" disabled={cambio.cambiando || !nuevo || nuevo.id === actual.id || bloqueado(evaluacion, nuevo, confirmado)} onClick={() => nuevo && void cambio.cambiar(nuevo.id)}>
+          {cambio.segundosEspera !== null && <button type="button" className="btn" onClick={cambio.reintentarAhora}>{tx.descarga.reintentarAhora}</button>}
+          <button type="button" className="btn pri" disabled={cambio.cambiando || reparando || !nuevo || nuevo.id === actual.id || bloqueado(evaluacion, nuevo, confirmado)} onClick={() => nuevo && void cambio.cambiar(nuevo.id)}>
             {nuevo?.id === actual.id ? t.actualBoton : extra > 0 ? t.cambiarDescargar(fmt(extra)) : t.cambiar}
           </button></>}>
         <DondeCorre />
         <Medidor evaluacion={evaluacion} />
-        {cambio.estado && <p className="peq tenue" aria-live="polite">{cambio.estado}</p>}
+        {cambio.segundosEspera !== null
+          ? <p className="peq tenue" role="status">{textoEspera(cambio.segundosEspera)}</p>
+          : cambio.estado && <p className="peq tenue" aria-live="polite">{cambio.estado}</p>}
         {cambio.error && <div className="error" role="alert">{cambio.error}</div>}
         {cambio.sobrantes.length > 0 && (
           <div className="fila">
-            <button type="button" className="btn" disabled={cambio.borrando || cambio.cambiando} onClick={() => void cambio.borrar()}>{cambio.borrando ? t.borrando : t.borrar(fmt(cambio.sobrantes.reduce((a, s) => a + s.gb, 0)))}</button>
+            <button type="button" className="btn" disabled={cambio.borrando || cambio.cambiando || reparando} onClick={() => void cambio.borrar()}>{cambio.borrando ? t.borrando : t.borrar(fmt(cambio.sobrantes.reduce((a, s) => a + s.gb, 0)))}</button>
           </div>
         )}
         <Tarjetas evaluacion={evaluacion} seleccionado={elegido} confirmado={confirmado} onConfirmar={setConfirmado}
-          onCambiarCarpeta={carpeta.mover} moviendo={carpeta.moviendo}
+          onCambiarCarpeta={carpeta.mover} moviendo={carpeta.moviendo} desactivado={reparando}
           onSeleccionar={(id) => { setConfirmado(false); setElegido(id) }} />
-        {rutas && <CarpetaIa ruta={rutas.ia} accion={t.moverCarpeta} moviendo={carpeta.moviendo} error={carpeta.error} onMover={carpeta.mover} desactivado={cambio.cambiando} />}
-        <ControlUsoCpu uso={config.usoCpu} hilos={config.equipo?.hilos ?? 4} onCambiar={(usoCpu) => actualizar({ usoCpu })} desactivado={cambio.cambiando} />
-        <Reparar alTerminar={(r) => actualizar({ modelosDescargados: r.modelos })} desactivado={cambio.cambiando} />
+        {rutas && <CarpetaIa ruta={rutas.ia} accion={t.moverCarpeta} moviendo={carpeta.moviendo} error={carpeta.error} onMover={carpeta.mover} desactivado={cambio.cambiando || reparando} />}
+        <ControlUsoCpu uso={config.usoCpu} hilos={config.equipo?.hilos ?? 4} onCambiar={(usoCpu) => actualizar({ usoCpu })} desactivado={ocupado} />
+        <Reparar alTerminar={(r) => actualizar({ modelosDescargados: r.modelos })} alReparar={setReparando} desactivado={cambio.cambiando} />
         <CopiarInforme />
         {nuevo && nuevo.descargaGb < actual.descargaGb && <p className="peq tenue">{t.liberar(nuevo.nombre, fmt(actual.descargaGb - nuevo.descargaGb))}</p>}
       </Pagina>

@@ -121,6 +121,12 @@ La pantalla central del asistente.
   diálogo del sistema) y avisa de que lo descargado se conserva para continuar.
 - Si se pierde la conexión: la descarga se pausa sola, la fila pasa a "Esperando conexión" y se
   reanuda al volver la red, con reintentos cada vez más espaciados (Heroic: autopausa y reanuda).
+  Los reintentos van a los 5, 10, 20, 40 y luego cada 60 s (el contador vuelve a 5 s en cuanto llega
+  progreso), con una cuenta atrás y dos botones: «Pausar» (cancela el reintento) y «Reintentar ahora».
+  Solo cuenta como falta de red lo que se arregla solo (sin DNS, conexión cortada, tiempo agotado):
+  un cortafuegos o proxy que bloquea el registro, o un disco lleno, siguen siendo un error con «Reintentar».
+  Lo mismo vale para «Cambiar y descargar» de Ajustes y para «Reparar» (misma línea «Esperando conexión · Reintentando en
+  N s», con «Reintentar ahora» y «Pausar»/«Cancelar», que también cancela la espera).
 - Encima de las filas, la carpeta de destino con "Cambiar carpeta" mientras no haya empezado
   (LM Studio y Ollama permiten cambiar la carpeta de modelos; en la Deck, para la tarjeta SD).
 
@@ -129,8 +135,10 @@ La pantalla central del asistente.
 Lista de las 7 comprobaciones de [`07`](07-flujo-de-instalacion.md) con un icono de estado cada
 una (pendiente, en curso, correcto, fallo). La última, "Narración de prueba", muestra la frase
 generada y la velocidad medida ("unas 9 palabras por segundo"), sacada de `eval_count /
-eval_duration`. Por debajo de 3 palabras/s se sugiere un perfil más ligero. Es la única prueba de
-velocidad: no hay botón aparte (LM Studio muestra la velocidad en cada respuesta).
+eval_duration`. Por debajo de 3 palabras/s (`PALABRAS_LENTAS` en `app/src/pantallasIa.tsx`) añade
+«Tu equipo narra despacio con este perfil: uno más ligero responderá antes» y el botón «Probar un perfil más ligero»
+(vuelve al paso 4), solo si existe un perfil más ligero (`perfilMasLigero`). Es la única prueba de velocidad: no hay
+botón aparte (LM Studio muestra la velocidad en cada respuesta).
 
 En caso de fallo, la fila se expande con la explicación, **Reintentar**, "Ver detalles" y
 **Copiar informe**. Si el fallo es de memoria, se ofrece "Probar un perfil más ligero" que vuelve
@@ -140,6 +148,18 @@ al paso 4. Si falla el motor de IA o un modelo, también **Reparar** (ver Ajuste
 
 - "Todo preparado". Resumen: perfil elegido, espacio usado, dónde están tus partidas.
 - Acción: **Jugar** → abre el juego (pantalla de inicio actual del frontend).
+
+### Entrar en el juego: calentar el narrador
+
+Al entrar en la vista del juego (también al abrir la app con el asistente ya completado) el frontal llama a `asegurar_motor`,
+que arranca el motor solo si no está en marcha (`iniciar_motor` reiniciaría uno que ya corre) y comprueba y arranca
+bajo el mismo candado que `arrancar_motor`, así que dos entradas seguidas o un cambio de perfil a la vez no lanzan dos
+arranques; luego `calentar_narrador` carga el narrador del perfil en memoria para que el primer turno no espere (`INS-42`, `12`). Una
+línea de estado lo cuenta: «Preparando el narrador…» y, al acabar, «El narrador está listo». No bloquea nada.
+
+- Si no cabe en memoria (`sinMemoria`) y hay un perfil más ligero: aviso con el motivo y **Cambiar a un perfil más
+  ligero**, que lleva a Ajustes con ese perfil ya elegido (el mismo camino que la pantalla del motor detenido).
+- Cualquier otro fallo (o sin perfil más ligero al que bajar): una línea discreta con el motivo, sin botón.
 
 ### Ajustes → Rendimiento de la IA
 
@@ -154,7 +174,8 @@ Accesible desde el menú del juego. Mismo estilo.
 - "Volver a analizar mi equipo".
 - Las tres tarjetas del paso 4 para cambiar de perfil; si el cambio implica descargar, muestra el
   tamaño en el botón ("Cambiar y descargar 2,7 GB"). Al cambiar, descarga lo que falte con su progreso y se puede
-  pausar; el perfil de antes sigue activo hasta que termina, y entonces se guarda el nuevo y se reinicia el motor
+  pausar; si se pierde la red, espera y reintenta sola como la Descarga (§5); el perfil de antes sigue activo hasta
+  que termina, y entonces se guarda el nuevo y se reinicia el motor
   (Steam descarga al elegir y no toca lo instalado hasta tener lo nuevo). Después, si sobran modelos, "Borrar
   modelos que ya no uso (X GB)", solo con el motor propio: los de un Ollama externo no se tocan (la "Desinstalar"
   de la ficha de Steam).
@@ -165,7 +186,8 @@ Accesible desde el menú del juego. Mismo estilo.
   sumas quedan en su marca `.completo` al instalarlo) y lo reinstala si alguna no casa, sin quitar el de antes
   hasta tener el nuevo listo; luego suma cada capa de `blobs/` (su nombre es su suma), borra las dañadas y pide
   de nuevo los modelos del perfil: `/api/pull` solo baja lo que falta (el "healing" de itch.io). Ollama no
-  vuelve a sumar las capas que ya tiene, por eso las suma Tarkor. Se puede cancelar, dice por dónde va y no
+  vuelve a sumar las capas que ya tiene, por eso las suma Tarkor. Si se pierde la red al pedir los modelos, espera y
+  reintenta sola (§5). Se puede cancelar, dice por dónde va y no
   coincide con «Mover a otra carpeta»; si falla, el motor vuelve a arrancar con lo que hubiera.
 - "Copiar informe del sistema" para pedir ayuda.
 

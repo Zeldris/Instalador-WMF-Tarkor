@@ -103,6 +103,9 @@ tiene que leer y pasar en cada petición a Ollama (`INS-35` del plan):
 
 - **Calentar el narrador:** al terminar de arrancar, una petición vacía carga el narrador en
   memoria mientras el jugador está en el menú, para que el primer turno no tarde de más (`INS-42`).
+  Implementado (trozo B): el comando `calentar_narrador` (`app/src-tauri/src/lib.rs`, que usa `Cliente::calentar`)
+  lo llama el componente `CalentarNarrador` de `app/src/pantallas.tsx` al entrar en el juego, tras arrancar el motor
+  si no corría (`asegurar_motor`, en fila con los demás arranques). Un fallo por falta de memoria ofrece el perfil más ligero (`11`, «Entrar en el juego»).
 - **Ver dónde corre la IA:** `GET /api/ps` de Ollama dice qué parte de cada modelo está en la
   gráfica. Se muestra en Ajustes ("La IA usa la gráfica al 100 %") y sirve para diagnosticar
   (`INS-43`).

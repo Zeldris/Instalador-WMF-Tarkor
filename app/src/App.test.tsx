@@ -1,14 +1,17 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { act } from 'react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
-import { perfilDe, perfilMasLigero } from './tipos'
+import { ErrorIa, perfilDe, perfilMasLigero } from './tipos'
 import { catalogo } from './catalogo'
+import { Reparar } from './componentes'
 import { Ajustes, ElegirPerfil, Listo } from './pantallas'
 import { Descarga } from './pantallasIa'
-import { ejemplo, configInicial, evaluarEjemplo, equipoEjemplo, fijarDiscoLibreIa, fijarErrorCambioPerfil, fijarRetardoCambioPerfil, fijarErrorCarpetaIa, fijarModelosDanados, fijarUsoIa, reiniciarCarpetaIa, reiniciarModelos, emitirMotorDetenido, fijarErrorCopiar, fijarErrorReintento, fijarMotorDetenido, oyentesMotor, reiniciarMotorDetenido, textoCopiado, TEXTO_INFORME } from './ejemplo'
+import { ejemplo, configInicial, evaluarEjemplo, equipoEjemplo, fijarDiscoLibreIa, fijarErrorCambioPerfil, fijarRetardoCambioPerfil, fijarErrorCarpetaIa, fijarModelosDanados, fijarSinRed, fijarUsoIa, reiniciarCarpetaIa, reiniciarModelos, emitirMotorDetenido, fijarCalentar, arranquesDelMotor, fijarTokensPorSegundo, fijarErrorCopiar, fijarErrorReintento, fijarMotorDetenido, oyentesMotor, reiniciarMotorDetenido, textoCopiado, TEXTO_INFORME } from './ejemplo'
 
 afterEach(async () => {
   cleanup()
+  vi.restoreAllMocks()
   await ejemplo.guardarConfig(configInicial())
   reiniciarCarpetaIa()
   fijarModelosDanados(false)
@@ -479,4 +482,475 @@ describe('asistente de primer arranque', () => {
     expect(guardada.consentimientoAceptado).toBe(true)
     expect(guardada.pasoAsistente).toBe(3)
   })
+})
+
+/** Entra en la app con el asistente acabado y ese perfil: abre directamente la vista del juego. */
+const conJuego = async (perfil: string) => {
+  await ejemplo.guardarConfig({ ...configInicial(), consentimientoAceptado: true, permisoAnalisis: true, equipo: await ejemplo.analizarEquipo(), perfil: perfil as never, pasoAsistente: 7, asistenteCompletado: true })
+}
+
+describe('calentar el narrador al entrar en el juego (INS-42)', () => {
+  it('con el motor parado lo arranca y luego calienta el narrador; con el motor en marcha no lo reinicia', async () => {
+    await conJuego('equilibrado')
+    const asegurar = vi.spyOn(ejemplo, 'asegurarMotor')
+    const calentar = vi.spyOn(ejemplo, 'calentarNarrador')
+    render(<App />)
+    expect((await screen.findByRole('status')).textContent).toBe('Preparando el narrador…')
+    expect((await screen.findByText('El narrador está listo')).getAttribute('role')).toBe('status')
+    expect(asegurar).toHaveBeenCalledTimes(1)
+    expect(arranquesDelMotor()).toBe(1)
+    expect(calentar).toHaveBeenCalledTimes(1)
+    expect(asegurar.mock.invocationCallOrder[0]).toBeLessThan(calentar.mock.invocationCallOrder[0])
+    cleanup()
+
+    calentar.mockClear()
+    render(<App />)
+    await screen.findByText('El narrador está listo')
+    expect(arranquesDelMotor()).toBe(1)
+    expect(calentar).toHaveBeenCalledTimes(1)
+  })
+
+  it('calienta una sola vez por entrada, aunque la pantalla se vuelva a pintar', async () => {
+    await conJuego('equilibrado')
+    const calentar = vi.spyOn(ejemplo, 'calentarNarrador')
+    const { rerender } = render(<App />)
+    await screen.findByText('El narrador está listo')
+    rerender(<App />)
+    await act(async () => { await new Promise((ok) => setTimeout(ok, 50)) })
+    expect(calentar).toHaveBeenCalledTimes(1)
+  })
+
+  it('sin memoria avisa y ofrece el perfil más ligero, que lleva a Ajustes con ese perfil elegido', async () => {
+    await conJuego('equilibrado')
+    fijarCalentar('sinMemoria')
+    render(<App />)
+    const aviso = await screen.findByRole('alert')
+    expect(aviso.textContent).toMatch(/se quedó sin memoria al cargar el narrador/)
+    fireEvent.click(within(aviso).getByRole('button', { name: 'Cambiar a un perfil más ligero' }))
+    expect((await boton(/^Ligero/)).getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('sin memoria pero ya en el perfil más ligero, solo dice el motivo, sin botón', async () => {
+    await conJuego('minimo')
+    fijarCalentar('sinMemoria')
+    render(<App />)
+    expect(await screen.findByText(/se quedó sin memoria al cargar el narrador/)).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Cambiar a un perfil más ligero' })).toBeNull()
+  })
+
+  it('cualquier otro error es una línea discreta con el motivo, sin aviso ni botón', async () => {
+    await conJuego('equilibrado')
+    fijarCalentar('error')
+    render(<App />)
+    const linea = await screen.findByText(/el motor no respondió/)
+    // La frase dice qué se pierde (el primer turno tardará más) y deja el motivo del núcleo entre paréntesis.
+    expect(linea.textContent).toBe('No se pudo preparar el narrador: el primer turno tardará más. (No se pudo cargar el narrador: el motor no respondió.)')
+    expect(linea.className).toMatch(/tenue/)
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Cambiar a un perfil más ligero' })).toBeNull()
+    expect(screen.queryByText('El narrador está listo')).toBeNull()
+  })
+
+  it('si el motor no arranca, lo dice en la misma línea discreta y no calienta', async () => {
+    await conJuego('equilibrado')
+    vi.spyOn(ejemplo, 'asegurarMotor').mockRejectedValue('No se pudo arrancar el motor de IA.')
+    const calentar = vi.spyOn(ejemplo, 'calentarNarrador')
+    render(<App />)
+    expect(await screen.findByText('No se pudo preparar el narrador: el primer turno tardará más. (No se pudo arrancar el motor de IA.)')).toBeTruthy()
+    expect(calentar).not.toHaveBeenCalled()
+  })
+
+  it('si se sale antes de que conteste el motor, no lo arranca ni calienta', async () => {
+    await conJuego('equilibrado')
+    vi.spyOn(ejemplo, 'asegurarMotor').mockImplementation(async () => { await new Promise((ok) => setTimeout(ok, 60)) })
+    const calentar = vi.spyOn(ejemplo, 'calentarNarrador')
+    render(<App />)
+    await screen.findByText('Preparando el narrador…')
+    cleanup()
+    await act(async () => { await new Promise((ok) => setTimeout(ok, 150)) })
+    expect(calentar).not.toHaveBeenCalled()
+  })
+
+  it('al entrar no usa estadoMotor ni iniciarMotor: el arranque va entero por asegurarMotor, que va en fila en el motor', async () => {
+    await conJuego('equilibrado')
+    const estado = vi.spyOn(ejemplo, 'estadoMotor')
+    const iniciar = vi.spyOn(ejemplo, 'iniciarMotor')
+    render(<App />)
+    await screen.findByText('El narrador está listo')
+    expect(estado).not.toHaveBeenCalled()
+    expect(iniciar).not.toHaveBeenCalled()
+  })
+})
+
+describe('narración de prueba lenta (INS-42)', () => {
+  const conComprobacion = async (perfil: string) => {
+    await ejemplo.guardarConfig({ ...configInicial(), consentimientoAceptado: true, permisoAnalisis: true, equipo: await ejemplo.analizarEquipo(), perfil: perfil as never, pasoAsistente: 6 })
+    render(<App />)
+    await screen.findByText(/palabras por segundo/, {}, { timeout: 5000 })
+  }
+  const SUGERENCIA = 'Tu equipo narra despacio con este perfil: uno más ligero responderá antes'
+
+  it('por debajo de 3 palabras por segundo sugiere un perfil más ligero, y el botón vuelve a elegir perfil', async () => {
+    fijarTokensPorSegundo(2)
+    await conComprobacion('equilibrado')
+    expect(screen.getByText(SUGERENCIA)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Probar un perfil más ligero' }))
+    expect((await boton(/^Equilibrado/)).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByText(/Cuanta más memoria le dediques/)).toBeTruthy()
+  }, 15000)
+
+  it('a una velocidad normal no sugiere nada', async () => {
+    await conComprobacion('equilibrado')
+    expect(screen.queryByText(SUGERENCIA)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Probar un perfil más ligero' })).toBeNull()
+  }, 15000)
+
+  it('el umbral se mide sin redondear: 4 tokens/s son 2,8 palabras/s (se muestra «3») y aun así es lento', async () => {
+    fijarTokensPorSegundo(4)
+    await conComprobacion('equilibrado')
+    expect(screen.getByText(/3 palabras por segundo/)).toBeTruthy()
+    expect(screen.getByText(SUGERENCIA)).toBeTruthy()
+  }, 15000)
+
+  it('una medida inválida (0 tokens/s) no sugiere nada', async () => {
+    fijarTokensPorSegundo(0)
+    await conComprobacion('equilibrado')
+    expect(screen.queryByText(SUGERENCIA)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Probar un perfil más ligero' })).toBeNull()
+  }, 15000)
+
+  it('lenta pero en el perfil más ligero no sugiere nada: no hay a dónde bajar', async () => {
+    fijarTokensPorSegundo(2)
+    await conComprobacion('minimo')
+    expect(screen.queryByText(SUGERENCIA)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Probar un perfil más ligero' })).toBeNull()
+  }, 15000)
+})
+
+describe('descarga sin red (INS-42)', () => {
+  const e = evaluarEjemplo(equipoEjemplo)
+  const config = { ...configInicial(), perfil: e.recomendado }
+  /** Descarga con esperas de décimas de segundo; `llamadas` guarda cuándo se llamó a `descargarModelos`. */
+  const conEsperas = (esperas: number[]) => {
+    const llamadas: number[] = []
+    const original = ejemplo.descargarModelos
+    vi.spyOn(ejemplo, 'descargarModelos').mockImplementation((p) => { llamadas.push(Date.now()); return original(p) })
+    render(<Descarga ir={() => {}} config={config} evaluacion={e} actualizar={() => {}} esperas={esperas} />)
+    return llamadas
+  }
+
+  it('si se pierde la red muestra «Esperando conexión» y reanuda sola, cada vez más espaciada, hasta terminar', async () => {
+    fijarSinRed(2)
+    const llamadas = conEsperas([0.05, 0.4])
+    expect((await screen.findAllByText('Esperando conexión', {}, { timeout: 2000 })).length).toBeGreaterThan(0)
+    expect(screen.getByRole('status').textContent).toContain('La descarga seguirá sola cuando vuelva la red')
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Reintentar ahora' })).toBeTruthy()
+    fireEvent.click(await boton('Comprobar la instalación', 10000))
+    expect(llamadas).toHaveLength(3)
+    // La segunda espera (0,4 s) es más larga que la primera (0,05 s).
+    expect(llamadas[2] - llamadas[1]).toBeGreaterThanOrEqual(llamadas[1] - llamadas[0] + 250)
+    expect(screen.queryByText('Esperando conexión')).toBeNull()
+  }, 20000)
+
+  it('Pausar durante la espera cancela el reintento programado', async () => {
+    fijarSinRed(1)
+    const llamadas = conEsperas([0.2])
+    await screen.findAllByText('Esperando conexión', {}, { timeout: 2000 })
+    fireEvent.click(screen.getByRole('button', { name: 'Pausar' }))
+    expect(await boton('Reanudar')).toBeTruthy()
+    expect(screen.queryByText('Esperando conexión')).toBeNull()
+    await new Promise((ok) => setTimeout(ok, 500))
+    expect(llamadas).toHaveLength(1)
+    // Reanudar sí vuelve a intentarlo y termina.
+    fireEvent.click(screen.getByRole('button', { name: 'Reanudar' }))
+    await boton('Comprobar la instalación', 10000)
+    expect(llamadas).toHaveLength(2)
+  }, 20000)
+
+  it('«Reintentar ahora» no espera al temporizador', async () => {
+    fijarSinRed(1)
+    const llamadas = conEsperas([60])
+    await screen.findAllByText('Esperando conexión', {}, { timeout: 2000 })
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar ahora' }))
+    await boton('Comprobar la instalación', 10000)
+    expect(llamadas).toHaveLength(2)
+  }, 20000)
+
+  it('un error que no es de red sigue mostrando el error y «Reintentar»', async () => {
+    vi.spyOn(ejemplo, 'descargarModelos').mockRejectedValueOnce(new ErrorIa('Tu equipo se ha quedado sin memoria al cargar el modelo.', false, true))
+    render(<Descarga ir={() => {}} config={config} evaluacion={e} actualizar={() => {}} esperas={[0.05]} />)
+    expect((await screen.findByRole('alert', {}, { timeout: 2000 })).textContent).toBe('Tu equipo se ha quedado sin memoria al cargar el modelo.')
+    expect(screen.queryByText('Esperando conexión')).toBeNull()
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(await boton('Reintentar')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Reintentar ahora' })).toBeNull()
+  }, 20000)
+
+  describe('la escalera de espera solo baja a 5 s con progreso real', () => {
+    const modelos = catalogo.perfiles.find((p) => p.id === config.perfil)!
+    const [m0, m1] = [modelos.narrador, modelos.cronista === modelos.narrador ? modelos.embeddings : modelos.cronista]
+    const pulling = (modelo: string, hecho: number) => ({ modelo, estado: 'pulling', hecho, total: 1000 })
+    const espera = (segundos: RegExp) => screen.findByText(new RegExp(`Reintentando en (${segundos.source}) s`), {}, { timeout: 2000 })
+    /** Deja pasar la espera programada y el corte siguiente. */
+    const pasar = (ms: number) => act(async () => { vi.advanceTimersByTime(ms) })
+    const conRelojFalso = async (prueba: () => Promise<void>) => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      try { await prueba() } finally { vi.useRealTimers() }
+    }
+
+    it('un modelo que ya estaba en disco no cuenta: la segunda espera es de 10 s y la tercera de 20 s', () => conRelojFalso(async () => {
+      fijarSinRed(3, [{ modelo: m0, estado: 'success', hecho: 1, total: 1 }])
+      render(<Descarga ir={() => {}} config={config} evaluacion={e} actualizar={() => {}} />)
+      await espera(/[45]/)
+      await pasar(5000)
+      await espera(/9|10/)
+      await pasar(10000)
+      await espera(/19|20/)
+    }), 20000)
+
+    it('un progreso repetido tras reintentar no cuenta: la segunda espera es de 10 s', () => conRelojFalso(async () => {
+      fijarSinRed(3, [pulling(m0, 100)])
+      render(<Descarga ir={() => {}} config={config} evaluacion={e} actualizar={() => {}} />)
+      await espera(/[45]/)
+      await pasar(5000)
+      await espera(/9|10/)
+      await pasar(10000)
+      await espera(/19|20/)
+    }), 20000)
+
+    it('un progreso que sí crece devuelve la espera a 5 s', () => conRelojFalso(async () => {
+      fijarSinRed(3, (corte) => [pulling(m1, corte < 2 ? 100 : 200)])
+      render(<Descarga ir={() => {}} config={config} evaluacion={e} actualizar={() => {}} />)
+      await espera(/[45]/)
+      await pasar(5000)
+      await espera(/9|10/)
+      await pasar(10000)
+      await espera(/[45]/)
+    }), 20000)
+  })
+})
+
+describe('autopausa por red al cambiar de perfil y al reparar (INS-42)', () => {
+  const e = evaluarEjemplo(equipoEjemplo)
+  const config = { ...configInicial(), perfil: e.recomendado }
+  const linea = /^Esperando conexión · Reintentando en [45] s\.$/
+  /** Deja pasar el tiempo del reloj falso (la espera programada). */
+  const pasar = (ms: number) => act(async () => { vi.advanceTimersByTime(ms) })
+  const conRelojFalso = async (prueba: () => Promise<void>) => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try { await prueba() } finally { vi.useRealTimers() }
+  }
+  /** Ajustes con el perfil Ligero elegido y el cambio pedido; devuelve lo que recibió `reemplazarConfig`. */
+  const cambiarALigero = async () => {
+    const reemplazar = vi.fn()
+    render(<Ajustes config={config} evaluacion={e} rutas={null} cambiarCarpeta={async () => {}} actualizar={() => {}}
+      reemplazarConfig={reemplazar} reanalizar={async () => {}} volver={() => {}} />)
+    fireEvent.click(await boton(/^Ligero/))
+    fireEvent.click(await boton(/^Cambiar/))
+    return reemplazar
+  }
+
+  it('cambiar de perfil con un corte de red muestra «Esperando conexión» y termina solo al reintentar', () => conRelojFalso(async () => {
+    fijarSinRed(1)
+    const cambiar = vi.spyOn(ejemplo, 'cambiarPerfil')
+    const reemplazar = await cambiarALigero()
+    const estado = await screen.findByRole('status', {}, { timeout: 3000 })
+    expect(estado.textContent).toMatch(linea)
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Reintentar ahora' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Pausar' })).toBeTruthy()
+    // Mientras espera, el cambio sigue en marcha: no se puede cambiar otra vez ni tocar el resto.
+    expect(screen.getByRole('button', { name: 'Reparar' })).toHaveProperty('disabled', true)
+    expect(cambiar).toHaveBeenCalledTimes(1)
+    await pasar(5000)
+    await waitFor(() => expect(reemplazar).toHaveBeenCalledTimes(1), { timeout: 10000 })
+    expect(cambiar).toHaveBeenCalledTimes(2)
+    expect(reemplazar.mock.calls[0][0].perfil).toBe('ligero')
+    expect(screen.queryByText(/Esperando conexión/)).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+  }), 30000)
+
+  it('«Reintentar ahora» al cambiar de perfil no espera al temporizador', () => conRelojFalso(async () => {
+    fijarSinRed(1)
+    const cambiar = vi.spyOn(ejemplo, 'cambiarPerfil')
+    const reemplazar = await cambiarALigero()
+    await screen.findByText(linea, {}, { timeout: 3000 })
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar ahora' }))
+    await waitFor(() => expect(reemplazar).toHaveBeenCalledTimes(1), { timeout: 10000 })
+    expect(cambiar).toHaveBeenCalledTimes(2)
+  }), 30000)
+
+  it('Reparar con un corte de red muestra «Esperando conexión» y termina sola al reintentar', () => conRelojFalso(async () => {
+    fijarSinRed(1)
+    const reparar = vi.spyOn(ejemplo, 'reparar')
+    render(<Reparar />)
+    fireEvent.click(await boton('Reparar'))
+    const estado = await screen.findByRole('status', {}, { timeout: 3000 })
+    expect(estado.textContent).toMatch(linea)
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Reintentar ahora' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toBeTruthy()
+    expect(reparar).toHaveBeenCalledTimes(1)
+    await pasar(5000)
+    expect(await screen.findByText(/^Todo estaba en orden/, {}, { timeout: 10000 })).toBeTruthy()
+    expect(reparar).toHaveBeenCalledTimes(2)
+    expect(screen.queryByText(/Esperando conexión/)).toBeNull()
+    expect(await boton('Reparar')).toHaveProperty('disabled', false)
+  }), 30000)
+
+  it('mientras Reparar espera la red, Volver, Volver a analizar y el uso del procesador están desactivados', () => conRelojFalso(async () => {
+    fijarSinRed(1)
+    render(<Ajustes config={config} evaluacion={e} rutas={null} cambiarCarpeta={async () => {}} actualizar={() => {}}
+      reemplazarConfig={vi.fn()} reanalizar={async () => {}} volver={() => {}} />)
+    fireEvent.click(await boton('Reparar'))
+    await screen.findByText(linea, {}, { timeout: 3000 })
+    expect(screen.getByRole('button', { name: 'Volver' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Volver a analizar mi equipo' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Alto' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Moderado' })).toHaveProperty('disabled', true)
+    // Al terminar la reparación se vuelve a poder salir.
+    await pasar(5000)
+    expect(await screen.findByText(/^Todo estaba en orden/, {}, { timeout: 10000 })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Volver' })).toHaveProperty('disabled', false)
+    expect(screen.getByRole('button', { name: 'Alto' })).toHaveProperty('disabled', false)
+  }), 30000)
+
+  it('mientras Reparar espera la red en la Comprobación, Reintentar y el perfil más ligero están desactivados', async () => {
+    await hastaElPerfil()
+    fireEvent.click(await boton(/^Descargar/))
+    fijarModelosDanados(true)
+    fireEvent.click(await boton('Comprobar la instalación', 10000))
+    await screen.findByRole('alert', {}, { timeout: 3000 })
+    expect(await boton('Reintentar')).toHaveProperty('disabled', false)
+    fijarSinRed(1)
+    fireEvent.click(await boton('Reparar'))
+    await screen.findByText(/^Esperando conexión/, {}, { timeout: 3000 })
+    expect(screen.getByRole('button', { name: 'Reintentar' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Probar un perfil más ligero' })).toHaveProperty('disabled', true)
+  }, 20000)
+
+  it('Pausar durante la espera del cambio de perfil cancela el reintento', () => conRelojFalso(async () => {
+    fijarSinRed(1)
+    const cambiar = vi.spyOn(ejemplo, 'cambiarPerfil')
+    const reemplazar = await cambiarALigero()
+    await screen.findByText(linea, {}, { timeout: 3000 })
+    fireEvent.click(screen.getByRole('button', { name: 'Pausar' }))
+    expect(await screen.findByText(/^Cambio pausado/)).toBeTruthy()
+    expect(screen.queryByText(/Esperando conexión/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Reintentar ahora' })).toBeNull()
+    expect(screen.getByRole('button', { name: /^Cambiar/ })).toHaveProperty('disabled', false)
+    await pasar(70000)
+    expect(cambiar).toHaveBeenCalledTimes(1)
+    expect(reemplazar).not.toHaveBeenCalled()
+  }), 30000)
+
+  it('Cancelar durante la espera de Reparar cancela el reintento', () => conRelojFalso(async () => {
+    fijarSinRed(1)
+    const reparar = vi.spyOn(ejemplo, 'reparar')
+    render(<Reparar />)
+    fireEvent.click(await boton('Reparar'))
+    await screen.findByText(linea, {}, { timeout: 3000 })
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(await screen.findByText(/^Reparación cancelada/)).toBeTruthy()
+    expect(screen.queryByText(/Esperando conexión/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Reintentar ahora' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Reparar' })).toHaveProperty('disabled', false)
+    await pasar(70000)
+    expect(reparar).toHaveBeenCalledTimes(1)
+  }), 30000)
+
+  it('un error que no es de red al cambiar de perfil se muestra como error, sin espera', () => conRelojFalso(async () => {
+    const cambiar = vi.spyOn(ejemplo, 'cambiarPerfil').mockRejectedValue(new ErrorIa('El motor de IA no arranca con el perfil nuevo (x); sigue el perfil de antes.'))
+    await cambiarALigero()
+    expect((await screen.findByRole('alert', {}, { timeout: 3000 })).textContent).toContain('sigue el perfil de antes')
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(screen.queryByText(/Esperando conexión/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Reintentar ahora' })).toBeNull()
+    expect(screen.getByRole('button', { name: /^Cambiar/ })).toHaveProperty('disabled', false)
+    await pasar(70000)
+    expect(cambiar).toHaveBeenCalledTimes(1)
+  }), 30000)
+
+  it('un error que no es de red al reparar se muestra como error, sin espera', () => conRelojFalso(async () => {
+    const reparar = vi.spyOn(ejemplo, 'reparar').mockRejectedValue(new ErrorIa('No se pudo reinstalar el motor: disco lleno.'))
+    render(<Reparar />)
+    fireEvent.click(await boton('Reparar'))
+    expect((await screen.findByRole('alert', {}, { timeout: 3000 })).textContent).toBe('No se pudo reinstalar el motor: disco lleno.')
+    expect(screen.queryByText(/Esperando conexión/)).toBeNull()
+    await pasar(70000)
+    expect(reparar).toHaveBeenCalledTimes(1)
+  }), 30000)
+
+  it('al salir de Ajustes durante la espera no queda ningún reintento vivo', () => conRelojFalso(async () => {
+    fijarSinRed(1)
+    const cambiar = vi.spyOn(ejemplo, 'cambiarPerfil')
+    await cambiarALigero()
+    await screen.findByText(linea, {}, { timeout: 3000 })
+    cleanup()
+    await pasar(70000)
+    expect(cambiar).toHaveBeenCalledTimes(1)
+  }), 30000)
+
+  /** Una llamada que la prueba resuelve a mano: `fallar` la hace fallar como un corte de red. */
+  const llamadaEnVuelo = () => {
+    let fallar: () => void = () => {}
+    const promesa = new Promise<never>((_, rechazar) => { fallar = () => rechazar(new ErrorIa('Sin conexión.', true)) })
+    return { promesa, fallar }
+  }
+
+  it('un corte de red que llega con Reparar ya desmontada no programa ningún reintento', () => conRelojFalso(async () => {
+    const { promesa, fallar } = llamadaEnVuelo()
+    const reparar = vi.spyOn(ejemplo, 'reparar').mockImplementation(() => promesa)
+    render(<Reparar />)
+    fireEvent.click(await boton('Reparar'))
+    await waitFor(() => expect(reparar).toHaveBeenCalledTimes(1))
+    cleanup()
+    await act(async () => { fallar(); await promesa.catch(() => {}) })
+    await pasar(70000)
+    expect(reparar).toHaveBeenCalledTimes(1)
+  }), 30000)
+
+  it('un corte de red que llega con Ajustes ya desmontada no reintenta el cambio de perfil', () => conRelojFalso(async () => {
+    const { promesa, fallar } = llamadaEnVuelo()
+    const cambiar = vi.spyOn(ejemplo, 'cambiarPerfil').mockImplementation(() => promesa)
+    await cambiarALigero()
+    await waitFor(() => expect(cambiar).toHaveBeenCalledTimes(1))
+    cleanup()
+    await act(async () => { fallar(); await promesa.catch(() => {}) })
+    await pasar(70000)
+    expect(cambiar).toHaveBeenCalledTimes(1)
+  }), 30000)
+
+  it('Pausar y que la llamada falle a la vez con un corte de red deja «pausado», sin reintento', () => conRelojFalso(async () => {
+    const { promesa, fallar } = llamadaEnVuelo()
+    const cambiar = vi.spyOn(ejemplo, 'cambiarPerfil').mockImplementation(() => promesa)
+    const reemplazar = await cambiarALigero()
+    await waitFor(() => expect(cambiar).toHaveBeenCalledTimes(1))
+    fireEvent.click(await boton('Pausar'))
+    await act(async () => { fallar(); await promesa.catch(() => {}) })
+    expect(await screen.findByText(/^Cambio pausado/)).toBeTruthy()
+    expect(screen.queryByText(/Esperando conexión/)).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+    await pasar(70000)
+    expect(cambiar).toHaveBeenCalledTimes(1)
+    expect(reemplazar).not.toHaveBeenCalled()
+  }), 30000)
+
+  it('mientras Reparar espera la red, Ajustes no deja cambiar de perfil ni tocar las tarjetas, y vuelve a dejar al cancelar', () => conRelojFalso(async () => {
+    fijarSinRed(1)
+    render(<Ajustes config={config} evaluacion={e} rutas={null} cambiarCarpeta={async () => {}} actualizar={() => {}}
+      reemplazarConfig={vi.fn()} reanalizar={async () => {}} volver={() => {}} />)
+    fireEvent.click(await boton(/^Ligero/))
+    expect(await boton(/^Cambiar/)).toHaveProperty('disabled', false)
+    fireEvent.click(await boton('Reparar'))
+    await screen.findByText(linea, {}, { timeout: 3000 })
+    expect(screen.getByRole('button', { name: /^Cambiar/ })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: /^Ligero/ })).toHaveProperty('disabled', true)
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    await screen.findByText(/^Reparación cancelada/)
+    expect(screen.getByRole('button', { name: /^Cambiar/ })).toHaveProperty('disabled', false)
+    expect(screen.getByRole('button', { name: /^Ligero/ })).toHaveProperty('disabled', false)
+  }), 30000)
 })

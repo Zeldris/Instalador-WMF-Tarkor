@@ -2,8 +2,9 @@
 // (docs/07 y docs/11). En el navegador y en los tests, `api` las simula.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api } from './api'
+import { api, ErrorIa } from './api'
 import { Marco, Reparar } from './componentes'
+import { useEsperaRed } from './esperaRed'
 import * as tx from './textos'
 import type { Config, Evaluacion, ProgresoMotor } from './tipos'
 import { perfilDe } from './tipos'
@@ -19,21 +20,27 @@ interface Fila {
   estado: EstadoFila
 }
 
+export { ESPERAS_RED_S } from './esperaRed'
+
 interface Props {
+  /** Esperas entre reintentos por falta de red, en segundos; la última se repite. Solo los tests la cambian. */
+  esperas?: readonly number[]
   ir: (paso: number) => void
   config: Config
   evaluacion: Evaluacion
   actualizar: (c: Partial<Config>) => void
 }
 
-export function Descarga({ ir, config, evaluacion, actualizar }: Props) {
+export function Descarga({ ir, config, evaluacion, actualizar, esperas }: Props) {
   const t = tx.descarga
   const p = perfilDe(evaluacion, config.perfil)
   const [filas, setFilas] = useState<Fila[] | null>(null)
-  const [fase, setFase] = useState<'trabajando' | 'pausada' | 'error' | 'fin'>('trabajando')
+  const [fase, setFase] = useState<'trabajando' | 'esperando' | 'pausada' | 'error' | 'fin'>('trabajando')
   const [error, setError] = useState<string | null>(null)
   const [intento, setIntento] = useState(0)
   const pausando = useRef(false)
+  // Reintento programado por falta de red (esperaRed.ts): la cuenta atrás, los fallos seguidos y lo máximo descargado por pieza.
+  const espera = useEsperaRed(esperas)
   const inicio = useRef({ t: 0, gb: 0 })
   const papeles = [['narrador', p.narrador], ['cronista', p.cronista], ['sugerencias', p.sugerencias], ['embeddings', p.embeddings]] as const
   const nombreDe = (m: string) => {
@@ -50,6 +57,7 @@ export function Descarga({ ir, config, evaluacion, actualizar }: Props) {
     pausando.current = false
     setFase('trabajando')
     setError(null)
+    espera.cancelar()
     void (async () => {
       try {
         const info = await api.estadoMotor()
@@ -65,6 +73,7 @@ export function Descarga({ ir, config, evaluacion, actualizar }: Props) {
         if (!info.instalado) {
           await api.instalarMotor((pm: ProgresoMotor) => {
             if (!vivo) return
+            if (pm.fase === 'descargando') espera.progreso('motor', pm.hecho)
             if (pm.fase === 'descargando') cambiar('motor', { estado: 'bajando', parte: pm.total ? pm.hecho / pm.total : 0 })
             else if (pm.fase === 'listo') cambiar('motor', { estado: 'listo', parte: 1 })
             else cambiar('motor', { estado: pm.fase, parte: 1 })
@@ -75,6 +84,7 @@ export function Descarga({ ir, config, evaluacion, actualizar }: Props) {
         const bajados = await api.descargarModelos((pm) => {
           if (!vivo) return
           const listo = pm.estado === 'success'
+          if (!listo) espera.progreso(pm.modelo, pm.hecho)
           cambiar(pm.modelo, { estado: listo ? 'listo' : 'bajando', parte: listo ? 1 : pm.total ? pm.hecho / pm.total : 0 })
         })
         if (!vivo) return
@@ -83,7 +93,11 @@ export function Descarga({ ir, config, evaluacion, actualizar }: Props) {
       } catch (e) {
         if (!vivo) return
         if (pausando.current) setFase('pausada')
-        else {
+        else if (e instanceof ErrorIa && e.red) {
+          // Sin internet: la descarga espera y vuelve a intentarlo sola, cada vez más espaciada.
+          setFase('esperando')
+          espera.programar(() => setIntento((n) => n + 1))
+        } else {
           setError(String(e))
           setFase('error')
         }
@@ -95,8 +109,18 @@ export function Descarga({ ir, config, evaluacion, actualizar }: Props) {
   }, [intento])
 
   const pausar = () => {
+    if (fase === 'esperando') {
+      // No hay descarga en curso: basta con cancelar el reintento programado.
+      espera.cancelar()
+      setFase('pausada')
+      return
+    }
     pausando.current = true
     void api.cancelarDescargas()
+  }
+  const reanudar = () => {
+    espera.reiniciar()
+    setIntento((n) => n + 1)
   }
 
   const total = (filas ?? []).reduce((a, f) => a + f.gb, 0)
@@ -110,9 +134,10 @@ export function Descarga({ ir, config, evaluacion, actualizar }: Props) {
       <button type="button" className="btn" onClick={() => { pausar(); ir(4) }}>{tx.comun.atras}</button>
       <span className="hueco" />
       {fase === 'fin' && <button type="button" className="btn pri" onClick={() => ir(6)}>{t.accion}</button>}
-      {fase === 'trabajando' && <button type="button" className="btn" onClick={pausar}>{t.pausar}</button>}
+      {(fase === 'trabajando' || fase === 'esperando') && <button type="button" className="btn" onClick={pausar}>{t.pausar}</button>}
+      {fase === 'esperando' && <button type="button" className="btn pri" onClick={espera.reintentarAhora}>{t.reintentarAhora}</button>}
       {(fase === 'pausada' || fase === 'error') && (
-        <button type="button" className="btn pri" onClick={() => setIntento((n) => n + 1)}>{fase === 'error' ? t.reintentar : t.reanudar}</button>
+        <button type="button" className="btn pri" onClick={reanudar}>{fase === 'error' ? t.reintentar : t.reanudar}</button>
       )}
     </>
   )
@@ -129,6 +154,7 @@ export function Descarga({ ir, config, evaluacion, actualizar }: Props) {
         {(filas ?? []).map((f) => {
           const ok = f.estado === 'listo'
           const estado = ok ? t.estados.listo
+            : fase === 'esperando' && (f.parte > 0 || f.estado === 'bajando') ? t.estados.esperando
             : fase === 'pausada' && f.parte > 0 ? t.estados.pausa
             : fase === 'error' && f.estado === 'bajando' ? t.estados.detenida
             : f.estado === 'verificando' ? t.estados.verificando
@@ -143,6 +169,11 @@ export function Descarga({ ir, config, evaluacion, actualizar }: Props) {
           )
         })}
       </div>
+      {fase === 'esperando' && (
+        <div className="aviso" role="status">
+          {t.sinRed}{espera.segundos !== null && ` ${t.reintentandoEn(espera.segundos)}`}
+        </div>
+      )}
       {error && <div className="error" role="alert">{error}</div>}
       <p className="peq tenue">{t.verificado}</p>
     </Marco>
@@ -151,12 +182,20 @@ export function Descarga({ ir, config, evaluacion, actualizar }: Props) {
 
 type EstadoComp = 'pendiente' | 'curso' | 'ok' | 'omitida' | 'fallo'
 
-export function Comprobacion({ ir }: { ir: (paso: number) => void }) {
+/**
+ * Palabras por segundo de la narración de prueba por debajo de las cuales se sugiere un perfil más ligero: a esa
+ * velocidad una narración típica (~150 palabras) pasa de ~50 s (docs/09, «Velocidad real»).
+ */
+export const PALABRAS_LENTAS = 3
+
+export function Comprobacion({ ir, hayMasLigero }: { ir: (paso: number) => void; /** Hay un perfil de menos memoria al que bajar. */ hayMasLigero: boolean }) {
   const t = tx.comprobacion
   const [estados, setEstados] = useState<EstadoComp[]>(() => t.pasos.map(() => 'pendiente'))
   const [detalles, setDetalles] = useState<string[]>(() => t.pasos.map(() => ''))
   // Cada reintento es una ronda nueva, aunque empiece en el mismo paso que la anterior.
   const [ronda, setRonda] = useState({ desde: 0, n: 0 })
+  // «Reparar» usa el mismo motor que el reintento de la fila: mientras repara o espera la red, la fila no se toca.
+  const [reparando, setReparando] = useState(false)
   const [copiado, setCopiado] = useState('')
 
   useEffect(() => {
@@ -203,16 +242,16 @@ export function Comprobacion({ ir }: { ir: (paso: number) => void }) {
               <span className={`icono ${estados[i]}`}>{estados[i] === 'ok' ? '✓' : estados[i] === 'fallo' ? '!' : estados[i] === 'omitida' ? '–' : ''}</span>
               <span>{paso.nombre}</span>
             </div>
-            <Detalle estado={estados[i]} id={paso.id} detalle={detalles[i]} />
+            <Detalle estado={estados[i]} id={paso.id} detalle={detalles[i]} hayMasLigero={hayMasLigero} ir={ir} />
             {estados[i] === 'fallo' && (
               <div className="fila">
-                <button type="button" className="btn pri" onClick={reintentar}>{t.reintentar}</button>
-                <button type="button" className="btn" onClick={() => ir(4)}>{t.masLigero}</button>
+                <button type="button" className="btn pri" disabled={reparando} onClick={reintentar}>{t.reintentar}</button>
+                <button type="button" className="btn" disabled={reparando} onClick={() => ir(4)}>{t.masLigero}</button>
                 <button type="button" className="btn" onClick={copiar}>{t.copiar}</button>
                 <span className="peq tenue" aria-live="polite">{copiado}</span>
               </div>
             )}
-            {estados[i] === 'fallo' && (paso.id === 'motor' || paso.id === 'modelos') && <Reparar alTerminar={reintentar} />}
+            {estados[i] === 'fallo' && (paso.id === 'motor' || paso.id === 'modelos') && <Reparar alTerminar={reintentar} alReparar={setReparando} />}
           </li>
         ))}
       </ol>
@@ -220,7 +259,7 @@ export function Comprobacion({ ir }: { ir: (paso: number) => void }) {
   )
 }
 
-function Detalle({ estado, id, detalle }: { estado: EstadoComp; id: string; detalle: string }) {
+function Detalle({ estado, id, detalle, hayMasLigero, ir }: { estado: EstadoComp; id: string; detalle: string; hayMasLigero: boolean; ir: (paso: number) => void }) {
   const t = tx.comprobacion
   if (estado === 'fallo') return <div className="error" role="alert">{detalle}</div>
   if (estado === 'omitida') return <p className="peq tenue">{detalle}</p>
@@ -228,11 +267,20 @@ function Detalle({ estado, id, detalle }: { estado: EstadoComp; id: string; deta
   if (id !== 'narracion') return <p className="peq tenue">{detalle}</p>
   const { texto, tokensPorSegundo } = JSON.parse(detalle) as { texto: string; tokensPorSegundo: number }
   // En castellano una palabra son ~1,4 tokens de Qwen: palabras/s ≈ tokens/s × 0,7.
-  const palabras = Math.max(1, Math.round(tokensPorSegundo * 0.7))
+  const palabrasPorSegundo = tokensPorSegundo * 0.7
+  const palabras = Math.max(1, Math.round(palabrasPorSegundo))
+  // Se compara sin redondear (2,6 palabras/s es lenta aunque se muestre «3»); una medida inválida (≤ 0) no sugiere nada.
+  const lenta = tokensPorSegundo > 0 && palabrasPorSegundo < PALABRAS_LENTAS && hayMasLigero
   return (
     <>
       <p className="cita">«{texto}»</p>
       <p className="peq tenue">{t.velocidad(palabras, Math.round(150 / palabras))}</p>
+      {lenta && (
+        <div className="fila">
+          <p className="peq">{t.lenta}</p>
+          <button type="button" className="btn" onClick={() => ir(4)}>{t.masLigero}</button>
+        </div>
+      )}
     </>
   )
 }

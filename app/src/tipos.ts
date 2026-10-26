@@ -161,3 +161,33 @@ export function perfilMasLigero(perfiles: { id: PerfilId; memoriaGb: number; exp
   const menores = perfiles.filter((p) => !p.experimental && p.cabeEnDisco !== false && p.memoriaGb < ref.memoriaGb).sort((a, b) => b.memoriaGb - a.memoriaGb)
   return menores[0]?.id ?? null
 }
+
+/**
+ * Error de una descarga que Rust clasifica (`ErrorIa` en src-tauri/src/lib.rs, INS-42): `red` = se perdió internet
+ * (la Descarga espera y reintenta sola); `sinMemoria` = pide un perfil más ligero. El código convierte los errores en
+ * texto con `String(e)`: `toString()` devuelve solo el mensaje, sin el prefijo «Error: ».
+ */
+export class ErrorIa extends Error {
+  red: boolean
+  sinMemoria: boolean
+  constructor(mensaje: string, red = false, sinMemoria = false) {
+    super(mensaje)
+    this.name = 'ErrorIa'
+    this.red = red
+    this.sinMemoria = sinMemoria
+  }
+
+  override toString() {
+    return this.message
+  }
+}
+
+/** Convierte lo que rechaza `invoke` (el objeto `{mensaje, red, sinMemoria}` de Rust, o un texto) en un `ErrorIa`. */
+export function aErrorIa(e: unknown): ErrorIa {
+  if (e instanceof ErrorIa) return e
+  if (e && typeof e === 'object' && 'mensaje' in e) {
+    const { mensaje, red, sinMemoria } = e as { mensaje: unknown; red?: unknown; sinMemoria?: unknown }
+    return new ErrorIa(String(mensaje), red === true, sinMemoria === true)
+  }
+  return new ErrorIa(String(e))
+}

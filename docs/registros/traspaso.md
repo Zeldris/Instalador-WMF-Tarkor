@@ -10,11 +10,11 @@ cada commit.**
 
 | | |
 |---|---|
-| **Actualizado** | 2026-10-25 |
+| **Actualizado** | 2026-10-26 |
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-25). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
-| **Último commit en `main`** | Fusión del PR #7 (2026-10-25, `8566d48`): `INS-49`, con la confirmación de la usuaria. La CI de GitHub no arrancó (pago); `ci-local` en verde sobre `04a37c6`, Windows sin cubrir. |
+| **Último commit en `main`** | Fusión del PR #8 (2026-10-25, `f399a63`): `INS-43` (y `INS-42`), con la confirmación de la usuaria. La CI de GitHub no arrancó (pago); `ci-local` en verde sobre `98bda69`, Windows sin cubrir (pendiente de `INS-8`). |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-10-25: `INS-43` cerrada (Rust, frontal y E2E `app/e2e/rendimiento.e2e.mjs`). Fase 1 (code-review) con los medios arreglados (motor, esperas, perfiles inexistentes, avisos y controles); E2E en verde tras los arreglos. Fase 2 hecha ([retro](retro-2026-10-25-ins43.md), aprobada entera). Fase 3: revisados sus commits; el E2E destapó que un motor que se cierra al arrancar agotaba los 30 s de espera (arreglado en `procesos.rs`). Los dos E2E en verde. Presupuesto: 1 compactación (lleva 3). PR #8 abierto; GitHub sin cuota, `ci-local` en verde. Siguiente: fusionar el PR #8 si la usuaria lo dice. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 🚧 2026-10-26: fases 1 y 2 antes de `main` hechas; la retro ([`retro-2026-10-26-ins42.md`](retro-2026-10-26-ins42.md)) aplicada, con `FLU-5` aplazada a después de fusionar. Fase 3 hecha: arreglos del `Turno` revisados, marca de revisión (`f0aadbe`) y CI local en verde (`3eeb268`), descripción del PR escrita. Siguiente: con la confirmación de la usuaria, crear el PR a `main` y fusionarlo; luego `FLU-5`. |
 | **Tests** | 2026-10-25: núcleo `cargo test -p tarkor-nucleo` 104, asistente `vitest` 27, `tsc -b` 0, clippy 0 avisos, `cargo check` del núcleo para Windows (mingw) en verde; E2E del asistente con el Ollama falso en verde. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -44,7 +44,34 @@ cada commit.**
    al reponer un modelo es el de cada capa y vuelve a 0 %; `escribir_sumas` relee todo el motor tras extraerlo
    en vez de sumar al extraer; la lista única de modelos de un perfil está copiada en cuatro sitios (conviene un
    `modelosDe(perfil)` en `catalogo.ts`).
-6. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
+6. Pendientes leves de la revisión del trozo A de `INS-42`: `clasificar` (`ollama.rs`) no reconoce `EOF` ni
+   `unexpected EOF` como corte de red; sin test de Atrás o desmontar durante la espera, ni de `aErrorIa` con el objeto de Tauri;
+   el máximo de progreso va por modelo, no por capa (una capa nueva más pequeña no cuenta como progreso).
+7. Pendientes leves de la revisión del trozo B de `INS-42`: `calentar` no manda las `options` del juego (`num_thread`), que podrían
+   recargar el modelo en el primer turno; al abrir con el motor ya caído, `Juego` puede arrancarlo a la vez que
+   «Reintentar» de la pantalla del motor detenido; el test «calienta una sola vez» usa `rerender` y no prueba el
+   `[]` del efecto; la fila de fallo de la Comprobación ofrece «Probar un perfil más ligero» aunque no haya uno;
+   `lib.rs` no pasa `cargo fmt` (ya antes de este trozo; `FLU-5`). El candado compartido ya no pide test: arrancar
+   sin él no compila (`Turno`, retro de `INS-42`).
+8. Pendientes leves de la revisión del trozo C de `INS-42`: `cambiar` y `empezar` no reinician la escalera tras
+   Pausar y volver a pulsar (queda en 40/60 s); si un reintento de `reparar` falla por red tras reinstalar el motor o
+   reponer capas, lo hecho se pierde y dice «Todo estaba en orden»; `maxHecho` nunca se vacía (un modelo borrado y
+   vuelto a bajar no cuenta como progreso); la comprobación del E2E de `rendimiento` con «Esperando conexión» es
+   tautológica.
+9. Pendientes leves de la fase 1 antes de `main` (`INS-42`; no vuelven a revisarse en su PR):
+   - cada reintento de `reparar` tras un corte vuelve a parar el motor y a recalcular todos los hashes;
+   - que el runner local cierre la conexión («forcibly closed») cuenta como corte de red;
+   - mientras el cambio de perfil espera la red, `cambiando` oculta la pantalla del motor detenido;
+   - el reintento de Reparar usa un `alTerminar` de un render anterior;
+   - sin Range (un 200 desde 0) el progreso no reinicia la escalera de esperas;
+   - «Probar un perfil más ligero» de la Comprobación no preselecciona el más ligero;
+   - el `map_err(|e| ErrorIa::from(e.to_string()))` se repite en cinco comandos.
+   - de la fase 3 (el `Turno`): la vigilancia relanza el motor dentro de `Estado::motor` sin turno, y un
+     `asegurar` a la vez lo ve parado y lo reinicia otra vez; la salida (`RunEvent::Exit`) para el motor sin turno, y
+     uno que esté arrancando al cerrar queda vivo; un fallo pasajero de `version()` hace que `asegurar` reinicie un
+     motor sano (las tres, ya en `main`); el test de dos arranques copia la forma de `asegurar` en vez de llamarlo (el
+     tipo lo cubre: sin turno no se llama a `arrancar_con_turno`); `coger` reserva memoria para la guarda.
+10. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
 
 ## Decisiones de la usuaria que bloquean algo
 
@@ -73,6 +100,8 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 
 Dos líneas cada una como mucho; el detalle está en el commit y la más antigua sale cuando hay más de 5.
 
+- ~~`INS-42` · Asistente real de punta a punta~~ (2026-10-26): autopausa por red con espera creciente en la
+  Descarga, Ajustes y Reparar; calentar el narrador al entrar; perfil más ligero si falta memoria o narra lento.
 - ~~`INS-43` · Rendimiento de la IA y motor detenido~~ (2026-10-25): dónde corre la IA, cambiar de perfil con
   borrado de sobrantes, «Copiar informe» y pantalla del motor detenido con vigilancia en Rust.
 - ~~`INS-49` · Reparar~~ (2026-10-25): suma de cada archivo del motor y de cada capa de los modelos; reinstala o
@@ -81,5 +110,3 @@ Dos líneas cada una como mucho; el detalle está en el commit y la más antigua
   tarjeta, «Cambiar carpeta» en el paso 4 y «Mover a otra carpeta» en Ajustes.
 - ~~`INS-14` · Perfiles por encima del máximo seguro~~ (2026-10-25): se pueden elegir con aviso y confirmación
   en la tarjeta, sin interruptor; implementado el mismo día.
-- ~~`FLU-4` · Galivelop-workflow v0.3.0~~ (2026-10-25): `/gw-update` de scripts, skills y ganchos; `comprobar.yml`
-  se queda el local; dos reglas nuevas en `REVIEW.md`.

@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { api } from './api'
+import { api, ErrorIa } from './api'
+import { textoEspera, useEsperaRed } from './esperaRed'
 import { comun, pasos, perfil as t, reparar as tr } from './textos'
 import * as tx from './textos'
 import type { Evaluacion, PerfilId, ProgresoModelo, ProgresoMotor, Reparacion, UsoCpu } from './tipos'
@@ -86,7 +87,7 @@ export function Medidor({ evaluacion }: { evaluacion: Evaluacion }) {
   )
 }
 
-export function Tarjetas({ evaluacion, seleccionado, onSeleccionar, confirmado, onConfirmar, onCambiarCarpeta, moviendo }: {
+export function Tarjetas({ evaluacion, seleccionado, onSeleccionar, confirmado, onConfirmar, onCambiarCarpeta, moviendo, desactivado = false }: {
   evaluacion: Evaluacion
   seleccionado: PerfilId | null
   onSeleccionar: (id: PerfilId) => void
@@ -94,6 +95,8 @@ export function Tarjetas({ evaluacion, seleccionado, onSeleccionar, confirmado, 
   onConfirmar: (si: boolean) => void
   onCambiarCarpeta: () => void
   moviendo: boolean
+  /** Algo más está usando el motor (p. ej. Reparar): no se cambia de perfil ni de carpeta. */
+  desactivado?: boolean
 }) {
   const analizado = evaluacion.memoriaParaIaGb !== null
   const libre = evaluacion.discoLibreGb
@@ -107,6 +110,7 @@ export function Tarjetas({ evaluacion, seleccionado, onSeleccionar, confirmado, 
               type="button"
               className={`tarjeta${sel ? ' sel' : ''}`}
               aria-pressed={sel}
+              disabled={desactivado}
               onClick={() => onSeleccionar(p.id)}
             >
               <span className="nombre">{p.nombre}</span>
@@ -136,7 +140,7 @@ export function Tarjetas({ evaluacion, seleccionado, onSeleccionar, confirmado, 
             {libre !== null && (
               <p className={`espacio peq${p.cabeEnDisco ? ' tenue' : ' sin'}`}>
                 <span><span className="nw">{t.necesita(fmt(p.necesitaDiscoGb))}</span> · <span className="nw">{t.libres(fmt(libre))}</span></span>
-                {!p.cabeEnDisco && <button type="button" className="enlace" disabled={moviendo} onClick={onCambiarCarpeta}>{t.cambiarCarpeta}</button>}
+                {!p.cabeEnDisco && <button type="button" className="enlace" disabled={moviendo || desactivado} onClick={onCambiarCarpeta}>{t.cambiarCarpeta}</button>}
               </p>
             )}
           </div>
@@ -182,38 +186,80 @@ export function textoModelo(p: ProgresoModelo) {
   return p.total > 0 && p.hecho < p.total ? tr.descargandoModelo(p.modelo, pc(p.hecho, p.total)) : tr.pidiendoModelo(p.modelo)
 }
 
-/** «Reparar» (`INS-49`): el botón, lo que está haciendo y cómo acabó. `alTerminar` solo se llama si salió bien. */
-export function Reparar({ alTerminar, desactivado = false }: { alTerminar?: (r: Reparacion) => void; desactivado?: boolean }) {
+/**
+ * «Reparar» (`INS-49`): el botón, lo que está haciendo y cómo acabó. `alTerminar` solo se llama si salió bien.
+ * Si se pierde la red (`ErrorIa.red`, `INS-42`) espera y repite la reparación sola, como la Descarga.
+ */
+export function Reparar({ alTerminar, alReparar, desactivado = false }: {
+  alTerminar?: (r: Reparacion) => void
+  /** Avisa de que está (o ya no) reparando, esperando la red incluida: el padre bloquea lo que usa el mismo motor. */
+  alReparar?: (reparando: boolean) => void
+  desactivado?: boolean
+}) {
   const [reparando, setReparando] = useState(false)
   const [estado, setEstado] = useState('')
   const [error, setError] = useState<string | null>(null)
   const cancelando = useRef(false)
+  const espera = useEsperaRed()
+  useEffect(() => { alReparar?.(reparando) }, [alReparar, reparando])
+  useEffect(() => () => alReparar?.(false), [alReparar])
   const empezar = async () => {
     cancelando.current = false
+    espera.cancelar()
     setReparando(true)
     setError(null)
     setEstado(tr.motor.verificando)
+    let esperaPuesta = false
     try {
-      const r = await api.reparar((p) => setEstado(textoMotor(p)), (p) => setEstado(textoModelo(p)))
+      const r = await api.reparar(
+        (p) => {
+          if (p.fase === 'descargando') espera.progreso('motor', p.hecho)
+          setEstado(textoMotor(p))
+        },
+        (p) => {
+          // «verificando» cuenta capas comprobadas en disco (sin modelo), no bytes bajados: no es progreso de red.
+          if (p.estado !== 'success' && p.estado !== 'verificando') espera.progreso(p.modelo, p.hecho)
+          setEstado(textoModelo(p))
+        },
+      )
       const partes = [...(r.motorReinstalado ? [tr.motorReinstalado] : []), ...(r.capasRepuestas > 0 ? [tr.capas(r.capasRepuestas)] : [])]
       setEstado(partes.length ? tr.hecho(partes) : tr.enOrden)
       alTerminar?.(r)
     } catch (e) {
       if (cancelando.current) setEstado(tr.cancelado)
-      else {
+      else if (e instanceof ErrorIa && e.red) {
+        setEstado('')
+        esperaPuesta = true
+        espera.programar(() => void empezar())
+      } else {
         setEstado('')
         setError(String(e))
       }
     } finally {
-      setReparando(false)
+      // Con la espera puesta, `reparando` lo quita el reintento (que vuelve a ponerlo) o «Cancelar».
+      if (!esperaPuesta) setReparando(false)
     }
+  }
+  const cancelar = () => {
+    if (espera.segundos !== null) {
+      // No hay reparación en curso: basta con cancelar el reintento programado.
+      espera.cancelar()
+      setReparando(false)
+      setEstado(tr.cancelado)
+      return
+    }
+    cancelando.current = true
+    void api.cancelarDescargas()
   }
   return (
     <div className="reparar">
       <div className="fila">
         <button type="button" className="btn" disabled={reparando || desactivado} onClick={empezar}>{reparando ? tr.reparando : tr.boton}</button>
-        {reparando && <button type="button" className="btn" onClick={() => { cancelando.current = true; void api.cancelarDescargas() }}>{tr.cancelar}</button>}
-        <span className="peq tenue" aria-live="polite">{estado || tr.explicacion}</span>
+        {reparando && <button type="button" className="btn" onClick={cancelar}>{tr.cancelar}</button>}
+        {espera.segundos !== null && <button type="button" className="btn" onClick={espera.reintentarAhora}>{tx.descarga.reintentarAhora}</button>}
+        {espera.segundos !== null
+          ? <span className="peq tenue" role="status">{textoEspera(espera.segundos)}</span>
+          : <span className="peq tenue" aria-live="polite">{estado || tr.explicacion}</span>}
       </div>
       {error && <div className="error" role="alert">{error}</div>}
     </div>

@@ -5,7 +5,8 @@
 
 import type { Api } from './api'
 import { catalogo, descargaGb as descargaDe } from './catalogo'
-import type { Config, Equipo, Evaluacion, MotorDetenido, PerfilEvaluado, Sobrante, UsoIa } from './tipos'
+import { ErrorIa } from './tipos'
+import type { Config, Equipo, Evaluacion, MotorDetenido, PerfilEvaluado, ProgresoModelo, Sobrante, UsoIa } from './tipos'
 
 export const configInicial = (): Config => ({
   version: 1,
@@ -84,7 +85,17 @@ export const fijarErrorCambioPerfil = (mensaje: string) => { errorCambioPerfil =
 let retardoCambioPerfil = 0
 /** Para los tests: el cambio de perfil tarda esto (ms) antes de acabar o de fallar. */
 export const fijarRetardoCambioPerfil = (ms: number) => { retardoCambioPerfil = ms }
-export const reiniciarModelos = () => { errorCambioPerfil = null; retardoCambioPerfil = 0; sobrantes = []; usoSimulado = { porcentajeGpu: 100, memoriaMb: 5400 } }
+let sinRedRestantes = 0
+let sinRedCortes = 0
+let sinRedAntes: ProgresoModelo[] | ((corte: number) => ProgresoModelo[]) | null = null
+/** El motor simulado se «instala» una vez, como el real: un reintento de la Descarga ya no lo repite. */
+let motorInstalado = false
+/**
+ * Para los tests: las `n` siguientes llamadas que descargan (`descargarModelos`, `cambiarPerfil` con modelos que faltan y
+ * `reparar`) fallan por falta de red (un `ErrorIa` con `red`), como el núcleo.
+ */
+export const fijarSinRed = (n: number, antes: typeof sinRedAntes = null) => { sinRedRestantes = n; sinRedCortes = 0; sinRedAntes = antes }
+export const reiniciarModelos = () => { motorEnMarcha = false; arranquesMotor = 0; calentarResultado = 'ok'; tokensPorSegundoPrueba = 12; sinRedRestantes = 0; sinRedCortes = 0; sinRedAntes = null; motorInstalado = false; errorCambioPerfil = null; retardoCambioPerfil = 0; sobrantes = []; usoSimulado = { porcentajeGpu: 100, memoriaMb: 5400 } }
 const modelosDe = (id: string | null) => {
   const perfil = catalogo.perfiles.find((p) => p.id === id) ?? catalogo.perfiles[0]
   return [...new Set([perfil.narrador, perfil.cronista, perfil.sugerencias, perfil.embeddings])]
@@ -108,8 +119,32 @@ export const textoCopiado = () => copiado
 export const oyentesMotor = () => oyentes.size
 export const TEXTO_INFORME = 'Tarkor (informe de ejemplo)\nSistema: Linux\nMotor: en marcha'
 export const reiniciarMotorDetenido = () => { avisoMotor = null; errorReintento = null; errorCopiar = null; copiado = null; oyentes.clear() }
+let calentarResultado: 'ok' | 'sinMemoria' | 'error' = 'ok'
+/** Para los tests: si el motor del ejemplo corre (lo pone en marcha `asegurarMotor`/`iniciarMotor`) y cuántas veces se ha arrancado. */
+let motorEnMarcha = false
+let arranquesMotor = 0
+export const arranquesDelMotor = () => arranquesMotor
+/** Para los tests: cómo acaba el siguiente `calentarNarrador` (`sinMemoria` y `error` fallan con un `ErrorIa`). */
+export const fijarCalentar = (r: 'ok' | 'sinMemoria' | 'error') => { calentarResultado = r }
+let tokensPorSegundoPrueba = 12
+/** Para los tests: la velocidad de la narración de prueba (tokens por segundo; 12 = ~8 palabras/s). */
+export const fijarTokensPorSegundo = (n: number) => { tokensPorSegundoPrueba = n }
 let cancelado = false
 const pausa = (ms: number) => new Promise((ok) => setTimeout(ok, ms))
+
+/** Si toca un corte de red (`fijarSinRed`), lo da: informa de lo que dijo Ollama antes de cortarse y falla con un `ErrorIa` de red. */
+async function cortarSinRed(modelos: string[], progreso: (p: ProgresoModelo) => void) {
+  if (sinRedRestantes <= 0) return
+  sinRedRestantes--
+  // Como Ollama: empieza por el manifiesto (sin bytes) y ahí se corta. Con `antes`, informa de eso en cada corte
+  // (`corte` cuenta desde 0): un modelo que ya estaba en disco, o los bytes que ya tenía al reanudar.
+  progreso({ modelo: modelos[0], estado: 'pulling manifest', hecho: 0, total: 0 })
+  const extra = typeof sinRedAntes === 'function' ? sinRedAntes(sinRedCortes) : (sinRedAntes ?? [])
+  sinRedCortes++
+  extra.forEach(progreso)
+  await pausa(30)
+  throw new ErrorIa('No se pudo conectar con el servidor de modelos. Comprueba tu conexión a internet y vuelve a intentarlo; lo ya descargado se conserva.', true)
+}
 
 /** Descarga simulada en `pasos` avisos; se detiene si se cancela. */
 async function simular(total: number, pasos: number, aviso: (hecho: number) => void) {
@@ -128,8 +163,8 @@ export const ejemplo: Api = {
   evaluarPerfiles: async (equipo) => evaluarEjemplo(equipo),
   estadoMotor: async () => ({
     version: catalogo.motor.version,
-    instalado: false,
-    enMarcha: false,
+    instalado: motorInstalado,
+    enMarcha: motorEnMarcha,
     descargaGb: catalogo.motor.paquetes.linux.descargaGb,
     modelosGb: Object.fromEntries(Object.entries(catalogo.modelos).map(([k, v]) => [k, v.descargaGb])),
   }),
@@ -140,12 +175,15 @@ export const ejemplo: Api = {
     progreso({ fase: 'verificando' })
     progreso({ fase: 'extrayendo' })
     progreso({ fase: 'listo' })
+    motorInstalado = true
   },
-  iniciarMotor: async () => {},
+  iniciarMotor: async () => { motorEnMarcha = true; arranquesMotor++ },
+  asegurarMotor: async () => { if (!motorEnMarcha) { motorEnMarcha = true; arranquesMotor++ } },
   descargarModelos: async (progreso) => {
     cancelado = false
     const perfil = catalogo.perfiles.find((p) => p.id === guardada.perfil) ?? catalogo.perfiles[0]
     const modelos = [...new Set([perfil.narrador, perfil.cronista, perfil.sugerencias, perfil.embeddings])]
+    await cortarSinRed(modelos, progreso)
     for (const modelo of modelos) {
       const total = (catalogo.modelos[modelo]?.descargaGb ?? 1) * 1024 ** 3
       await simular(total, 8, (hecho) => progreso({ modelo, estado: 'pulling', hecho, total }))
@@ -154,6 +192,11 @@ export const ejemplo: Api = {
     return modelos
   },
   cancelarDescargas: async () => { cancelado = true },
+  calentarNarrador: async () => {
+    await pausa(30)
+    if (calentarResultado === 'sinMemoria') throw new ErrorIa('El motor se quedó sin memoria al cargar el narrador: model requires more system memory than is available', false, true)
+    if (calentarResultado === 'error') throw new ErrorIa('No se pudo cargar el narrador: el motor no respondió.')
+  },
   reparar: async (motor, progreso) => {
     cancelado = false
     motor({ fase: 'verificando' })
@@ -162,6 +205,7 @@ export const ejemplo: Api = {
     motor({ fase: 'listo' })
     const perfil = catalogo.perfiles.find((p) => p.id === guardada.perfil) ?? catalogo.perfiles[0]
     const modelos = [...new Set([perfil.narrador, perfil.cronista, perfil.sugerencias, perfil.embeddings])]
+    await cortarSinRed(modelos, progreso)
     modelos.forEach((_, i) => progreso({ modelo: '', estado: 'verificando', hecho: i, total: modelos.length }))
     const capasRepuestas = modelosDanados ? 1 : 0
     if (modelosDanados) {
@@ -190,6 +234,7 @@ export const ejemplo: Api = {
     const antes = modelosDe(guardada.perfil)
     const nuevos = modelosDe(perfil)
     const faltan = nuevos.filter((m) => !guardada.modelosDescargados.includes(m))
+    if (faltan.length > 0) await cortarSinRed(faltan, progreso)
     for (const modelo of faltan) {
       const total = (catalogo.modelos[modelo]?.descargaGb ?? 1) * 1024 ** 3
       await simular(total, 8, (hecho) => progreso({ modelo, estado: 'pulling', hecho, total }))
@@ -221,7 +266,7 @@ export const ejemplo: Api = {
     if (['basedatos', 'juego', 'mundo'].includes(id)) return { resultado: 'omitida', motivo: 'Llega con el juego empaquetado (fase 4).' }
     if (id === 'modelos' && modelosDanados) throw 'Faltan modelos: qwen2.5:7b. Vuelve al paso de descarga.'
     if (id === 'narracion') {
-      return { resultado: 'ok', detalle: JSON.stringify({ texto: 'La niebla del estrecho se abre un instante y deja ver, al otro lado, las hogueras de Berig.', tokensPorSegundo: 12 }) }
+      return { resultado: 'ok', detalle: JSON.stringify({ texto: 'La niebla del estrecho se abre un instante y deja ver, al otro lado, las hogueras de Berig.', tokensPorSegundo: tokensPorSegundoPrueba }) }
     }
     return { resultado: 'ok', detalle: 'Correcto (ejemplo).' }
   },

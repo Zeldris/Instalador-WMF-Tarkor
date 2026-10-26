@@ -113,12 +113,14 @@ export default function App() {
 
   if (!config) return null
 
+  const masLigero = evaluacion ? perfilMasLigero(evaluacion.perfiles, config.perfil) : null
+
   const avisoError = error && <div className="error" role="alert" style={{ position: 'fixed', bottom: 16, left: 16, right: 16 }}>{error}</div>
 
   if (aviso && !cambiando) {
     const salir = () => { antesDelAviso.current = null; setAviso(null) }
     return <>{avisoError}<PantallaMotorDetenido aviso={aviso}
-      masLigero={evaluacion ? perfilMasLigero(evaluacion.perfiles, config.perfil) : null}
+      masLigero={masLigero}
       reintentado={salir}
       irAAjustes={(p) => {
         const antes = antesDelAviso.current ?? vista
@@ -127,7 +129,7 @@ export default function App() {
       }} /></>
   }
   if (vista === 'juego') {
-    return <>{avisoError}<Juego abrirAjustes={() => setVista('ajustes')} repetir={() => { setVista('asistente'); actualizar({ ...configInicial(), carpetaIa: config.carpetaIa, pasoAsistente: 1 }); setEvaluacion(null) }} /></>
+    return <>{avisoError}<Juego abrirAjustes={() => setVista('ajustes')} masLigero={masLigero} irAAjustes={(p) => { setPerfilAjustes(p); setVolverA('juego'); setVista('ajustes') }} repetir={() => { setVista('asistente'); actualizar({ ...configInicial(), carpetaIa: config.carpetaIa, pasoAsistente: 1 }); setEvaluacion(null) }} /></>
   }
   if (vista === 'ajustes' && evaluacion) {
     return <>{avisoError}<Ajustes perfilInicial={perfilAjustes} config={config} evaluacion={evaluacion} rutas={rutas} cambiarCarpeta={cambiarCarpeta} actualizar={actualizar} reemplazarConfig={reemplazarConfig} reanalizar={analizar} alCambiar={setCambiando} volver={() => { setPerfilAjustes(undefined); setVista(volverA); setVolverA('juego') }} /></>
@@ -143,7 +145,7 @@ export default function App() {
     case 3: pantalla = <TuEquipo {...nav} config={config} evaluacion={evaluacion} analizar={analizar} elegirAMano={elegirAMano} />; break
     case 4: pantalla = <ElegirPerfil {...nav} config={config} evaluacion={evaluacion!} rutas={rutas} cambiarCarpeta={cambiarCarpeta} actualizar={actualizar} />; break
     case 5: pantalla = <Descarga {...nav} config={config} evaluacion={evaluacion!} actualizar={actualizar} />; break
-    case 6: pantalla = <Comprobacion {...nav} />; break
+    case 6: pantalla = <Comprobacion {...nav} hayMasLigero={masLigero !== null} />; break
     default: pantalla = <Listo config={config} evaluacion={evaluacion!} rutas={rutas} jugar={() => { actualizar({ asistenteCompletado: true }); setVista('juego') }} />
   }
   return <>{avisoError}{pantalla}</>

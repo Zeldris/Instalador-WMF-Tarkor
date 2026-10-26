@@ -32,7 +32,11 @@ pub enum Error {
     Cancelado,
     /// La suma no coincide: la descarga llegó dañada o no es el fichero esperado.
     Danado,
+    /// Fallo de transporte (sin conexión, DNS, tiempo agotado, corte a media descarga): vuelve a intentarse solo.
     Red(String),
+    /// El servidor respondió con un código HTTP de error (404, 403...) o falló el certificado TLS: hay conexión,
+    /// así que esperar a que vuelva internet no lo arregla.
+    Servidor(String),
     Disco(io::Error),
 }
 
@@ -43,8 +47,20 @@ impl std::fmt::Display for Error {
             Error::Cancelado => write!(f, "Descarga cancelada. Lo descargado se conserva para continuar."),
             Error::Danado => write!(f, "El motor de IA se descargó dañado. Se ha borrado; vuelve a intentarlo."),
             Error::Red(e) => write!(f, "No se pudo descargar el motor de IA: {e}"),
+            Error::Servidor(e) => write!(
+                f,
+                "El servidor del motor de IA no dejó descargarlo ({e}). No es un corte de internet: prueba más tarde o con otra conexión."
+            ),
             Error::Disco(e) => write!(f, "No se pudo guardar el motor de IA en el disco: {e}"),
         }
+    }
+}
+
+impl Error {
+    /// Se perdió internet durante la descarga del motor: puede esperar y reanudarse sola. Un código HTTP de error o
+    /// un fallo de certificado (`Servidor`), un disco lleno, un paquete dañado o una cancelación no son de red.
+    pub fn es_de_red(&self) -> bool {
+        matches!(self, Error::Red(_))
     }
 }
 
@@ -216,13 +232,19 @@ pub fn descargar(url: &str, destino: &Path, cancelar: &AtomicBool, progreso: &mu
         "{}.part",
         destino.extension().map(|e| e.to_string_lossy().into_owned()).unwrap_or_default()
     ));
-    let ya = fs::metadata(&parcial).map(|m| m.len()).unwrap_or(0);
+    let mut ya = fs::metadata(&parcial).map(|m| m.len()).unwrap_or(0);
 
-    let mut peticion = agente().get(url);
-    if ya > 0 {
-        peticion = peticion.header("Range", &format!("bytes={ya}-"));
+    let respuesta = match pedir(url, ya) {
+        // 416: lo que hay en el `.part` no encaja con el archivo del servidor (cambió, o ya estaba entero). Se
+        // empieza de cero, una sola vez: si vuelve a fallar, el error sale tal cual.
+        Err(ureq::Error::StatusCode(416)) if ya > 0 => {
+            fs::remove_file(&parcial)?;
+            ya = 0;
+            pedir(url, 0)
+        }
+        r => r,
     }
-    let respuesta = peticion.call().map_err(|e| Error::Red(e.to_string()))?;
+    .map_err(error_de_peticion)?;
     let reanuda = respuesta.status() == 206;
     let resto: u64 = respuesta
         .headers()
@@ -263,6 +285,25 @@ pub fn descargar(url: &str, destino: &Path, cancelar: &AtomicBool, progreso: &mu
     progreso(Progreso::Descargando { hecho, total: total.max(hecho) });
     fs::rename(&parcial, destino)?;
     Ok(())
+}
+
+/// Pide `url` desde el byte `desde` (con cabecera Range si no es 0).
+fn pedir(url: &str, desde: u64) -> Result<ureq::http::Response<ureq::Body>, ureq::Error> {
+    let mut peticion = agente().get(url);
+    if desde > 0 {
+        peticion = peticion.header("Range", &format!("bytes={desde}-"));
+    }
+    peticion.call()
+}
+
+/// Solo los fallos de transporte son de red (se esperan y se reintentan); un código HTTP o un fallo de TLS no.
+fn error_de_peticion(e: ureq::Error) -> Error {
+    match e {
+        ureq::Error::Io(_) | ureq::Error::Timeout(_) | ureq::Error::HostNotFound | ureq::Error::ConnectionFailed => {
+            Error::Red(e.to_string())
+        }
+        e => Error::Servidor(e.to_string()),
+    }
 }
 
 /// Cliente HTTP para descargas de internet: respeta el proxy del sistema y usa sus certificados.
@@ -320,6 +361,16 @@ mod tests {
     use std::net::TcpListener;
     use std::thread;
 
+    #[test]
+    fn solo_el_error_de_red_es_de_red() {
+        assert!(Error::Red("connection reset".into()).es_de_red());
+        assert!(!Error::Cancelado.es_de_red());
+        assert!(!Error::Danado.es_de_red());
+        assert!(!Error::Servidor("http status: 404".into()).es_de_red());
+        assert!(!Error::SinPaquete.es_de_red());
+        assert!(!Error::Disco(io::Error::other("sin espacio")).es_de_red());
+    }
+
     /// Sirve `datos` por HTTP; con cabecera Range responde 206 con el resto.
     fn servidor(datos: Vec<u8>) -> String {
         let l = TcpListener::bind(("127.0.0.1", 0)).unwrap();
@@ -362,6 +413,102 @@ mod tests {
         assert_eq!(avisos.last(), Some(&Progreso::Descargando { hecho: 10_000_000, total: 10_000_000 }));
         // Reanudó: el primer aviso ya parte de los 3 MB previos.
         assert!(matches!(avisos[0], Progreso::Descargando { hecho, .. } if hecho > 3_000_000));
+    }
+
+    /// Servidor que contesta con los bytes crudos que decida `respuesta(desde)` (el Range pedido, si lo hay);
+    /// devuelve la URL y cuántas peticiones recibió.
+    fn servidor_crudo(respuesta: impl Fn(Option<u64>) -> Vec<u8> + Send + 'static) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        let l = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let url = format!("http://127.0.0.1:{}/paquete", l.local_addr().unwrap().port());
+        let peticiones = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let cuenta = peticiones.clone();
+        thread::spawn(move || {
+            for s in l.incoming().flatten() {
+                cuenta.fetch_add(1, Ordering::SeqCst);
+                let mut r = BufReader::new(s.try_clone().unwrap());
+                let mut desde = None;
+                loop {
+                    let mut linea = String::new();
+                    if r.read_line(&mut linea).unwrap_or(0) == 0 || linea == "\r\n" {
+                        break;
+                    }
+                    if let Some(v) = linea.to_ascii_lowercase().strip_prefix("range: bytes=") {
+                        desde = Some(v.trim().trim_end_matches('-').parse().unwrap());
+                    }
+                }
+                let mut s = s;
+                let _ = s.write_all(&respuesta(desde));
+            }
+        });
+        (url, peticiones)
+    }
+
+    #[test]
+    fn un_404_no_es_de_red_y_dice_el_codigo() {
+        let (url, _) = servidor_crudo(|_| b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec());
+        let dir = tempfile::tempdir().unwrap();
+        let e = descargar(&url, &dir.path().join("x.zip"), &AtomicBool::new(false), &mut |_| {}).unwrap_err();
+        assert!(matches!(&e, Error::Servidor(m) if m.contains("404")), "{e:?}");
+        assert!(!e.es_de_red());
+        assert!(e.to_string().contains("No es un corte de internet"), "{e}");
+    }
+
+    #[test]
+    fn un_416_con_part_borra_el_part_y_empieza_de_cero() {
+        let datos: Vec<u8> = (0..50_000u32).map(|i| (i % 251) as u8).collect();
+        let cuerpo = datos.clone();
+        let (url, peticiones) = servidor_crudo(move |desde| {
+            if desde.is_some() {
+                return b"HTTP/1.1 416 Range Not Satisfiable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec();
+            }
+            let mut r = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", cuerpo.len()).into_bytes();
+            r.extend_from_slice(&cuerpo);
+            r
+        });
+        let dir = tempfile::tempdir().unwrap();
+        let destino = dir.path().join("paquete.zip");
+        fs::write(dir.path().join("paquete.zip.part"), b"basura de otro archivo").unwrap();
+        descargar(&url, &destino, &AtomicBool::new(false), &mut |_| {}).unwrap();
+        assert_eq!(fs::read(&destino).unwrap(), datos);
+        assert!(!dir.path().join("paquete.zip.part").exists());
+        assert_eq!(peticiones.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn un_416_que_se_repite_se_intenta_una_sola_vez_y_no_es_de_red() {
+        let (url, peticiones) = servidor_crudo(|_| b"HTTP/1.1 416 Range Not Satisfiable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec());
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("x.zip.part"), b"abc").unwrap();
+        let e = descargar(&url, &dir.path().join("x.zip"), &AtomicBool::new(false), &mut |_| {}).unwrap_err();
+        assert!(matches!(&e, Error::Servidor(m) if m.contains("416")), "{e:?}");
+        assert_eq!(peticiones.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn un_corte_a_mitad_del_cuerpo_sigue_siendo_de_red() {
+        // Promete 1000 bytes, manda 100 y cierra.
+        let (url, _) = servidor_crudo(|_| {
+            let mut r = b"HTTP/1.1 200 OK\r\nContent-Length: 1000\r\nConnection: close\r\n\r\n".to_vec();
+            r.extend_from_slice(&[7u8; 100]);
+            r
+        });
+        let dir = tempfile::tempdir().unwrap();
+        let e = descargar(&url, &dir.path().join("x.zip"), &AtomicBool::new(false), &mut |_| {}).unwrap_err();
+        assert!(matches!(e, Error::Red(_)), "{e:?}");
+        assert!(e.es_de_red());
+        // Lo recibido queda en el .part para reanudar.
+        assert_eq!(fs::metadata(dir.path().join("x.zip.part")).unwrap().len(), 100);
+    }
+
+    #[test]
+    fn sin_servidor_es_de_red() {
+        // Puerto cerrado: fallo de conexión, que sí se espera y se reintenta.
+        let l = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let url = format!("http://127.0.0.1:{}/paquete", l.local_addr().unwrap().port());
+        drop(l);
+        let dir = tempfile::tempdir().unwrap();
+        let e = descargar(&url, &dir.path().join("x.zip"), &AtomicBool::new(false), &mut |_| {}).unwrap_err();
+        assert!(e.es_de_red(), "{e:?}");
     }
 
     #[test]

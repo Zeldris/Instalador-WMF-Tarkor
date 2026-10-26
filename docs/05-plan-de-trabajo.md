@@ -121,11 +121,27 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
 - [ ] **INS-41** Integrar el build del juego (frontend + backend en bytecode + plantilla) en la app de
   Tauri. Pendiente: pantalla del motor detenido: variante "El motor del juego se ha detenido" (docs/11), cuando
   `MotorDetenido` diga qué proceso es.
-- [ ] **INS-42** Asistente real de punta a punta: descargas y comprobaciones de verdad; calentar el
+- [x] **INS-42** (2026-10-26) Asistente real de punta a punta: descargas y comprobaciones de verdad; calentar el
   narrador al arrancar. Incluye la autopausa al perder la red con reanudación sola y la velocidad
   de la narración de prueba (ronda de diseño del 2026-10-25). Si calentar el narrador o una narración fallan por
   falta de memoria (`serve` sigue vivo y la pantalla del motor detenido no sale), ofrecer el perfil más ligero
   (hallazgo de la revisión de `INS-43`).
+  Hecho del trozo A (2026-10-26, autopausa): el núcleo clasifica los errores de Ollama
+  (`Error::es_de_red`, `sin_memoria`; `motor::Error::es_de_red`), Tauri devuelve `ErrorIa {mensaje, red, sinMemoria}` en
+  `instalar_motor` y `descargar_modelos`, y la Descarga espera con «Esperando conexión» y reintenta sola a los 5, 10,
+  20, 40 y 60 s (con «Pausar» y «Reintentar ahora»); E2E con `FALSO_CORTES_PULL`.
+  Hecho del trozo B (2026-10-26): comando `calentar_narrador` (Tauri) y `calentarNarrador` en la
+  `Api`; al entrar en el juego se arranca el motor si no corre y se calienta el narrador («Preparando el narrador…» /
+  «El narrador está listo»), con el aviso y «Cambiar a un perfil más ligero» si falta memoria y una línea discreta en
+  otro error; la Comprobación sugiere un perfil más ligero bajo 3 palabras/s (`PALABRAS_LENTAS`); tests de vitest y
+  E2E (`asistente`, `rendimiento`). Revisión del trozo B: el umbral de lento se mide sin redondear (y una medida de 0 no
+  sugiere nada) y `asegurar_motor` arranca el motor solo si no corre bajo un candado común con `arrancar_motor`, para que
+  dos arranques a la vez no se pisen.
+  Hecho del trozo C (2026-10-26): la misma autopausa al cambiar de perfil en Ajustes y en Reparar. `cambiar_perfil` y
+  `reparar` devuelven `ErrorIa` (el corte llega con `red: true`), el gancho común `useEsperaRed` (`app/src/esperaRed.ts`:
+  escalera de esperas, cuenta atrás, «Reintentar ahora» y limpieza al desmontar) lo usan la Descarga, Ajustes y Reparar,
+  y «Pausar» cancela también la espera; tests de vitest, y el E2E `rendimiento` corta el primer pull del cambio de perfil
+  (`FALSO_CORTES_PULL`). Con el trozo C, `INS-42` queda cerrada.
 - [x] **INS-43** (2026-10-25) Ajustes → Rendimiento de la IA (con uso de la gráfica vía `/api/ps`) y pantalla de
   motor detenido. Decidido el 2026-10-25 (ver `11`): frase de dónde corre la IA y memoria real; cambiar de perfil
   descarga, reinicia el motor y ofrece borrar lo que sobra; "Copiar informe" con "Ver detalles"; un hilo de Rust
@@ -185,3 +201,6 @@ ganchos, `.claude/gw/scripts`, `tools/qa` y las skills ([runbook](runbooks/skill
   fecha, commit y resultado en [`ci-local.md`](registros/ci-local.md). El job de Windows sale como «sin cubrir».
 - [x] **FLU-4** (2026-10-25) `/gw-update` a Galivelop-workflow v0.3.0: scripts, esquema, skills y ganchos al día;
   `comprobar.yml` conserva sus jobs (el cambio de `ciInstall` no le toca) y `REVIEW.md` gana dos reglas de la plantilla.
+- [ ] **FLU-5** (2026-10-26, retro de `INS-42`) `cargo fmt` del workspace en un commit aparte y `cargo fmt --check`
+  en `check` de `.claude/gw.json` y en `comprobar.yml`. `lib.rs` no lo pasa desde antes de `INS-42`. Justo después de
+  fusionar la rama de `INS-42`, para no chocar con otras ramas que toquen `lib.rs`.

@@ -119,12 +119,16 @@ export const descarga = {
   total: 'Total',
   quedan: (min: number) => `quedan unos ${min} min`,
   motor: 'Motor de IA',
-  estados: { cola: 'En cola', bajando: 'Descargando', pausa: 'En pausa', verificando: 'Verificando', extrayendo: 'Preparando', detenida: 'Detenida', listo: 'Listo' },
+  estados: { cola: 'En cola', bajando: 'Descargando', pausa: 'En pausa', esperando: 'Esperando conexión', verificando: 'Verificando', extrayendo: 'Preparando', detenida: 'Detenida', listo: 'Listo' },
   verificado: 'Descargado de las fuentes oficiales y verificado al terminar cada archivo.',
   pausar: 'Pausar',
   reanudar: 'Reanudar',
   accion: 'Comprobar la instalación',
   reintentar: 'Reintentar',
+  reintentarAhora: 'Reintentar ahora',
+  /** Aviso de la espera por falta de red (docs/11 §5); `segundos` es la cuenta atrás hasta el siguiente reintento. */
+  sinRed: 'Sin conexión. La descarga seguirá sola cuando vuelva la red; lo descargado se conserva.',
+  reintentandoEn: (segundos: number) => `Reintentando en ${segundos} s.`,
   /** Para qué sirve cada modelo; un mismo modelo puede cumplir varios papeles (perfil Mínimo). */
   papeles: { narrador: 'Narrador', cronista: 'Cronista', sugerencias: 'Sugerencias', embeddings: 'Memoria del mundo' },
 }
@@ -146,6 +150,7 @@ export const comprobacion = {
     `Tu equipo narra a unas ${palabras} palabras por segundo: una narración típica tardará unos ${segundos} segundos.`,
   reintentar: 'Reintentar',
   masLigero: 'Probar un perfil más ligero',
+  lenta: 'Tu equipo narra despacio con este perfil: uno más ligero responderá antes',
   copiar: 'Copiar informe',
   copiado: 'Informe copiado',
 }
@@ -182,6 +187,10 @@ export const juego = {
   lead: 'El asistente está completo. En esta fase del desarrollo el juego todavía no va dentro de la app (fase 4 del plan).',
   ajustes: 'Ajustes → Rendimiento de la IA',
   repetir: 'Repetir el asistente',
+  preparando: 'Preparando el narrador…',
+  listo: 'El narrador está listo',
+  noCalento: (motivo: string) => `No se pudo preparar el narrador: el primer turno tardará más. (${motivo})`,
+  masLigero: 'Cambiar a un perfil más ligero',
 }
 
 export const ajustes = {
