@@ -2,7 +2,7 @@
 name = "tarkor"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.94"
+rust-version.workspace = true
 description = "Tarkor: envoltorio de escritorio (asistente de primer arranque y gestión de procesos)."
 publish = false
 

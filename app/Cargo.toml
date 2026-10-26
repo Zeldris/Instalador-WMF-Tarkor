@@ -2,6 +2,10 @@
 resolver = "3"
 members = ["nucleo", "src-tauri"]
 
+[workspace.package]
+# La versión mínima de Rust de todos los miembros: el X.Y de app/rust-toolchain.toml (FLU-6).
+rust-version = "1.94"
+
 [profile.release]
 # Binario final: sin símbolos y optimizado (ver docs/10-proteccion-del-codigo-y-build.md).
 strip = true
