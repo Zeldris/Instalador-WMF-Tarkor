@@ -115,7 +115,10 @@ Ver [`06`](06-inventario-exclusiones.md).
   empaquetado (`window.__TARKOR__` presente) desaparece todo lo de admin: el enlace de `Home.tsx`, las rutas
   `/admin/*` y `ImagePromptSlot` en cualquier sitio (ya estaba tras el modo desarrollador, `CFG-33` del juego); en
   desarrollo sigue igual. «Crear desde cero» deshabilitada y el texto de `ComingSoon.tsx` («en construcción para
-  futuras versiones») cambian en todas partes. Encargada a una sesión del juego, rama `claude/ins-33-frontend-sin-admin`.
+  futuras versiones») cambian en todas partes. **Hecha en la rama del juego** `claude/ins-33-frontend-sin-admin`
+  (`2455ecac`, sin PR ni `main` todavía): `esEmpaquetado()` en `frontend/src/lib/empaquetado.ts`, que comparte la
+  lectura de `window.__TARKOR__` con `apiBaseUrl()`; 9 tests nuevos que fallan sin el arreglo; `tsc`, `oxlint` y
+  vitest (798) en verde, comprobado también desde aquí. El juego no tiene E2E de frontend.
 - [ ] **INS-34** Backend: build sin rutas ni servicios de curación (ruta de image-prompt, orquestador
   cloud, `LiveTeacherCapture`, scripts).
 - [ ] **INS-35** Backend: `SYSTEM` del narrador incrustado en build; narrador con modelo base +

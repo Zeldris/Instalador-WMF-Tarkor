@@ -14,7 +14,7 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #11 (2026-10-26, `a73f881`): `FLU-6`, con la confirmación de la usuaria. La CI de GitHub no arrancó (sin cuota); `ci-local` en verde sobre `f59202b`, Windows sin cubrir (pendiente de `INS-8`). |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-10-26: `INS-33` encargada a una sesión del juego (rama `claude/ins-33-frontend-sin-admin`, alcance decidido por la usuaria en el plan). `INS-32` cerrada sin código (`BAS-1` del juego). Siguiente: revisar el informe y el PR de esa sesión y marcar `INS-33`. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-10-26: `INS-33` hecha en la rama del juego `claude/ins-33-frontend-sin-admin` (`2455ecac`), revisada y con los tests comprobados desde aquí; **sin PR**: la sesión del juego no lo creó. Siguiente: que la usuaria diga si se abre el PR y se lleva a `main` del juego (tres fases allí, CI local por la cuota, `QA-215`), o se sigue con `INS-34` antes. |
 | **Tests** | 2026-10-26: núcleo `cargo test -p tarkor-nucleo` 116, `cargo fmt --all --check` en verde, clippy 0 avisos, `tsc -b` 0, `cargo check` del núcleo y la app para Windows (mingw) en verde. Asistente `vitest` 27 y E2E con el Ollama falso: último verde el 2026-10-25. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -82,7 +82,11 @@ cada commit.**
 12. Pendientes leves de `INS-31` (en `main` del juego): con `VITE_API_URL=""` la base queda vacía (igual que antes);
     el aviso de `useReconnectionPolling.ts` no dice qué URL probó (útil para `INS-41`). El comentario de los tests y
     `15-instalacion.md` ya se arreglaron allí.
-13. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
+13. Pendientes leves de `INS-33` (rama del juego): en `api.ts` el `import` de `leerTarkor` queda a mitad de archivo,
+    entre el comentario de `apiBaseUrl()` y la función; el comentario `INS-33` de `modoDesarrollador.ts` está encima de
+    `HerramientasAdminContext` en vez del hook; empaquetado, una URL `/admin/*` escrita a mano da pantalla en blanco
+    (no hay ruta comodín).
+14. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
 
 ## Decisiones de la usuaria que bloquean algo
 
