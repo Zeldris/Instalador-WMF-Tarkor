@@ -55,6 +55,8 @@ antes de la `/retro`; todo en español, y solo lo que confirme la usuaria entra 
   diff. Los hallazgos se guardan en el scratchpad al salir de la revisión: la lista de leves se copia de ahí.
 - **Archivos de código de más de ~300 líneas** (retro de `INS-49`): `lib.rs` y `motor.rs`, leídos enteros 8 y 11
   veces, arrastraron ~300k. Por tramos (`grep -n` del nombre y `sed -n`), como el plan.
+- **Qué archivos no pasan `cargo fmt`** (opt-tokens de `FLU-5`): `cargo fmt --all -- --check -l` da solo la lista;
+  el diff de `--check` filtrado con `grep` volcó 230 líneas y arrastró ~217k.
 - **El registro de la sesión** pesa cientos de MB: medirlo con `medir.py` de la skill, nunca leerlo.
 
 ## Ajustes en vigor
