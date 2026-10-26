@@ -14,7 +14,7 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-25). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #8 (2026-10-25, `f399a63`): `INS-43` (y `INS-42`), con la confirmación de la usuaria. La CI de GitHub no arrancó (pago); `ci-local` en verde sobre `98bda69`, Windows sin cubrir (pendiente de `INS-8`). |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 🚧 2026-10-26: `INS-42` cerrada en el plan (trozos A, B y C hechos; A y B revisados). Falta la revisión corta del trozo C (`29d9fd1`: `useEsperaRed` en Descarga, cambiar de perfil y Reparar). Siguiente: revisar el trozo C y luego las tres fases antes de `main`. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 🚧 2026-10-26: `INS-42` cerrada y revisada (trozos A, B y C, con sus arreglos medios; los leves en «Siguiente paso», puntos 6 a 8). Pausar al cambiar de perfil solo gana a cortes de red y cancelaciones: otro fallo se enseña (test de `INS-43`). Siguiente: las tres fases antes de `main`, empezando por la revisión del diff contra `origin/main`. |
 | **Tests** | 2026-10-25: núcleo `cargo test -p tarkor-nucleo` 104, asistente `vitest` 27, `tsc -b` 0, clippy 0 avisos, `cargo check` del núcleo para Windows (mingw) en verde; E2E del asistente con el Ollama falso en verde. |
 
 ## Dónde está todo (para saber qué sigue)
