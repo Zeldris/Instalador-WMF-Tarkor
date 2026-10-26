@@ -44,6 +44,15 @@ export function Descarga({ ir, config, evaluacion, actualizar, esperas = ESPERAS
   const [ahora, setAhora] = useState(() => Date.now())
   const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fallosRed = useRef(0)
+  // Lo máximo descargado por pieza (el motor o cada modelo) en todos los intentos: solo lo que lo supera es progreso real.
+  // Un reintento repite lo ya bajado (Ollama informa `completed` con los bytes que tenía) y un modelo que ya estaba en
+  // disco llega completo de golpe: ninguno de los dos devuelve la espera a 5 s.
+  const maxHecho = useRef(new Map<string, number>())
+  const crece = (pieza: string, hecho: number) => {
+    if (hecho <= (maxHecho.current.get(pieza) ?? 0)) return false
+    maxHecho.current.set(pieza, hecho)
+    return true
+  }
   const quitarTemporizador = () => {
     if (temporizador.current !== null) clearTimeout(temporizador.current)
     temporizador.current = null
@@ -81,7 +90,7 @@ export function Descarga({ ir, config, evaluacion, actualizar, esperas = ESPERAS
         if (!info.instalado) {
           await api.instalarMotor((pm: ProgresoMotor) => {
             if (!vivo) return
-            if (pm.fase === 'descargando' && pm.hecho > 0) fallosRed.current = 0
+            if (pm.fase === 'descargando' && crece('motor', pm.hecho)) fallosRed.current = 0
             if (pm.fase === 'descargando') cambiar('motor', { estado: 'bajando', parte: pm.total ? pm.hecho / pm.total : 0 })
             else if (pm.fase === 'listo') cambiar('motor', { estado: 'listo', parte: 1 })
             else cambiar('motor', { estado: pm.fase, parte: 1 })
@@ -91,8 +100,8 @@ export function Descarga({ ir, config, evaluacion, actualizar, esperas = ESPERAS
         await api.iniciarMotor()
         const bajados = await api.descargarModelos((pm) => {
           if (!vivo) return
-          if (pm.hecho > 0) fallosRed.current = 0
           const listo = pm.estado === 'success'
+          if (!listo && crece(pm.modelo, pm.hecho)) fallosRed.current = 0
           cambiar(pm.modelo, { estado: listo ? 'listo' : 'bajando', parte: listo ? 1 : pm.total ? pm.hecho / pm.total : 0 })
         })
         if (!vivo) return

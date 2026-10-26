@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { ErrorIa, perfilDe, perfilMasLigero } from './tipos'
@@ -541,4 +542,47 @@ describe('descarga sin red (INS-42)', () => {
     expect(await boton('Reintentar')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Reintentar ahora' })).toBeNull()
   }, 20000)
+
+  describe('la escalera de espera solo baja a 5 s con progreso real', () => {
+    const modelos = catalogo.perfiles.find((p) => p.id === config.perfil)!
+    const [m0, m1] = [modelos.narrador, modelos.cronista === modelos.narrador ? modelos.embeddings : modelos.cronista]
+    const pulling = (modelo: string, hecho: number) => ({ modelo, estado: 'pulling', hecho, total: 1000 })
+    const espera = (segundos: RegExp) => screen.findByText(new RegExp(`Reintentando en (${segundos.source}) s`), {}, { timeout: 2000 })
+    /** Deja pasar la espera programada y el corte siguiente. */
+    const pasar = (ms: number) => act(async () => { vi.advanceTimersByTime(ms) })
+    const conRelojFalso = async (prueba: () => Promise<void>) => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      try { await prueba() } finally { vi.useRealTimers() }
+    }
+
+    it('un modelo que ya estaba en disco no cuenta: la segunda espera es de 10 s y la tercera de 20 s', () => conRelojFalso(async () => {
+      fijarSinRed(3, [{ modelo: m0, estado: 'success', hecho: 1, total: 1 }])
+      render(<Descarga ir={() => {}} config={config} evaluacion={e} actualizar={() => {}} />)
+      await espera(/[45]/)
+      await pasar(5000)
+      await espera(/9|10/)
+      await pasar(10000)
+      await espera(/19|20/)
+    }), 20000)
+
+    it('un progreso repetido tras reintentar no cuenta: la segunda espera es de 10 s', () => conRelojFalso(async () => {
+      fijarSinRed(3, [pulling(m0, 100)])
+      render(<Descarga ir={() => {}} config={config} evaluacion={e} actualizar={() => {}} />)
+      await espera(/[45]/)
+      await pasar(5000)
+      await espera(/9|10/)
+      await pasar(10000)
+      await espera(/19|20/)
+    }), 20000)
+
+    it('un progreso que sí crece devuelve la espera a 5 s', () => conRelojFalso(async () => {
+      fijarSinRed(3, (corte) => [pulling(m1, corte < 2 ? 100 : 200)])
+      render(<Descarga ir={() => {}} config={config} evaluacion={e} actualizar={() => {}} />)
+      await espera(/[45]/)
+      await pasar(5000)
+      await espera(/9|10/)
+      await pasar(10000)
+      await espera(/[45]/)
+    }), 20000)
+  })
 })

@@ -6,7 +6,7 @@
 import type { Api } from './api'
 import { catalogo, descargaGb as descargaDe } from './catalogo'
 import { ErrorIa } from './tipos'
-import type { Config, Equipo, Evaluacion, MotorDetenido, PerfilEvaluado, Sobrante, UsoIa } from './tipos'
+import type { Config, Equipo, Evaluacion, MotorDetenido, PerfilEvaluado, ProgresoModelo, Sobrante, UsoIa } from './tipos'
 
 export const configInicial = (): Config => ({
   version: 1,
@@ -86,11 +86,13 @@ let retardoCambioPerfil = 0
 /** Para los tests: el cambio de perfil tarda esto (ms) antes de acabar o de fallar. */
 export const fijarRetardoCambioPerfil = (ms: number) => { retardoCambioPerfil = ms }
 let sinRedRestantes = 0
+let sinRedCortes = 0
+let sinRedAntes: ProgresoModelo[] | ((corte: number) => ProgresoModelo[]) | null = null
 /** El motor simulado se «instala» una vez, como el real: un reintento de la Descarga ya no lo repite. */
 let motorInstalado = false
 /** Para los tests: las `n` siguientes llamadas a `descargarModelos` fallan por falta de red (un `ErrorIa` con `red`), como el núcleo. */
-export const fijarSinRed = (n: number) => { sinRedRestantes = n }
-export const reiniciarModelos = () => { sinRedRestantes = 0; motorInstalado = false; errorCambioPerfil = null; retardoCambioPerfil = 0; sobrantes = []; usoSimulado = { porcentajeGpu: 100, memoriaMb: 5400 } }
+export const fijarSinRed = (n: number, antes: typeof sinRedAntes = null) => { sinRedRestantes = n; sinRedCortes = 0; sinRedAntes = antes }
+export const reiniciarModelos = () => { sinRedRestantes = 0; sinRedCortes = 0; sinRedAntes = null; motorInstalado = false; errorCambioPerfil = null; retardoCambioPerfil = 0; sobrantes = []; usoSimulado = { porcentajeGpu: 100, memoriaMb: 5400 } }
 const modelosDe = (id: string | null) => {
   const perfil = catalogo.perfiles.find((p) => p.id === id) ?? catalogo.perfiles[0]
   return [...new Set([perfil.narrador, perfil.cronista, perfil.sugerencias, perfil.embeddings])]
@@ -155,8 +157,12 @@ export const ejemplo: Api = {
     const modelos = [...new Set([perfil.narrador, perfil.cronista, perfil.sugerencias, perfil.embeddings])]
     if (sinRedRestantes > 0) {
       sinRedRestantes--
-      // Como Ollama: empieza por el manifiesto (sin bytes) y ahí se corta.
+      // Como Ollama: empieza por el manifiesto (sin bytes) y ahí se corta. Con `antes`, informa de eso en cada corte
+      // (`corte` cuenta desde 0): un modelo que ya estaba en disco, o los bytes que ya tenía al reanudar.
       progreso({ modelo: modelos[0], estado: 'pulling manifest', hecho: 0, total: 0 })
+      const extra = typeof sinRedAntes === 'function' ? sinRedAntes(sinRedCortes) : (sinRedAntes ?? [])
+      sinRedCortes++
+      extra.forEach(progreso)
       await pausa(30)
       throw new ErrorIa('No se pudo conectar con el servidor de modelos. Comprueba tu conexión a internet y vuelve a intentarlo; lo ya descargado se conserva.', true)
     }
