@@ -301,12 +301,15 @@ function Detalle({ estado, id, detalle, hayMasLigero, ir }: { estado: EstadoComp
   if (id !== 'narracion') return <p className="peq tenue">{detalle}</p>
   const { texto, tokensPorSegundo } = JSON.parse(detalle) as { texto: string; tokensPorSegundo: number }
   // En castellano una palabra son ~1,4 tokens de Qwen: palabras/s ≈ tokens/s × 0,7.
-  const palabras = Math.max(1, Math.round(tokensPorSegundo * 0.7))
+  const palabrasPorSegundo = tokensPorSegundo * 0.7
+  const palabras = Math.max(1, Math.round(palabrasPorSegundo))
+  // Se compara sin redondear (2,6 palabras/s es lenta aunque se muestre «3»); una medida inválida (≤ 0) no sugiere nada.
+  const lenta = tokensPorSegundo > 0 && palabrasPorSegundo < PALABRAS_LENTAS && hayMasLigero
   return (
     <>
       <p className="cita">«{texto}»</p>
       <p className="peq tenue">{t.velocidad(palabras, Math.round(150 / palabras))}</p>
-      {palabras < PALABRAS_LENTAS && hayMasLigero && (
+      {lenta && (
         <div className="fila">
           <p className="peq">{t.lenta}</p>
           <button type="button" className="btn" onClick={() => ir(4)}>{t.masLigero}</button>

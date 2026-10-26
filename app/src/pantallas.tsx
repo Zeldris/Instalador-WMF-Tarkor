@@ -178,9 +178,7 @@ function CalentarNarrador({ masLigero, irAAjustes }: { masLigero: PerfilId | nul
     let vivo = true
     void (async () => {
       try {
-        const motor = await api.estadoMotor()
-        if (!vivo) return
-        if (!motor.enMarcha) await api.iniciarMotor()
+        await api.asegurarMotor()
         if (!vivo) return
         await api.calentarNarrador()
         if (vivo) setEstado({ fase: 'listo' })

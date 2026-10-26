@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::future::Future;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tarkor_nucleo::carpetas::{espacio_libre_mb, mover_carpeta};
@@ -19,6 +20,7 @@ use tarkor_nucleo::perfiles::{self, Evaluacion, UsoCpu};
 use tarkor_nucleo::procesos::{self, Especificacion, MotorDetenido, Proceso};
 use tarkor_nucleo::rendimiento::{self, Ajustes};
 use tarkor_nucleo::{modelos, motor, rendimiento::hilos_para_ia};
+use tauri::async_runtime::Mutex as MutexAsincrono;
 use tauri::ipc::Channel;
 use tauri::{Emitter, Manager, RunEvent, State};
 
@@ -43,6 +45,9 @@ struct Estado {
     /// Motivo de la última parada: se guarda al avisar y no se borra al arrancar (el aviso
     /// `detenido` sí); lo lee «Copiar informe».
     ultimo_motivo_parada: Mutex<Option<String>>,
+    /// Pone en fila los arranques del motor (`arrancar_motor`, `asegurar_motor`): dos a la vez sacarían el motor recién
+    /// puesto, su `Drop` lo mataría y lo que lo usara (calentar el narrador) fallaría.
+    arranque: MutexAsincrono<()>,
 }
 
 /// Registro del motor de IA, dentro de `Rutas::registros`.
@@ -79,6 +84,11 @@ impl Estado {
     fn perfil(&self, config: &Config) -> Result<&Perfil, String> {
         let id = config.perfil.as_deref().ok_or("todavía no se ha elegido perfil")?;
         self.catalogo.perfil(id).ok_or_else(|| format!("perfil desconocido: {id}"))
+    }
+
+    /// Si el motor contesta ahora (bloqueante: red).
+    fn en_marcha(&self) -> bool {
+        self.cliente().and_then(|c| c.version().map_err(|e| e.to_string())).is_ok()
     }
 
     fn cliente(&self) -> Result<Cliente, String> {
@@ -201,7 +211,7 @@ async fn estado_motor(app: tauri::AppHandle) -> Res<InfoMotor> {
         InfoMotor {
             version: m.version.clone(),
             instalado: estado.ollama_externo.is_some() || motor::instalado(&estado.ia(), m),
-            en_marcha: estado.cliente().and_then(|c| c.version().map_err(|e| e.to_string())).is_ok(),
+            en_marcha: estado.en_marcha(),
             descarga_gb: if estado.ollama_externo.is_some() { 0.0 } else { m.paquete().map_or(0.0, |p| p.descarga_gb) },
             modelos_gb: estado.catalogo.modelos.iter().map(|(k, v)| (k.clone(), v.descarga_gb)).collect(),
         }
@@ -243,9 +253,48 @@ async fn iniciar_motor(app: tauri::AppHandle) -> Res<()> {
     arrancar_motor(&app).await
 }
 
+/// Arranca solo si el motor no está en marcha, sin reiniciar uno que ya corre (`iniciar_motor` sí lo haría). Lo usa el
+/// juego al entrar (`INS-42`). Comprobar y arrancar van bajo el mismo candado que `arrancar_motor`: dos entradas
+/// seguidas, o un cambio de perfil a la vez, no lanzan dos arranques. Con un Ollama externo no hace nada.
+#[tauri::command]
+async fn asegurar_motor(app: tauri::AppHandle) -> Res<()> {
+    let estado = app.state::<Estado>();
+    asegurar_con(
+        &estado.arranque,
+        || async {
+            let a = app.clone();
+            tauri::async_runtime::spawn_blocking(move || a.state::<Estado>().en_marcha()).await.unwrap_or(false)
+        },
+        || arrancar_sin_candado(&app),
+    )
+    .await
+}
+
+/// Toma el candado y arranca solo si `en_marcha` dice que no corre: la comprobación y el arranque no se separan.
+async fn asegurar_con<E, F, A, G>(candado: &MutexAsincrono<()>, en_marcha: E, arrancar: A) -> Res<()>
+where
+    E: FnOnce() -> F,
+    F: Future<Output = bool>,
+    A: FnOnce() -> G,
+    G: Future<Output = Res<()>>,
+{
+    let _fila = candado.lock().await;
+    if en_marcha().await {
+        return Ok(());
+    }
+    arrancar().await
+}
+
 /// Lo que hace `iniciar_motor`; también lo usa `cambiar_carpeta_ia` para volver a arrancar el
-/// motor con la carpeta nueva.
+/// motor con la carpeta nueva. En fila con cualquier otro arranque.
 async fn arrancar_motor(app: &tauri::AppHandle) -> Res<()> {
+    let estado = app.state::<Estado>();
+    let _fila = estado.arranque.lock().await;
+    arrancar_sin_candado(app).await
+}
+
+/// El arranque en sí: quien lo llama ya tiene `Estado::arranque`.
+async fn arrancar_sin_candado(app: &tauri::AppHandle) -> Res<()> {
     let estado = app.state::<Estado>();
     if estado.ollama_externo.is_some() {
         return Ok(());
@@ -767,6 +816,7 @@ pub fn run() {
             ocupado: AtomicBool::new(false),
             detenido: Mutex::new(None),
             ultimo_motivo_parada: Mutex::new(None),
+            arranque: MutexAsincrono::new(()),
         })
         .invoke_handler(tauri::generate_handler![
             rutas,
@@ -780,6 +830,7 @@ pub fn run() {
             cancelar_descargas,
             instalar_motor,
             iniciar_motor,
+            asegurar_motor,
             cambiar_carpeta_ia,
             motor_detenido,
             reintentar_motor,
@@ -809,4 +860,73 @@ pub fn run() {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+    #[test]
+    fn asegurar_arranca_si_no_corre_y_no_reinicia_si_corre() {
+        let candado = MutexAsincrono::new(());
+        let arranques = AtomicUsize::new(0);
+        let arrancar = || async {
+            arranques.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        };
+        tauri::async_runtime::block_on(asegurar_con(&candado, || async { false }, arrancar)).unwrap();
+        assert_eq!(arranques.load(Ordering::SeqCst), 1, "parado: arranca");
+        tauri::async_runtime::block_on(asegurar_con(&candado, || async { true }, arrancar)).unwrap();
+        assert_eq!(arranques.load(Ordering::SeqCst), 1, "en marcha: no lo reinicia");
+    }
+
+    #[test]
+    fn dos_asegurar_a_la_vez_arrancan_una_sola_vez() {
+        let candado = MutexAsincrono::new(());
+        let en_marcha = AtomicBool::new(false);
+        let arranques = AtomicUsize::new(0);
+        let uno = || {
+            asegurar_con(
+                &candado,
+                || async { en_marcha.load(Ordering::SeqCst) },
+                || async {
+                    arranques.fetch_add(1, Ordering::SeqCst);
+                    // El arranque tarda: el segundo espera el candado y, al entrar, ya lo ve en marcha.
+                    tauri::async_runtime::spawn_blocking(|| std::thread::sleep(std::time::Duration::from_millis(100)))
+                        .await
+                        .unwrap();
+                    en_marcha.store(true, Ordering::SeqCst);
+                    Ok(())
+                },
+            )
+        };
+        let (a, b) = tauri::async_runtime::block_on(unir(uno(), uno()));
+        a.unwrap();
+        b.unwrap();
+        assert_eq!(arranques.load(Ordering::SeqCst), 1);
+    }
+
+    /// `join` de dos futuros sin añadir `futures` al crate.
+    async fn unir<A: Future, B: Future>(a: A, b: B) -> (A::Output, B::Output) {
+        use std::pin::pin;
+        use std::task::Poll;
+        let (mut a, mut b) = (pin!(a), pin!(b));
+        let (mut ra, mut rb) = (None, None);
+        std::future::poll_fn(|cx| {
+            if ra.is_none() {
+                if let Poll::Ready(v) = a.as_mut().poll(cx) {
+                    ra = Some(v);
+                }
+            }
+            if rb.is_none() {
+                if let Poll::Ready(v) = b.as_mut().poll(cx) {
+                    rb = Some(v);
+                }
+            }
+            if ra.is_some() && rb.is_some() { Poll::Ready(()) } else { Poll::Pending }
+        })
+        .await;
+        (ra.unwrap(), rb.unwrap())
+    }
 }

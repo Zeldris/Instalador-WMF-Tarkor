@@ -92,7 +92,7 @@ let sinRedAntes: ProgresoModelo[] | ((corte: number) => ProgresoModelo[]) | null
 let motorInstalado = false
 /** Para los tests: las `n` siguientes llamadas a `descargarModelos` fallan por falta de red (un `ErrorIa` con `red`), como el núcleo. */
 export const fijarSinRed = (n: number, antes: typeof sinRedAntes = null) => { sinRedRestantes = n; sinRedCortes = 0; sinRedAntes = antes }
-export const reiniciarModelos = () => { calentarResultado = 'ok'; tokensPorSegundoPrueba = 12; sinRedRestantes = 0; sinRedCortes = 0; sinRedAntes = null; motorInstalado = false; errorCambioPerfil = null; retardoCambioPerfil = 0; sobrantes = []; usoSimulado = { porcentajeGpu: 100, memoriaMb: 5400 } }
+export const reiniciarModelos = () => { motorEnMarcha = false; arranquesMotor = 0; calentarResultado = 'ok'; tokensPorSegundoPrueba = 12; sinRedRestantes = 0; sinRedCortes = 0; sinRedAntes = null; motorInstalado = false; errorCambioPerfil = null; retardoCambioPerfil = 0; sobrantes = []; usoSimulado = { porcentajeGpu: 100, memoriaMb: 5400 } }
 const modelosDe = (id: string | null) => {
   const perfil = catalogo.perfiles.find((p) => p.id === id) ?? catalogo.perfiles[0]
   return [...new Set([perfil.narrador, perfil.cronista, perfil.sugerencias, perfil.embeddings])]
@@ -118,6 +118,10 @@ export const TEXTO_INFORME = 'Tarkor (informe de ejemplo)\nSistema: Linux\nMotor
 export const reiniciarMotorDetenido = () => { avisoMotor = null; errorReintento = null; errorCopiar = null; copiado = null; oyentes.clear() }
 let calentarResultado: 'ok' | 'sinMemoria' | 'error' = 'ok'
 /** Para los tests: cómo acaba el siguiente `calentarNarrador` (`sinMemoria` y `error` fallan con un `ErrorIa`). */
+/** Para los tests: si el motor del ejemplo corre (lo pone en marcha `asegurarMotor`/`iniciarMotor`) y cuántas veces se ha arrancado. */
+let motorEnMarcha = false
+let arranquesMotor = 0
+export const arranquesDelMotor = () => arranquesMotor
 export const fijarCalentar = (r: 'ok' | 'sinMemoria' | 'error') => { calentarResultado = r }
 let tokensPorSegundoPrueba = 12
 /** Para los tests: la velocidad de la narración de prueba (tokens por segundo; 12 = ~8 palabras/s). */
@@ -143,7 +147,7 @@ export const ejemplo: Api = {
   estadoMotor: async () => ({
     version: catalogo.motor.version,
     instalado: motorInstalado,
-    enMarcha: false,
+    enMarcha: motorEnMarcha,
     descargaGb: catalogo.motor.paquetes.linux.descargaGb,
     modelosGb: Object.fromEntries(Object.entries(catalogo.modelos).map(([k, v]) => [k, v.descargaGb])),
   }),
@@ -156,7 +160,8 @@ export const ejemplo: Api = {
     progreso({ fase: 'listo' })
     motorInstalado = true
   },
-  iniciarMotor: async () => {},
+  iniciarMotor: async () => { motorEnMarcha = true; arranquesMotor++ },
+  asegurarMotor: async () => { if (!motorEnMarcha) { motorEnMarcha = true; arranquesMotor++ } },
   descargarModelos: async (progreso) => {
     cancelado = false
     const perfil = catalogo.perfiles.find((p) => p.id === guardada.perfil) ?? catalogo.perfiles[0]

@@ -23,6 +23,8 @@ export interface Api {
   /** Falla con un `ErrorIa`: `red` si se perdió internet (la Descarga espera y reintenta sola). */
   instalarMotor(progreso: (p: ProgresoMotor) => void): Promise<void>
   iniciarMotor(): Promise<void>
+  /** Arranca el motor solo si no corre (sin reiniciar uno en marcha) y en fila con cualquier otro arranque: lo usa el juego al entrar. */
+  asegurarMotor(): Promise<void>
   /** Falla con un `ErrorIa`: `red` si se perdió internet (la Descarga espera y reintenta sola). */
   descargarModelos(progreso: (p: ProgresoModelo) => void): Promise<string[]>
   cancelarDescargas(): Promise<void>
@@ -72,6 +74,7 @@ const tauri: Api = {
   estadoMotor: () => invoke('estado_motor'),
   instalarMotor: (progreso) => invoke<void>('instalar_motor', { canal: canal(progreso) }).catch((e) => { throw aErrorIa(e) }),
   iniciarMotor: () => invoke('iniciar_motor'),
+  asegurarMotor: () => invoke('asegurar_motor'),
   descargarModelos: (progreso) => invoke<string[]>('descargar_modelos', { canal: canal(progreso) }).catch((e) => { throw aErrorIa(e) }),
   cancelarDescargas: () => invoke('cancelar_descargas'),
   calentarNarrador: () => invoke<void>('calentar_narrador').catch((e) => { throw aErrorIa(e) }),

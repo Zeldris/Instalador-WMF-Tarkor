@@ -135,7 +135,9 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
   `Api`; al entrar en el juego se arranca el motor si no corre y se calienta el narrador («Preparando el narrador…» /
   «El narrador está listo»), con el aviso y «Cambiar a un perfil más ligero» si falta memoria y una línea discreta en
   otro error; la Comprobación sugiere un perfil más ligero bajo 3 palabras/s (`PALABRAS_LENTAS`); tests de vitest y
-  E2E (`asistente`, `rendimiento`). Pendiente: lo del trozo A y marcar la casilla al cerrar la tarea.
+  E2E (`asistente`, `rendimiento`). Revisión del trozo B: el umbral de lento se mide sin redondear (y una medida de 0 no
+  sugiere nada) y `asegurar_motor` arranca el motor solo si no corre bajo un candado común con `arrancar_motor`, para que
+  dos arranques a la vez no se pisen. Pendiente: lo del trozo A y marcar la casilla al cerrar la tarea.
 - [x] **INS-43** (2026-10-25) Ajustes → Rendimiento de la IA (con uso de la gráfica vía `/api/ps`) y pantalla de
   motor detenido. Decidido el 2026-10-25 (ver `11`): frase de dónde corre la IA y memoria real; cambiar de perfil
   descarga, reinicia el motor y ofrece borrar lo que sobra; "Copiar informe" con "Ver detalles"; un hilo de Rust

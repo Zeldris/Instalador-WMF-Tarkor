@@ -149,9 +149,10 @@ al paso 4. Si falla el motor de IA o un modelo, también **Reparar** (ver Ajuste
 
 ### Entrar en el juego: calentar el narrador
 
-Al entrar en la vista del juego (también al abrir la app con el asistente ya completado) el frontal mira `estado_motor`
-y, solo si el motor no está en marcha, lo arranca (`iniciar_motor` reiniciaría uno que ya corre); luego
-`calentar_narrador` carga el narrador del perfil en memoria para que el primer turno no espere (`INS-42`, `12`). Una
+Al entrar en la vista del juego (también al abrir la app con el asistente ya completado) el frontal llama a `asegurar_motor`,
+que arranca el motor solo si no está en marcha (`iniciar_motor` reiniciaría uno que ya corre) y comprueba y arranca
+bajo el mismo candado que `arrancar_motor`, así que dos entradas seguidas o un cambio de perfil a la vez no lanzan dos
+arranques; luego `calentar_narrador` carga el narrador del perfil en memoria para que el primer turno no espere (`INS-42`, `12`). Una
 línea de estado lo cuenta: «Preparando el narrador…» y, al acabar, «El narrador está listo». No bloquea nada.
 
 - Si no cabe en memoria (`sinMemoria`) y hay un perfil más ligero: aviso con el motivo y **Cambiar a un perfil más

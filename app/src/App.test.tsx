@@ -6,7 +6,7 @@ import { ErrorIa, perfilDe, perfilMasLigero } from './tipos'
 import { catalogo } from './catalogo'
 import { Ajustes, ElegirPerfil, Listo } from './pantallas'
 import { Descarga } from './pantallasIa'
-import { ejemplo, configInicial, evaluarEjemplo, equipoEjemplo, fijarDiscoLibreIa, fijarErrorCambioPerfil, fijarRetardoCambioPerfil, fijarErrorCarpetaIa, fijarModelosDanados, fijarSinRed, fijarUsoIa, reiniciarCarpetaIa, reiniciarModelos, emitirMotorDetenido, fijarCalentar, fijarTokensPorSegundo, fijarErrorCopiar, fijarErrorReintento, fijarMotorDetenido, oyentesMotor, reiniciarMotorDetenido, textoCopiado, TEXTO_INFORME } from './ejemplo'
+import { ejemplo, configInicial, evaluarEjemplo, equipoEjemplo, fijarDiscoLibreIa, fijarErrorCambioPerfil, fijarRetardoCambioPerfil, fijarErrorCarpetaIa, fijarModelosDanados, fijarSinRed, fijarUsoIa, reiniciarCarpetaIa, reiniciarModelos, emitirMotorDetenido, fijarCalentar, arranquesDelMotor, fijarTokensPorSegundo, fijarErrorCopiar, fijarErrorReintento, fijarMotorDetenido, oyentesMotor, reiniciarMotorDetenido, textoCopiado, TEXTO_INFORME } from './ejemplo'
 
 afterEach(async () => {
   cleanup()
@@ -491,22 +491,21 @@ const conJuego = async (perfil: string) => {
 describe('calentar el narrador al entrar en el juego (INS-42)', () => {
   it('con el motor parado lo arranca y luego calienta el narrador; con el motor en marcha no lo reinicia', async () => {
     await conJuego('equilibrado')
-    const iniciar = vi.spyOn(ejemplo, 'iniciarMotor')
+    const asegurar = vi.spyOn(ejemplo, 'asegurarMotor')
     const calentar = vi.spyOn(ejemplo, 'calentarNarrador')
     render(<App />)
     expect((await screen.findByRole('status')).textContent).toBe('Preparando el narrador…')
     expect((await screen.findByText('El narrador está listo')).getAttribute('role')).toBe('status')
-    expect(iniciar).toHaveBeenCalledTimes(1)
+    expect(asegurar).toHaveBeenCalledTimes(1)
+    expect(arranquesDelMotor()).toBe(1)
     expect(calentar).toHaveBeenCalledTimes(1)
-    expect(iniciar.mock.invocationCallOrder[0]).toBeLessThan(calentar.mock.invocationCallOrder[0])
+    expect(asegurar.mock.invocationCallOrder[0]).toBeLessThan(calentar.mock.invocationCallOrder[0])
     cleanup()
 
-    iniciar.mockClear()
     calentar.mockClear()
-    vi.spyOn(ejemplo, 'estadoMotor').mockResolvedValue({ ...(await ejemplo.estadoMotor()), enMarcha: true })
     render(<App />)
     await screen.findByText('El narrador está listo')
-    expect(iniciar).not.toHaveBeenCalled()
+    expect(arranquesDelMotor()).toBe(1)
     expect(calentar).toHaveBeenCalledTimes(1)
   })
 
@@ -552,7 +551,7 @@ describe('calentar el narrador al entrar en el juego (INS-42)', () => {
 
   it('si el motor no arranca, lo dice en la misma línea discreta y no calienta', async () => {
     await conJuego('equilibrado')
-    vi.spyOn(ejemplo, 'iniciarMotor').mockRejectedValue('No se pudo arrancar el motor de IA.')
+    vi.spyOn(ejemplo, 'asegurarMotor').mockRejectedValue('No se pudo arrancar el motor de IA.')
     const calentar = vi.spyOn(ejemplo, 'calentarNarrador')
     render(<App />)
     expect(await screen.findByText('No se pudo arrancar el motor de IA.')).toBeTruthy()
@@ -561,16 +560,23 @@ describe('calentar el narrador al entrar en el juego (INS-42)', () => {
 
   it('si se sale antes de que conteste el motor, no lo arranca ni calienta', async () => {
     await conJuego('equilibrado')
-    const original = ejemplo.estadoMotor
-    vi.spyOn(ejemplo, 'estadoMotor').mockImplementation(async () => { await new Promise((ok) => setTimeout(ok, 60)); return original() })
-    const iniciar = vi.spyOn(ejemplo, 'iniciarMotor')
+    vi.spyOn(ejemplo, 'asegurarMotor').mockImplementation(async () => { await new Promise((ok) => setTimeout(ok, 60)) })
     const calentar = vi.spyOn(ejemplo, 'calentarNarrador')
     render(<App />)
     await screen.findByText('Preparando el narrador…')
     cleanup()
     await act(async () => { await new Promise((ok) => setTimeout(ok, 150)) })
-    expect(iniciar).not.toHaveBeenCalled()
     expect(calentar).not.toHaveBeenCalled()
+  })
+
+  it('al entrar no usa estadoMotor ni iniciarMotor: el arranque va entero por asegurarMotor, que va en fila en el motor', async () => {
+    await conJuego('equilibrado')
+    const estado = vi.spyOn(ejemplo, 'estadoMotor')
+    const iniciar = vi.spyOn(ejemplo, 'iniciarMotor')
+    render(<App />)
+    await screen.findByText('El narrador está listo')
+    expect(estado).not.toHaveBeenCalled()
+    expect(iniciar).not.toHaveBeenCalled()
   })
 })
 
@@ -592,6 +598,20 @@ describe('narración de prueba lenta (INS-42)', () => {
   }, 15000)
 
   it('a una velocidad normal no sugiere nada', async () => {
+    await conComprobacion('equilibrado')
+    expect(screen.queryByText(SUGERENCIA)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Probar un perfil más ligero' })).toBeNull()
+  }, 15000)
+
+  it('el umbral se mide sin redondear: 4 tokens/s son 2,8 palabras/s (se muestra «3») y aun así es lento', async () => {
+    fijarTokensPorSegundo(4)
+    await conComprobacion('equilibrado')
+    expect(screen.getByText(/3 palabras por segundo/)).toBeTruthy()
+    expect(screen.getByText(SUGERENCIA)).toBeTruthy()
+  }, 15000)
+
+  it('una medida inválida (0 tokens/s) no sugiere nada', async () => {
+    fijarTokensPorSegundo(0)
     await conComprobacion('equilibrado')
     expect(screen.queryByText(SUGERENCIA)).toBeNull()
     expect(screen.queryByRole('button', { name: 'Probar un perfil más ligero' })).toBeNull()
