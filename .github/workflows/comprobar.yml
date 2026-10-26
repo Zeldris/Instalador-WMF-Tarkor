@@ -23,10 +23,8 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: app/package-lock.json
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-gnu
-          components: clippy, rustfmt
+      - name: Rust de app/rust-toolchain.toml
+        run: rustup toolchain install --no-self-update
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: app
@@ -48,7 +46,8 @@ jobs:
         working-directory: app
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Rust de app/rust-toolchain.toml
+        run: rustup toolchain install --no-self-update
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: app

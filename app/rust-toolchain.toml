@@ -1,0 +1,7 @@
+# Versión de Rust del instalador (FLU-6): local, el pre-push y el CI formatean, compilan y avisan igual. rustup la
+# instala sola al correr cargo dentro de app/; subir de versión es un commit a mano (y el `rust-version` de los Cargo.toml).
+[toolchain]
+channel = "1.94.1"
+components = ["rustfmt", "clippy"]
+targets = ["x86_64-pc-windows-gnu"]
+profile = "minimal"
