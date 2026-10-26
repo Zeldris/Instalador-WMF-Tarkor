@@ -71,6 +71,8 @@ for prueba in "${pruebas[@]}"; do
     export E2E_PUERTO="$puerto" E2E_PUERTO_FALSO="$puerto_falso" E2E_FALSO=""
     if [ "$nombre" = "asistente" ]; then
       export TARKOR_OLLAMA_URL="http://127.0.0.1:$puerto_falso" E2E_FALSO=1
+      # La primera descarga de un modelo se corta como sin internet: el asistente espera y reintenta solo (INS-42).
+      export FALSO_CORTES_PULL="${FALSO_CORTES_PULL:-1}"
     fi
     cd "$raiz/app"
     # Las rutas van por el entorno (no dentro de la orden) para que un espacio o una comilla no la rompan, y se espera

@@ -30,19 +30,58 @@ impl std::fmt::Display for Error {
     }
 }
 
-/// Traduce los errores de Ollama más habituales a lenguaje de jugador (docs/11, principio 4).
-fn explicar(e: &str) -> String {
+/// Clase de un error de Ollama, por su texto. El orden de `clasificar` importa: la memoria primero, luego la red
+/// bloqueada y luego la caída de la conexión.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Clase {
+    SinMemoria,
+    /// Cortafuegos, proxy, antivirus o certificado: reintentar solo no lo arregla.
+    RedBloqueada,
+    /// Sin internet (DNS, conexión cortada, tiempo agotado): vuelve sola al volver la red.
+    SinRed,
+    SinEspacio,
+    Otro,
+}
+
+fn clasificar(e: &str) -> Clase {
     let m = e.to_ascii_lowercase();
     if m.contains("memory") || m.contains("oom") {
-        format!("Tu equipo se ha quedado sin memoria al cargar el modelo. Prueba un perfil más ligero o cierra otros programas. ({e})")
+        Clase::SinMemoria
     } else if m.contains("forbidden") || m.contains("403") || m.contains("proxy") || m.contains("certificate") {
-        format!("La red de este equipo no deja descargar del servidor de modelos (puede ser un cortafuegos, un proxy o un antivirus). Prueba con otra conexión; lo ya descargado se conserva. ({e})")
-    } else if m.contains("dial tcp") || m.contains("no such host") || m.contains("connection") || m.contains("timeout") {
-        format!("No se pudo conectar con el servidor de modelos. Comprueba tu conexión a internet y vuelve a intentarlo; lo ya descargado se conserva. ({e})")
+        Clase::RedBloqueada
+    } else if ["dial tcp", "no such host", "connection", "timeout", "unreachable", "max retries exceeded"]
+        .iter()
+        .any(|p| m.contains(p))
+    {
+        Clase::SinRed
     } else if m.contains("no space") {
-        format!("No queda espacio en el disco para el modelo. ({e})")
+        Clase::SinEspacio
     } else {
-        format!("El motor de IA ha devuelto un error: {e}")
+        Clase::Otro
+    }
+}
+
+impl Error {
+    /// Se perdió internet (no el motor local, ni un cortafuegos o proxy): la descarga puede esperar y reanudarse
+    /// sola al volver la red.
+    pub fn es_de_red(&self) -> bool {
+        matches!(self, Error::Ollama(e) if clasificar(e) == Clase::SinRed)
+    }
+
+    /// El equipo se quedó sin memoria al cargar el modelo: pide un perfil más ligero.
+    pub fn sin_memoria(&self) -> bool {
+        matches!(self, Error::Ollama(e) if clasificar(e) == Clase::SinMemoria)
+    }
+}
+
+/// Traduce los errores de Ollama más habituales a lenguaje de jugador (docs/11, principio 4).
+fn explicar(e: &str) -> String {
+    match clasificar(e) {
+        Clase::SinMemoria => format!("Tu equipo se ha quedado sin memoria al cargar el modelo. Prueba un perfil más ligero o cierra otros programas. ({e})"),
+        Clase::RedBloqueada => format!("La red de este equipo no deja descargar del servidor de modelos (puede ser un cortafuegos, un proxy o un antivirus). Prueba con otra conexión; lo ya descargado se conserva. ({e})"),
+        Clase::SinRed => format!("No se pudo conectar con el servidor de modelos. Comprueba tu conexión a internet y vuelve a intentarlo; lo ya descargado se conserva. ({e})"),
+        Clase::SinEspacio => format!("No queda espacio en el disco para el modelo. ({e})"),
+        Clase::Otro => format!("El motor de IA ha devuelto un error: {e}"),
     }
 }
 
@@ -393,6 +432,39 @@ mod tests {
         let c = ollama_falso("{\"error\":\"pull model manifest: Get \\\"https://registry.ollama.ai/v2/library/qwen2.5/manifests/1.5b-instruct\\\": Forbidden\"}\n");
         let e = c.descargar_modelo("qwen2.5:1.5b-instruct", &AtomicBool::new(false), &mut |_| {}).unwrap_err();
         assert!(e.to_string().starts_with("La red de este equipo no deja descargar"), "{e}");
+    }
+
+    #[test]
+    fn predicados_de_clase_de_error() {
+        let o = |m: &str| Error::Ollama(m.to_string());
+        // Sin red: DNS, conexión cortada, tiempo agotado, red inalcanzable, reintentos agotados.
+        for m in [
+            "pull model manifest: dial tcp: lookup registry.ollama.ai: no such host",
+            "read tcp 10.0.0.2:5000->1.2.3.4:443: connection reset by peer",
+            "net/http: TLS handshake timeout",
+            "dial tcp 1.2.3.4:443: connect: network is unreachable",
+            "max retries exceeded: EOF",
+        ] {
+            assert!(o(m).es_de_red(), "{m}");
+            assert!(!o(m).sin_memoria(), "{m}");
+        }
+        // Red bloqueada: reintentar solo no lo arregla, no se autopausa.
+        for m in ["Get \"https://registry.ollama.ai/v2\": Forbidden", "proxyconnect tcp: connection refused", "x509: certificate signed by unknown authority", "unexpected status 403"] {
+            assert!(!o(m).es_de_red(), "{m}");
+        }
+        // Sin memoria (tiene prioridad sobre "connection" en el mismo texto).
+        assert!(o("model requires more system memory").sin_memoria());
+        assert!(!o("model requires more system memory").es_de_red());
+        assert!(o("out of memory while connection open").sin_memoria());
+        assert!(!o("out of memory while connection open").es_de_red());
+        // Otros errores.
+        assert!(!o("write /x: no space left on device").es_de_red());
+        assert!(!o("write /x: no space left on device").sin_memoria());
+        // El motor local caído no es de red; la cancelación tampoco.
+        assert!(!Error::SinConexion("connection refused".into()).es_de_red());
+        assert!(!Error::SinConexion("connection refused".into()).sin_memoria());
+        assert!(!Error::Cancelado.es_de_red());
+        assert!(!Error::Cancelado.sin_memoria());
     }
 
     #[test]

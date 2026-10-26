@@ -48,6 +48,14 @@ impl std::fmt::Display for Error {
     }
 }
 
+impl Error {
+    /// Se perdió internet durante la descarga del motor: puede esperar y reanudarse sola. Un disco lleno, un
+    /// paquete dañado o una cancelación no son de red.
+    pub fn es_de_red(&self) -> bool {
+        matches!(self, Error::Red(_))
+    }
+}
+
 impl From<io::Error> for Error {
     fn from(e: io::Error) -> Self {
         Error::Disco(e)
@@ -319,6 +327,15 @@ mod tests {
     use std::io::{BufRead, BufReader};
     use std::net::TcpListener;
     use std::thread;
+
+    #[test]
+    fn solo_el_error_de_red_es_de_red() {
+        assert!(Error::Red("connection reset".into()).es_de_red());
+        assert!(!Error::Cancelado.es_de_red());
+        assert!(!Error::Danado.es_de_red());
+        assert!(!Error::SinPaquete.es_de_red());
+        assert!(!Error::Disco(io::Error::other("sin espacio")).es_de_red());
+    }
 
     /// Sirve `datos` por HTTP; con cabecera Range responde 206 con el resto.
     fn servidor(datos: Vec<u8>) -> String {

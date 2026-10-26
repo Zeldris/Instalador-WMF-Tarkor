@@ -126,6 +126,11 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
   de la narración de prueba (ronda de diseño del 2026-10-25). Si calentar el narrador o una narración fallan por
   falta de memoria (`serve` sigue vivo y la pantalla del motor detenido no sale), ofrecer el perfil más ligero
   (hallazgo de la revisión de `INS-43`).
+  Hecho del trozo A (2026-10-26, autopausa; falta el trozo B): el núcleo clasifica los errores de Ollama
+  (`Error::es_de_red`, `sin_memoria`; `motor::Error::es_de_red`), Tauri devuelve `ErrorIa {mensaje, red, sinMemoria}` en
+  `instalar_motor` y `descargar_modelos`, y la Descarga espera con «Esperando conexión» y reintenta sola a los 5, 10,
+  20, 40 y 60 s (con «Pausar» y «Reintentar ahora»); E2E con `FALSO_CORTES_PULL`. Pendiente: lo mismo al cambiar de
+  perfil en Ajustes (`cambiar_perfil`) y en Reparar, que siguen mostrando el error de red como texto.
 - [x] **INS-43** (2026-10-25) Ajustes → Rendimiento de la IA (con uso de la gráfica vía `/api/ps`) y pantalla de
   motor detenido. Decidido el 2026-10-25 (ver `11`): frase de dónde corre la IA y memoria real; cambiar de perfil
   descarga, reinicia el motor y ofrece borrar lo que sobra; "Copiar informe" con "Ver detalles"; un hilo de Rust

@@ -5,6 +5,7 @@
 
 import type { Api } from './api'
 import { catalogo, descargaGb as descargaDe } from './catalogo'
+import { ErrorIa } from './tipos'
 import type { Config, Equipo, Evaluacion, MotorDetenido, PerfilEvaluado, Sobrante, UsoIa } from './tipos'
 
 export const configInicial = (): Config => ({
@@ -84,7 +85,12 @@ export const fijarErrorCambioPerfil = (mensaje: string) => { errorCambioPerfil =
 let retardoCambioPerfil = 0
 /** Para los tests: el cambio de perfil tarda esto (ms) antes de acabar o de fallar. */
 export const fijarRetardoCambioPerfil = (ms: number) => { retardoCambioPerfil = ms }
-export const reiniciarModelos = () => { errorCambioPerfil = null; retardoCambioPerfil = 0; sobrantes = []; usoSimulado = { porcentajeGpu: 100, memoriaMb: 5400 } }
+let sinRedRestantes = 0
+/** El motor simulado se «instala» una vez, como el real: un reintento de la Descarga ya no lo repite. */
+let motorInstalado = false
+/** Para los tests: las `n` siguientes llamadas a `descargarModelos` fallan por falta de red (un `ErrorIa` con `red`), como el núcleo. */
+export const fijarSinRed = (n: number) => { sinRedRestantes = n }
+export const reiniciarModelos = () => { sinRedRestantes = 0; motorInstalado = false; errorCambioPerfil = null; retardoCambioPerfil = 0; sobrantes = []; usoSimulado = { porcentajeGpu: 100, memoriaMb: 5400 } }
 const modelosDe = (id: string | null) => {
   const perfil = catalogo.perfiles.find((p) => p.id === id) ?? catalogo.perfiles[0]
   return [...new Set([perfil.narrador, perfil.cronista, perfil.sugerencias, perfil.embeddings])]
@@ -128,7 +134,7 @@ export const ejemplo: Api = {
   evaluarPerfiles: async (equipo) => evaluarEjemplo(equipo),
   estadoMotor: async () => ({
     version: catalogo.motor.version,
-    instalado: false,
+    instalado: motorInstalado,
     enMarcha: false,
     descargaGb: catalogo.motor.paquetes.linux.descargaGb,
     modelosGb: Object.fromEntries(Object.entries(catalogo.modelos).map(([k, v]) => [k, v.descargaGb])),
@@ -140,12 +146,20 @@ export const ejemplo: Api = {
     progreso({ fase: 'verificando' })
     progreso({ fase: 'extrayendo' })
     progreso({ fase: 'listo' })
+    motorInstalado = true
   },
   iniciarMotor: async () => {},
   descargarModelos: async (progreso) => {
     cancelado = false
     const perfil = catalogo.perfiles.find((p) => p.id === guardada.perfil) ?? catalogo.perfiles[0]
     const modelos = [...new Set([perfil.narrador, perfil.cronista, perfil.sugerencias, perfil.embeddings])]
+    if (sinRedRestantes > 0) {
+      sinRedRestantes--
+      // Como Ollama: empieza por el manifiesto (sin bytes) y ahí se corta.
+      progreso({ modelo: modelos[0], estado: 'pulling manifest', hecho: 0, total: 0 })
+      await pausa(30)
+      throw new ErrorIa('No se pudo conectar con el servidor de modelos. Comprueba tu conexión a internet y vuelve a intentarlo; lo ya descargado se conserva.', true)
+    }
     for (const modelo of modelos) {
       const total = (catalogo.modelos[modelo]?.descargaGb ?? 1) * 1024 ** 3
       await simular(total, 8, (hecho) => progreso({ modelo, estado: 'pulling', hecho, total }))

@@ -2,11 +2,14 @@
 // navegador normal, y los tests) usa un equipo de ejemplo y descargas simuladas.
 
 import { Channel, invoke } from '@tauri-apps/api/core'
+import { aErrorIa } from './tipos'
 import type { Comprobacion, Config, Equipo, Evaluacion, InfoMotor, MotorDetenido, ProgresoModelo, ProgresoMotor, Reparacion, Rutas, Sobrante, UsoIa } from './tipos'
 import { listen } from '@tauri-apps/api/event'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { open } from '@tauri-apps/plugin-dialog'
 import { ejemplo } from './ejemplo'
+
+export { ErrorIa } from './tipos'
 
 export const enTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
@@ -17,8 +20,10 @@ export interface Api {
   analizarEquipo(): Promise<Equipo>
   evaluarPerfiles(equipo: Equipo | null): Promise<Evaluacion>
   estadoMotor(): Promise<InfoMotor>
+  /** Falla con un `ErrorIa`: `red` si se perdió internet (la Descarga espera y reintenta sola). */
   instalarMotor(progreso: (p: ProgresoMotor) => void): Promise<void>
   iniciarMotor(): Promise<void>
+  /** Falla con un `ErrorIa`: `red` si se perdió internet (la Descarga espera y reintenta sola). */
   descargarModelos(progreso: (p: ProgresoModelo) => void): Promise<string[]>
   cancelarDescargas(): Promise<void>
   /** Comprueba el motor y los modelos del perfil y repone lo que falte o esté dañado. */
@@ -60,9 +65,9 @@ const tauri: Api = {
   analizarEquipo: () => invoke('analizar_equipo'),
   evaluarPerfiles: (equipo) => invoke('evaluar_perfiles', { equipo }),
   estadoMotor: () => invoke('estado_motor'),
-  instalarMotor: (progreso) => invoke('instalar_motor', { canal: canal(progreso) }),
+  instalarMotor: (progreso) => invoke<void>('instalar_motor', { canal: canal(progreso) }).catch((e) => { throw aErrorIa(e) }),
   iniciarMotor: () => invoke('iniciar_motor'),
-  descargarModelos: (progreso) => invoke('descargar_modelos', { canal: canal(progreso) }),
+  descargarModelos: (progreso) => invoke<string[]>('descargar_modelos', { canal: canal(progreso) }).catch((e) => { throw aErrorIa(e) }),
   cancelarDescargas: () => invoke('cancelar_descargas'),
   reparar: (motor, modelos) => invoke('reparar', { canalMotor: canal(motor), canal: canal(modelos) }),
   comprobar: (id) => invoke('comprobar', { id }),

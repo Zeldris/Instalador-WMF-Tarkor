@@ -1,14 +1,15 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
-import { perfilDe, perfilMasLigero } from './tipos'
+import { ErrorIa, perfilDe, perfilMasLigero } from './tipos'
 import { catalogo } from './catalogo'
 import { Ajustes, ElegirPerfil, Listo } from './pantallas'
 import { Descarga } from './pantallasIa'
-import { ejemplo, configInicial, evaluarEjemplo, equipoEjemplo, fijarDiscoLibreIa, fijarErrorCambioPerfil, fijarRetardoCambioPerfil, fijarErrorCarpetaIa, fijarModelosDanados, fijarUsoIa, reiniciarCarpetaIa, reiniciarModelos, emitirMotorDetenido, fijarErrorCopiar, fijarErrorReintento, fijarMotorDetenido, oyentesMotor, reiniciarMotorDetenido, textoCopiado, TEXTO_INFORME } from './ejemplo'
+import { ejemplo, configInicial, evaluarEjemplo, equipoEjemplo, fijarDiscoLibreIa, fijarErrorCambioPerfil, fijarRetardoCambioPerfil, fijarErrorCarpetaIa, fijarModelosDanados, fijarSinRed, fijarUsoIa, reiniciarCarpetaIa, reiniciarModelos, emitirMotorDetenido, fijarErrorCopiar, fijarErrorReintento, fijarMotorDetenido, oyentesMotor, reiniciarMotorDetenido, textoCopiado, TEXTO_INFORME } from './ejemplo'
 
 afterEach(async () => {
   cleanup()
+  vi.restoreAllMocks()
   await ejemplo.guardarConfig(configInicial())
   reiniciarCarpetaIa()
   fijarModelosDanados(false)
@@ -479,4 +480,65 @@ describe('asistente de primer arranque', () => {
     expect(guardada.consentimientoAceptado).toBe(true)
     expect(guardada.pasoAsistente).toBe(3)
   })
+})
+
+describe('descarga sin red (INS-42)', () => {
+  const e = evaluarEjemplo(equipoEjemplo)
+  const config = { ...configInicial(), perfil: e.recomendado }
+  /** Descarga con esperas de décimas de segundo; `llamadas` guarda cuándo se llamó a `descargarModelos`. */
+  const conEsperas = (esperas: number[]) => {
+    const llamadas: number[] = []
+    const original = ejemplo.descargarModelos
+    vi.spyOn(ejemplo, 'descargarModelos').mockImplementation((p) => { llamadas.push(Date.now()); return original(p) })
+    render(<Descarga ir={() => {}} config={config} evaluacion={e} actualizar={() => {}} esperas={esperas} />)
+    return llamadas
+  }
+
+  it('si se pierde la red muestra «Esperando conexión» y reanuda sola, cada vez más espaciada, hasta terminar', async () => {
+    fijarSinRed(2)
+    const llamadas = conEsperas([0.05, 0.4])
+    expect((await screen.findAllByText('Esperando conexión', {}, { timeout: 2000 })).length).toBeGreaterThan(0)
+    expect(screen.getByRole('status').textContent).toContain('La descarga seguirá sola cuando vuelva la red')
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Reintentar ahora' })).toBeTruthy()
+    fireEvent.click(await boton('Comprobar la instalación', 10000))
+    expect(llamadas).toHaveLength(3)
+    // La segunda espera (0,4 s) es más larga que la primera (0,05 s).
+    expect(llamadas[2] - llamadas[1]).toBeGreaterThanOrEqual(llamadas[1] - llamadas[0] + 250)
+    expect(screen.queryByText('Esperando conexión')).toBeNull()
+  }, 20000)
+
+  it('Pausar durante la espera cancela el reintento programado', async () => {
+    fijarSinRed(1)
+    const llamadas = conEsperas([0.2])
+    await screen.findAllByText('Esperando conexión', {}, { timeout: 2000 })
+    fireEvent.click(screen.getByRole('button', { name: 'Pausar' }))
+    expect(await boton('Reanudar')).toBeTruthy()
+    expect(screen.queryByText('Esperando conexión')).toBeNull()
+    await new Promise((ok) => setTimeout(ok, 500))
+    expect(llamadas).toHaveLength(1)
+    // Reanudar sí vuelve a intentarlo y termina.
+    fireEvent.click(screen.getByRole('button', { name: 'Reanudar' }))
+    await boton('Comprobar la instalación', 10000)
+    expect(llamadas).toHaveLength(2)
+  }, 20000)
+
+  it('«Reintentar ahora» no espera al temporizador', async () => {
+    fijarSinRed(1)
+    const llamadas = conEsperas([60])
+    await screen.findAllByText('Esperando conexión', {}, { timeout: 2000 })
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar ahora' }))
+    await boton('Comprobar la instalación', 10000)
+    expect(llamadas).toHaveLength(2)
+  }, 20000)
+
+  it('un error que no es de red sigue mostrando el error y «Reintentar»', async () => {
+    vi.spyOn(ejemplo, 'descargarModelos').mockRejectedValueOnce(new ErrorIa('Tu equipo se ha quedado sin memoria al cargar el modelo.', false, true))
+    render(<Descarga ir={() => {}} config={config} evaluacion={e} actualizar={() => {}} esperas={[0.05]} />)
+    expect((await screen.findByRole('alert', {}, { timeout: 2000 })).textContent).toBe('Tu equipo se ha quedado sin memoria al cargar el modelo.')
+    expect(screen.queryByText('Esperando conexión')).toBeNull()
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(await boton('Reintentar')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Reintentar ahora' })).toBeNull()
+  }, 20000)
 })

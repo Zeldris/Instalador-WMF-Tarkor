@@ -133,6 +133,15 @@ async function recorrido() {
     await cerrar()
     return
   }
+  if (Number(process.env.FALSO_CORTES_PULL ?? 0) > 0) {
+    // El Ollama falso corta la primera descarga como sin internet: la fila pasa a «Esperando conexión», el aviso
+    // lo explica y, pasada la primera espera (5 s), la descarga sigue sola hasta terminar.
+    await buscar('//span[@class="estado"][normalize-space()="Esperando conexión"]', 30000)
+    const aviso = await texto('//div[@role="status"]', 5000)
+    comprobar(aviso.startsWith('Sin conexión. La descarga seguirá sola cuando vuelva la red'), `aviso de espera: "${aviso}"`)
+    comprobar((await wd('POST', s('/elements'), { using: 'xpath', value: '//div[@role="alert"]' })).length === 0, 'la falta de red no se muestra como error')
+    await captura('esperando-conexion')
+  }
   await pulsar('Comprobar la instalación', 600000)
 
   await buscar(titulo('Comprobación'))

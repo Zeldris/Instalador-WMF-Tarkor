@@ -121,6 +121,10 @@ La pantalla central del asistente.
   diálogo del sistema) y avisa de que lo descargado se conserva para continuar.
 - Si se pierde la conexión: la descarga se pausa sola, la fila pasa a "Esperando conexión" y se
   reanuda al volver la red, con reintentos cada vez más espaciados (Heroic: autopausa y reanuda).
+  Los reintentos van a los 5, 10, 20, 40 y luego cada 60 s (el contador vuelve a 5 s en cuanto llega
+  progreso), con una cuenta atrás y dos botones: «Pausar» (cancela el reintento) y «Reintentar ahora».
+  Solo cuenta como falta de red lo que se arregla solo (sin DNS, conexión cortada, tiempo agotado):
+  un cortafuegos o proxy que bloquea el registro, o un disco lleno, siguen siendo un error con «Reintentar».
 - Encima de las filas, la carpeta de destino con "Cambiar carpeta" mientras no haya empezado
   (LM Studio y Ollama permiten cambiar la carpeta de modelos; en la Deck, para la tarjeta SD).
 

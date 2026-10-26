@@ -106,6 +106,41 @@ impl Estado {
 
 type Res<T> = Result<T, String>;
 
+/// Error de una descarga que el frontal distingue por su clase (`INS-42`): `red` (se perdió internet: la Descarga
+/// espera y reintenta sola) y `sin_memoria` (pide un perfil más ligero). Viaja como objeto, no como texto.
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct ErrorIa {
+    mensaje: String,
+    red: bool,
+    sin_memoria: bool,
+}
+
+impl From<String> for ErrorIa {
+    fn from(mensaje: String) -> Self {
+        ErrorIa { mensaje, red: false, sin_memoria: false }
+    }
+}
+
+impl From<ollama::Error> for ErrorIa {
+    fn from(e: ollama::Error) -> Self {
+        ErrorIa { mensaje: e.to_string(), red: e.es_de_red(), sin_memoria: e.sin_memoria() }
+    }
+}
+
+impl From<motor::Error> for ErrorIa {
+    fn from(e: motor::Error) -> Self {
+        ErrorIa { mensaje: e.to_string(), red: e.es_de_red(), sin_memoria: false }
+    }
+}
+
+/// Para que `?` siga sirviendo dentro de los comandos que devuelven `Res`.
+impl From<ErrorIa> for String {
+    fn from(e: ErrorIa) -> Self {
+        e.mensaje
+    }
+}
+
 #[tauri::command]
 fn rutas(estado: State<'_, Estado>) -> Rutas {
     Rutas { ia: estado.ia(), ..estado.rutas.clone() }
@@ -182,7 +217,7 @@ fn cancelar_descargas(estado: State<'_, Estado>) {
 }
 
 #[tauri::command]
-async fn instalar_motor(app: tauri::AppHandle, canal: Channel<motor::Progreso>) -> Res<()> {
+async fn instalar_motor(app: tauri::AppHandle, canal: Channel<motor::Progreso>) -> Result<(), ErrorIa> {
     let estado = app.state::<Estado>();
     if estado.ollama_externo.is_some() {
         let _ = canal.send(motor::Progreso::Listo);
@@ -195,10 +230,10 @@ async fn instalar_motor(app: tauri::AppHandle, canal: Channel<motor::Progreso>) 
             let _ = canal.send(p);
         })
         .map(|_| ())
-        .map_err(|e| e.to_string())
+        .map_err(ErrorIa::from)
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| ErrorIa::from(e.to_string()))?
 }
 
 /// Arranca Ollama con los ajustes del perfil y el equipo guardados (docs/12). Si ya estaba en
@@ -321,25 +356,23 @@ async fn cambiar_carpeta_ia(app: tauri::AppHandle, destino: String) -> Res<Rutas
 
 /// Baja los `modelos` que `cliente` aún no tiene, avisando por `canal`. Ollama reanuda lo que se
 /// quedara a medias; `cancelar` corta la descarga en curso.
-fn descargar_faltantes(cliente: &Cliente, modelos: &[String], cancelar: &AtomicBool, canal: &Channel<ProgresoModelo>) -> Res<()> {
-    let hay = cliente.modelos().map_err(|e| e.to_string())?;
+fn descargar_faltantes(cliente: &Cliente, modelos: &[String], cancelar: &AtomicBool, canal: &Channel<ProgresoModelo>) -> Result<(), ollama::Error> {
+    let hay = cliente.modelos()?;
     for m in modelos {
         if tiene(&hay, m) {
             let _ = canal.send(ProgresoModelo { modelo: m.clone(), estado: "success".into(), hecho: 1, total: 1 });
             continue;
         }
-        cliente
-            .descargar_modelo(m, cancelar, &mut |p| {
-                let _ = canal.send(p);
-            })
-            .map_err(|e| e.to_string())?;
+        cliente.descargar_modelo(m, cancelar, &mut |p| {
+            let _ = canal.send(p);
+        })?;
     }
     Ok(())
 }
 
 /// Descarga los modelos del perfil que falten. Ollama reanuda lo que se quedara a medias.
 #[tauri::command]
-async fn descargar_modelos(app: tauri::AppHandle, canal: Channel<ProgresoModelo>) -> Res<Vec<String>> {
+async fn descargar_modelos(app: tauri::AppHandle, canal: Channel<ProgresoModelo>) -> Result<Vec<String>, ErrorIa> {
     let estado = app.state::<Estado>();
     estado.cancelar.store(false, Ordering::Relaxed);
     let perfil = estado.perfil(&estado.config())?.clone();
@@ -351,7 +384,7 @@ async fn descargar_modelos(app: tauri::AppHandle, canal: Channel<ProgresoModelo>
         Ok(modelos)
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| ErrorIa::from(e.to_string()))?
 }
 
 /// Cambia de perfil desde Ajustes (`INS-43`, docs/11): descarga con el motor en marcha lo que falte
@@ -389,7 +422,8 @@ async fn cambiar_perfil(app: tauri::AppHandle, perfil: String, canal: Channel<Pr
     let (cancelar, lista) = (estado.cancelar.clone(), modelos.clone());
     tauri::async_runtime::spawn_blocking(move || descargar_faltantes(&cliente, &lista, &cancelar, &canal))
         .await
-        .map_err(|e| e.to_string())??;
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())?;
     // Se vuelve a leer: lo que el asistente guardara durante la descarga no se pisa.
     let mut config = estado.config();
     config.perfil = Some(perfil);
