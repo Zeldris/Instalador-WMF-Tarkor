@@ -111,7 +111,11 @@ Ver [`06`](06-inventario-exclusiones.md).
   (latin y latin-ext, de `@fontsource-variable` 5.3.0) y sus `LICENSE-*.txt` (OFL, ver `08`); en `frontend` no
   queda ninguna petición a Google Fonts. Sin cambios en el juego.
 - [ ] **INS-33** Frontend: quitar `ImagePromptSlot`; deshabilitar "Crear desde cero" como "en
-  construcción"; revisar el texto de `ComingSoon.tsx`.
+  construcción"; revisar el texto de `ComingSoon.tsx`. Decidido por la usuaria (2026-10-26): en el juego
+  empaquetado (`window.__TARKOR__` presente) desaparece todo lo de admin: el enlace de `Home.tsx`, las rutas
+  `/admin/*` y `ImagePromptSlot` en cualquier sitio (ya estaba tras el modo desarrollador, `CFG-33` del juego); en
+  desarrollo sigue igual. «Crear desde cero» deshabilitada y el texto de `ComingSoon.tsx` («en construcción para
+  futuras versiones») cambian en todas partes. Encargada a una sesión del juego, rama `claude/ins-33-frontend-sin-admin`.
 - [ ] **INS-34** Backend: build sin rutas ni servicios de curación (ruta de image-prompt, orquestador
   cloud, `LiveTeacherCapture`, scripts).
 - [ ] **INS-35** Backend: `SYSTEM` del narrador incrustado en build; narrador con modelo base +

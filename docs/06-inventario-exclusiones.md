@@ -32,6 +32,8 @@ Tiene dos caras — datos/backend y un botón real en la UI del jugador, hay que
   de detalle de cualquier entrada de la Enciclopedia, ~líneas 633/643/657/681). Muestra un botón
   "Generar"/"Regenerar" que llama a `requestImagePrompt()` (`frontend/src/lib/api.ts`, ~línea
   2123), que pega al POST de arriba.
+- **Hoy (2026-10-26)**: `ImagePromptSlot` ya solo sale con el modo desarrollador (`CFG-33` del juego) o en
+  `/admin/enciclopedia`, enlazada desde `Home.tsx`. En el juego empaquetado se quita todo el admin (`INS-33`).
 - **Acción para el instalador**: quitar/ocultar `ImagePromptSlot` de `DetailModal.tsx` (dejar solo
   `MediaSlot`, que muestra la imagen ya empaquetada), y eliminar o desactivar la ruta POST en
   backend. Sin esto, el jugador vería botones "Generar" que fallarían con error 502 al no haber
