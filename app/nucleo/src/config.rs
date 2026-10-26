@@ -98,11 +98,7 @@ impl Rutas {
     /// `TARKOR_DATOS` sustituye la carpeta base (para pruebas y para quien quiera moverla).
     pub fn del_sistema() -> Rutas {
         if let Some(base) = std::env::var_os("TARKOR_DATOS").map(PathBuf::from) {
-            return Rutas {
-                ia: base.join("ia"),
-                registros: base.join("registros"),
-                datos: base,
-            };
+            return Rutas { ia: base.join("ia"), registros: base.join("registros"), datos: base };
         }
         Self::por_plataforma(|k| std::env::var_os(k).map(PathBuf::from))
     }
@@ -173,18 +169,11 @@ mod tests {
         fs::write(dir.path().join(NOMBRE_CONFIG), r#"{"version":1,"perfil":"maximo"}"#).unwrap();
         let c = Config::cargar(dir.path());
         assert_eq!(c.carpeta_ia, None);
-        let rutas = Rutas {
-            datos: "d".into(),
-            ia: "ia".into(),
-            registros: "r".into(),
-        };
+        let rutas = Rutas { datos: "d".into(), ia: "ia".into(), registros: "r".into() };
         assert_eq!(c.ia_efectiva(&rutas), PathBuf::from("ia"));
         assert_eq!(serde_json::to_value(&c).unwrap()["carpetaIa"], serde_json::Value::Null);
 
-        let c = Config {
-            carpeta_ia: Some("/otra/Tarkor IA".into()),
-            ..Config::default()
-        };
+        let c = Config { carpeta_ia: Some("/otra/Tarkor IA".into()), ..Config::default() };
         assert_eq!(serde_json::to_value(&c).unwrap()["carpetaIa"], "/otra/Tarkor IA");
         assert_eq!(c.ia_efectiva(&rutas), PathBuf::from("/otra/Tarkor IA"));
         c.guardar(dir.path()).unwrap();
@@ -201,11 +190,7 @@ mod tests {
 
     #[test]
     fn formato_json_en_camel_case() {
-        let json = serde_json::to_value(Config {
-            perfil: Some("ligero".into()),
-            ..Config::default()
-        })
-        .unwrap();
+        let json = serde_json::to_value(Config { perfil: Some("ligero".into()), ..Config::default() }).unwrap();
         assert_eq!(json["perfil"], "ligero");
         assert_eq!(json["asistenteCompletado"], false);
         assert_eq!(json["usoCpu"], "moderado");

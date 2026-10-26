@@ -254,10 +254,7 @@ pub fn descargar(
 ) -> Result<(), Error> {
     let parcial = destino.with_extension(format!(
         "{}.part",
-        destino
-            .extension()
-            .map(|e| e.to_string_lossy().into_owned())
-            .unwrap_or_default()
+        destino.extension().map(|e| e.to_string_lossy().into_owned()).unwrap_or_default()
     ));
     let mut ya = fs::metadata(&parcial).map(|m| m.len()).unwrap_or(0);
 
@@ -281,11 +278,7 @@ pub fn descargar(
         .unwrap_or(0);
     let (mut hecho, total) = if reanuda { (ya, ya + resto) } else { (0, resto) };
 
-    let mut salida = if reanuda {
-        File::options().append(true).open(&parcial)?
-    } else {
-        File::create(&parcial)?
-    };
+    let mut salida = if reanuda { File::options().append(true).open(&parcial)? } else { File::create(&parcial)? };
     let mut cuerpo = respuesta.into_body().into_reader();
     let mut buf = vec![0u8; 256 * 1024];
     let mut ultimo = 0u64;
@@ -307,14 +300,9 @@ pub fn descargar(
     }
     salida.sync_all()?;
     if total > 0 && hecho < total {
-        return Err(Error::Red(format!(
-            "la descarga se cortó ({hecho} de {total} bytes); se reanudará"
-        )));
+        return Err(Error::Red(format!("la descarga se cortó ({hecho} de {total} bytes); se reanudará")));
     }
-    progreso(Progreso::Descargando {
-        hecho,
-        total: total.max(hecho),
-    });
+    progreso(Progreso::Descargando { hecho, total: total.max(hecho) });
     fs::rename(&parcial, destino)?;
     Ok(())
 }
@@ -341,11 +329,7 @@ fn error_de_peticion(e: ureq::Error) -> Error {
 /// Cliente HTTP para descargas de internet: respeta el proxy del sistema y usa sus certificados.
 pub(crate) fn agente() -> ureq::Agent {
     ureq::Agent::config_builder()
-        .tls_config(
-            ureq::tls::TlsConfig::builder()
-                .root_certs(ureq::tls::RootCerts::PlatformVerifier)
-                .build(),
-        )
+        .tls_config(ureq::tls::TlsConfig::builder().root_certs(ureq::tls::RootCerts::PlatformVerifier).build())
         .build()
         .into()
 }
@@ -378,8 +362,7 @@ fn extraer(archivo: &Path, _: &PaqueteMotor, destino: &Path) -> Result<(), Error
 fn extraer(archivo: &Path, _: &PaqueteMotor, destino: &Path) -> Result<(), Error> {
     let mut zip =
         zip::ZipArchive::new(File::open(archivo)?).map_err(|e| Error::Disco(io::Error::other(e.to_string())))?;
-    zip.extract(destino)
-        .map_err(|e| Error::Disco(io::Error::other(e.to_string())))?;
+    zip.extract(destino).map_err(|e| Error::Disco(io::Error::other(e.to_string())))?;
     Ok(())
 }
 
@@ -425,11 +408,7 @@ mod tests {
                 let cuerpo = &datos[desde..];
                 let estado = if desde > 0 { "206 Partial Content" } else { "200 OK" };
                 let mut s = s;
-                let _ = write!(
-                    s,
-                    "HTTP/1.1 {estado}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-                    cuerpo.len()
-                );
+                let _ = write!(s, "HTTP/1.1 {estado}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", cuerpo.len());
                 let _ = s.write_all(cuerpo);
             }
         });
@@ -448,13 +427,7 @@ mod tests {
         let mut avisos = Vec::new();
         descargar(&url, &destino, &AtomicBool::new(false), &mut |p| avisos.push(p)).unwrap();
         assert_eq!(fs::read(&destino).unwrap(), datos);
-        assert_eq!(
-            avisos.last(),
-            Some(&Progreso::Descargando {
-                hecho: 10_000_000,
-                total: 10_000_000
-            })
-        );
+        assert_eq!(avisos.last(), Some(&Progreso::Descargando { hecho: 10_000_000, total: 10_000_000 }));
         // Reanudó: el primer aviso ya parte de los 3 MB previos.
         assert!(matches!(avisos[0], Progreso::Descargando { hecho, .. } if hecho > 3_000_000));
     }
@@ -509,11 +482,8 @@ mod tests {
                 return b"HTTP/1.1 416 Range Not Satisfiable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
                     .to_vec();
             }
-            let mut r = format!(
-                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-                cuerpo.len()
-            )
-            .into_bytes();
+            let mut r = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", cuerpo.len())
+                .into_bytes();
             r.extend_from_slice(&cuerpo);
             r
         });
@@ -579,10 +549,7 @@ mod tests {
         let f = dir.path().join("a");
         fs::write(&f, b"tarkor").unwrap();
         // Valor de referencia: `printf tarkor | sha256sum`.
-        assert_eq!(
-            sha256(&f).unwrap(),
-            "00ac1f2c6563a9612dd6d90dd53628eac0fa9a16f79179c87be9f5ebda1ae9f3"
-        );
+        assert_eq!(sha256(&f).unwrap(), "00ac1f2c6563a9612dd6d90dd53628eac0fa9a16f79179c87be9f5ebda1ae9f3");
     }
 
     #[test]
@@ -592,14 +559,7 @@ mod tests {
         let mut motor = crate::catalogo::Catalogo::incrustado().motor;
         let so = std::env::consts::OS.to_string();
         motor.url_base = url.trim_end_matches("paquete").to_string();
-        motor.paquetes.insert(
-            so,
-            PaqueteMotor {
-                archivo: "paquete".into(),
-                sha256: "0".repeat(64),
-                descarga_gb: 0.0,
-            },
-        );
+        motor.paquetes.insert(so, PaqueteMotor { archivo: "paquete".into(), sha256: "0".repeat(64), descarga_gb: 0.0 });
         let r = instalar(dir.path(), &motor, &AtomicBool::new(false), &mut |_| {});
         assert!(matches!(r, Err(Error::Danado)), "{r:?}");
         assert!(!dir.path().join("descargas/paquete").exists());
@@ -661,11 +621,7 @@ mod tests {
         motor.url_base = url.trim_end_matches("paquete").to_string();
         motor.paquetes.insert(
             std::env::consts::OS.into(),
-            PaqueteMotor {
-                archivo: "paquete".into(),
-                sha256: "0".repeat(64),
-                descarga_gb: 0.0,
-            },
+            PaqueteMotor { archivo: "paquete".into(), sha256: "0".repeat(64), descarga_gb: 0.0 },
         );
         let r = reparar(dir.path(), &motor, &AtomicBool::new(false), &mut |_| {});
         assert!(matches!(r, Err(Error::Danado)), "{r:?}");
@@ -710,9 +666,7 @@ mod tests {
         fs::write(c.join("lib/libcudart.so.12.8"), b"cuda").unwrap();
         std::os::unix::fs::symlink("libcudart.so.12.8", c.join("lib/libcudart.so.12")).unwrap();
         escribir_sumas(&c).unwrap();
-        assert!(fs::read_to_string(c.join(MARCA_COMPLETO))
-            .unwrap()
-            .contains("  lib/libcudart.so.12\n"));
+        assert!(fs::read_to_string(c.join(MARCA_COMPLETO)).unwrap().contains("  lib/libcudart.so.12\n"));
         fs::remove_file(c.join("lib/libcudart.so.12")).unwrap();
         assert!(!integro(dir.path(), &motor, &AtomicBool::new(false)).unwrap());
     }

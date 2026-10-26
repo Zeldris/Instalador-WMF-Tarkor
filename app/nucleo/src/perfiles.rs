@@ -135,12 +135,9 @@ pub(crate) mod tests {
                 vram_mb: Some(v * 1024),
                 integrada: false,
             }],
-            None => vec![Gpu {
-                nombre: "integrada".into(),
-                fabricante: Fabricante::Amd,
-                vram_mb: None,
-                integrada: true,
-            }],
+            None => {
+                vec![Gpu { nombre: "integrada".into(), fabricante: Fabricante::Amd, vram_mb: None, integrada: true }]
+            }
         };
         Equipo {
             ram_total_mb: ram_gb * 1024,

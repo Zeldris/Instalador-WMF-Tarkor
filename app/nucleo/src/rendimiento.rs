@@ -85,22 +85,14 @@ pub fn calcular(catalogo: &Catalogo, perfil: &Perfil, equipo: Option<&Equipo>, u
         ("TARKOR_NUM_THREAD", hilos.to_string()),
         ("TARKOR_NUM_BATCH", if margen_justo { "256" } else { "512" }.into()),
         ("TARKOR_NUM_CTX_NARRADOR", catalogo.reglas.contexto_narrador.to_string()),
-        (
-            "TARKOR_MODELOS_SIN_PENSAR",
-            catalogo.modelos_que_piensan(perfil).join(","),
-        ),
+        ("TARKOR_MODELOS_SIN_PENSAR", catalogo.modelos_que_piensan(perfil).join(",")),
     ];
 
     let a_string = |v: Vec<(&str, String)>| v.into_iter().map(|(k, x)| (k.to_string(), x)).collect();
     Ajustes {
         ollama: a_string(ollama),
         backend: a_string(backend),
-        resumen: Resumen {
-            hilos,
-            cache_contexto: cache,
-            usa_gpu_dedicada: gpu_dedicada,
-            margen_justo,
-        },
+        resumen: Resumen { hilos, cache_contexto: cache, usa_gpu_dedicada: gpu_dedicada, margen_justo },
     }
 }
 

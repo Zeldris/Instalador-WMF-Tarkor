@@ -157,18 +157,9 @@ mod tests {
     fn ruta_del_manifiesto_segun_el_nombre() {
         let c = Path::new("m");
         let m = |r: &str| c.join("manifests").join(r);
-        assert_eq!(
-            manifiesto(c, "qwen2.5:7b"),
-            Some(m("registry.ollama.ai/library/qwen2.5/7b"))
-        );
-        assert_eq!(
-            manifiesto(c, "nomic-embed-text"),
-            Some(m("registry.ollama.ai/library/nomic-embed-text/latest"))
-        );
-        assert_eq!(
-            manifiesto(c, "usuaria/modelo:q4"),
-            Some(m("registry.ollama.ai/usuaria/modelo/q4"))
-        );
+        assert_eq!(manifiesto(c, "qwen2.5:7b"), Some(m("registry.ollama.ai/library/qwen2.5/7b")));
+        assert_eq!(manifiesto(c, "nomic-embed-text"), Some(m("registry.ollama.ai/library/nomic-embed-text/latest")));
+        assert_eq!(manifiesto(c, "usuaria/modelo:q4"), Some(m("registry.ollama.ai/usuaria/modelo/q4")));
         assert_eq!(manifiesto(c, "hf.co/org/modelo"), Some(m("hf.co/org/modelo/latest")));
     }
 
@@ -271,12 +262,7 @@ mod tests {
     fn la_comprobacion_de_los_modelos_se_puede_cancelar() {
         let dir = tempfile::tempdir().unwrap();
         guardar(dir.path(), "qwen2.5:7b");
-        let r = reparar(
-            dir.path(),
-            &["qwen2.5:7b".into()],
-            &AtomicBool::new(true),
-            &mut |_, _| {},
-        );
+        let r = reparar(dir.path(), &["qwen2.5:7b".into()], &AtomicBool::new(true), &mut |_, _| {});
         assert!(matches!(r, Err(Error::Cancelado)), "{r:?}");
     }
 }

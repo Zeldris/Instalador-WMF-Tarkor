@@ -74,10 +74,7 @@ pub struct Equipo {
 impl Equipo {
     /// La gráfica dedicada con más VRAM fiable, si la hay. Es la que usaría Ollama.
     pub fn gpu_dedicada(&self) -> Option<&Gpu> {
-        self.gpus
-            .iter()
-            .filter(|g| !g.integrada && g.vram_mb.is_some())
-            .max_by_key(|g| g.vram_mb)
+        self.gpus.iter().filter(|g| !g.integrada && g.vram_mb.is_some()).max_by_key(|g| g.vram_mb)
     }
 }
 
@@ -111,12 +108,7 @@ pub fn analizar(carpeta_datos: &Path) -> Equipo {
 /// Clasifica una gráfica a partir de lo leído del sistema.
 pub fn clasificar_gpu(fabricante: Fabricante, nombre: String, vram_mb: Option<u64>) -> Gpu {
     let integrada = fabricante == Fabricante::Intel || vram_mb.is_none_or(|v| v < VRAM_MINIMA_DEDICADA_MB);
-    Gpu {
-        nombre,
-        fabricante,
-        vram_mb: vram_mb.filter(|_| !integrada),
-        integrada,
-    }
+    Gpu { nombre, fabricante, vram_mb: vram_mb.filter(|_| !integrada), integrada }
 }
 
 #[cfg(target_os = "linux")]
@@ -219,18 +211,10 @@ mod windows_dxgi {
             if desc.Flags & (DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32) != 0 {
                 continue; // "Microsoft Basic Render Driver"
             }
-            let fin = desc
-                .Description
-                .iter()
-                .position(|&c| c == 0)
-                .unwrap_or(desc.Description.len());
+            let fin = desc.Description.iter().position(|&c| c == 0).unwrap_or(desc.Description.len());
             let nombre = String::from_utf16_lossy(&desc.Description[..fin]);
             let vram = desc.DedicatedVideoMemory as u64 / MB;
-            out.push(clasificar_gpu(
-                Fabricante::desde_vendor_id(desc.VendorId),
-                nombre,
-                Some(vram),
-            ));
+            out.push(clasificar_gpu(Fabricante::desde_vendor_id(desc.VendorId), nombre, Some(vram)));
         }
         out
     }

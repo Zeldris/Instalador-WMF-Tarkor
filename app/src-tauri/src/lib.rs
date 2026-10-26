@@ -76,10 +76,7 @@ mod arranque {
 
     impl Candado {
         pub async fn coger(&self) -> Turno<'_> {
-            Turno {
-                candado: self,
-                _guarda: Box::new(self.0.lock().await),
-            }
+            Turno { candado: self, _guarda: Box::new(self.0.lock().await) }
         }
 
         /// El turno solo si hay que arrancar: con el candado cogido pregunta `en_marcha`, y si ya corre lo suelta. La
@@ -109,7 +106,7 @@ impl<'a> Ocupado<'a> {
     fn tomar(bandera: &'a AtomicBool) -> Res<Self> {
         if bandera.swap(true, Ordering::SeqCst) {
             return Err(
-                "Ya hay una reparación, un cambio de carpeta o de perfil en marcha; espera a que termine.".into(),
+                "Ya hay una reparación, un cambio de carpeta o de perfil en marcha; espera a que termine.".into()
             );
         }
         Ok(Ocupado(bandera))
@@ -134,16 +131,12 @@ impl Estado {
 
     fn perfil(&self, config: &Config) -> Result<&Perfil, String> {
         let id = config.perfil.as_deref().ok_or("todavía no se ha elegido perfil")?;
-        self.catalogo
-            .perfil(id)
-            .ok_or_else(|| format!("perfil desconocido: {id}"))
+        self.catalogo.perfil(id).ok_or_else(|| format!("perfil desconocido: {id}"))
     }
 
     /// Si el motor contesta ahora (bloqueante: red).
     fn en_marcha(&self) -> bool {
-        self.cliente()
-            .and_then(|c| c.version().map_err(|e| e.to_string()))
-            .is_ok()
+        self.cliente().and_then(|c| c.version().map_err(|e| e.to_string())).is_ok()
     }
 
     fn cliente(&self) -> Result<Cliente, String> {
@@ -151,16 +144,12 @@ impl Estado {
             return Ok(Cliente::new(url.clone()));
         }
         let url = self.url_motor.lock().unwrap().clone();
-        url.map(Cliente::new)
-            .ok_or_else(|| "El motor de IA no está en marcha.".to_string())
+        url.map(Cliente::new).ok_or_else(|| "El motor de IA no está en marcha.".to_string())
     }
 
     /// Saca el motor propio del `Mutex` (y su URL) para pararlo o sustituirlo, con el candado de arranque cogido.
     fn sacar_motor(&self, turno: &Turno<'_>) -> Option<Proceso> {
-        assert!(
-            turno.es_de(&self.arranque),
-            "sacar_motor con un turno que no es de Estado::arranque"
-        );
+        assert!(turno.es_de(&self.arranque), "sacar_motor con un turno que no es de Estado::arranque");
         let p = self.motor.lock().unwrap().take();
         *self.url_motor.lock().unwrap() = None;
         p
@@ -168,10 +157,7 @@ impl Estado {
 
     /// Pone el motor recién arrancado, con su URL.
     fn poner_motor(&self, proceso: Proceso, turno: &Turno<'_>) {
-        assert!(
-            turno.es_de(&self.arranque),
-            "poner_motor con un turno que no es de Estado::arranque"
-        );
+        assert!(turno.es_de(&self.arranque), "poner_motor con un turno que no es de Estado::arranque");
         let url = proceso.url();
         *self.motor.lock().unwrap() = Some(proceso);
         *self.url_motor.lock().unwrap() = Some(url);
@@ -192,31 +178,19 @@ struct ErrorIa {
 
 impl From<String> for ErrorIa {
     fn from(mensaje: String) -> Self {
-        ErrorIa {
-            mensaje,
-            red: false,
-            sin_memoria: false,
-        }
+        ErrorIa { mensaje, red: false, sin_memoria: false }
     }
 }
 
 impl From<ollama::Error> for ErrorIa {
     fn from(e: ollama::Error) -> Self {
-        ErrorIa {
-            mensaje: e.to_string(),
-            red: e.es_de_red(),
-            sin_memoria: e.sin_memoria(),
-        }
+        ErrorIa { mensaje: e.to_string(), red: e.es_de_red(), sin_memoria: e.sin_memoria() }
     }
 }
 
 impl From<motor::Error> for ErrorIa {
     fn from(e: motor::Error) -> Self {
-        ErrorIa {
-            mensaje: e.to_string(),
-            red: e.es_de_red(),
-            sin_memoria: false,
-        }
+        ErrorIa { mensaje: e.to_string(), red: e.es_de_red(), sin_memoria: false }
     }
 }
 
@@ -229,10 +203,7 @@ impl From<ErrorIa> for String {
 
 #[tauri::command]
 fn rutas(estado: State<'_, Estado>) -> Rutas {
-    Rutas {
-        ia: estado.ia(),
-        ..estado.rutas.clone()
-    }
+    Rutas { ia: estado.ia(), ..estado.rutas.clone() }
 }
 
 /// De dónde salió el catálogo (incrustado, externo, o externo inválido y por qué).
@@ -255,9 +226,7 @@ fn guardar_config(estado: State<'_, Estado>, config: Config) -> Res<()> {
 #[tauri::command]
 async fn analizar_equipo(estado: State<'_, Estado>) -> Res<Equipo> {
     let datos = estado.rutas.datos.clone();
-    tauri::async_runtime::spawn_blocking(move || equipo::analizar(&datos))
-        .await
-        .map_err(|e| e.to_string())
+    tauri::async_runtime::spawn_blocking(move || equipo::analizar(&datos)).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -272,10 +241,7 @@ fn ajustes_rendimiento(
     equipo: Option<Equipo>,
     uso_cpu: UsoCpu,
 ) -> Res<Ajustes> {
-    let p = estado
-        .catalogo
-        .perfil(&perfil)
-        .ok_or_else(|| format!("perfil desconocido: {perfil}"))?;
+    let p = estado.catalogo.perfil(&perfil).ok_or_else(|| format!("perfil desconocido: {perfil}"))?;
     Ok(rendimiento::calcular(&estado.catalogo, p, equipo.as_ref(), uso_cpu))
 }
 
@@ -301,17 +267,8 @@ async fn estado_motor(app: tauri::AppHandle) -> Res<InfoMotor> {
             version: m.version.clone(),
             instalado: estado.ollama_externo.is_some() || motor::instalado(&estado.ia(), m),
             en_marcha: estado.en_marcha(),
-            descarga_gb: if estado.ollama_externo.is_some() {
-                0.0
-            } else {
-                m.paquete().map_or(0.0, |p| p.descarga_gb)
-            },
-            modelos_gb: estado
-                .catalogo
-                .modelos
-                .iter()
-                .map(|(k, v)| (k.clone(), v.descarga_gb))
-                .collect(),
+            descarga_gb: if estado.ollama_externo.is_some() { 0.0 } else { m.paquete().map_or(0.0, |p| p.descarga_gb) },
+            modelos_gb: estado.catalogo.modelos.iter().map(|(k, v)| (k.clone(), v.descarga_gb)).collect(),
         }
     })
     .await
@@ -364,9 +321,7 @@ async fn asegurar(app: &tauri::AppHandle) -> Res<()> {
     let estado = app.state::<Estado>();
     let en_marcha = || async {
         let a = app.clone();
-        tauri::async_runtime::spawn_blocking(move || a.state::<Estado>().en_marcha())
-            .await
-            .unwrap_or(false)
+        tauri::async_runtime::spawn_blocking(move || a.state::<Estado>().en_marcha()).await.unwrap_or(false)
     };
     let Some(turno) = estado.arranque.turno_si_parado(en_marcha).await else {
         return Ok(());
@@ -400,10 +355,7 @@ async fn arrancar_con_turno(app: &tauri::AppHandle, turno: &Turno<'_>) -> Res<()
     let puerto = procesos::puerto_libre().map_err(|e| e.to_string())?;
     let mut entorno: BTreeMap<String, String> = ajustes.ollama.into_iter().collect();
     entorno.insert("OLLAMA_HOST".into(), format!("127.0.0.1:{puerto}"));
-    entorno.insert(
-        "OLLAMA_MODELS".into(),
-        modelos::carpeta(&ia).to_string_lossy().into_owned(),
-    );
+    entorno.insert("OLLAMA_MODELS".into(), modelos::carpeta(&ia).to_string_lossy().into_owned());
     let espec = Especificacion {
         nombre: "El motor de IA".into(),
         programa: ejecutable,
@@ -447,17 +399,10 @@ async fn rearrancar_o_avisar(app: &tauri::AppHandle, turno: &Turno<'_>) {
 async fn cambiar_carpeta_ia(app: tauri::AppHandle, destino: String) -> Res<Rutas> {
     let estado = app.state::<Estado>();
     let elegida = PathBuf::from(destino);
-    let nueva = if elegida.file_name().is_some_and(|n| n == "Tarkor IA") {
-        elegida
-    } else {
-        elegida.join("Tarkor IA")
-    };
+    let nueva = if elegida.file_name().is_some_and(|n| n == "Tarkor IA") { elegida } else { elegida.join("Tarkor IA") };
     let actual = estado.ia();
     if nueva == actual {
-        return Ok(Rutas {
-            ia: actual,
-            ..estado.rutas.clone()
-        });
+        return Ok(Rutas { ia: actual, ..estado.rutas.clone() });
     }
     let _ocupado = Ocupado::tomar(&estado.ocupado)?;
     // Parar, mover y volver a arrancar, sin que `asegurar_motor` arranque un motor en mitad del movimiento.
@@ -492,14 +437,8 @@ async fn cambiar_carpeta_ia(app: tauri::AppHandle, destino: String) -> Res<Rutas
             rearrancar_o_avisar(&app, &turno).await;
         }
         return Err(match vuelta {
-            Ok(_) => format!(
-                "No se pudo guardar el cambio ({e}); la carpeta sigue en {}.",
-                actual.display()
-            ),
-            Err(v) => format!(
-                "No se pudo guardar el cambio ({e}) ni devolver la carpeta a {}: {v}",
-                actual.display()
-            ),
+            Ok(_) => format!("No se pudo guardar el cambio ({e}); la carpeta sigue en {}.", actual.display()),
+            Err(v) => format!("No se pudo guardar el cambio ({e}) ni devolver la carpeta a {}: {v}", actual.display()),
         });
     }
     if let Ok(Some(aviso)) = movido {
@@ -508,16 +447,10 @@ async fn cambiar_carpeta_ia(app: tauri::AppHandle, destino: String) -> Res<Rutas
     if en_marcha {
         if let Err(e) = arrancar_con_turno(&app, &turno).await {
             avisar_parada(&app, e.clone());
-            return Err(format!(
-                "La carpeta se movió a {}, pero el motor de IA no arranca: {e}",
-                nueva.display()
-            ));
+            return Err(format!("La carpeta se movió a {}, pero el motor de IA no arranca: {e}", nueva.display()));
         }
     }
-    Ok(Rutas {
-        ia: nueva,
-        ..estado.rutas.clone()
-    })
+    Ok(Rutas { ia: nueva, ..estado.rutas.clone() })
 }
 
 /// Baja los `modelos` que `cliente` aún no tiene, avisando por `canal`. Ollama reanuda lo que se
@@ -531,12 +464,7 @@ fn descargar_faltantes(
     let hay = cliente.modelos()?;
     for m in modelos {
         if tiene(&hay, m) {
-            let _ = canal.send(ProgresoModelo {
-                modelo: m.clone(),
-                estado: "success".into(),
-                hecho: 1,
-                total: 1,
-            });
+            let _ = canal.send(ProgresoModelo { modelo: m.clone(), estado: "success".into(), hecho: 1, total: 1 });
             continue;
         }
         cliente.descargar_modelo(m, cancelar, &mut |p| {
@@ -590,11 +518,7 @@ async fn cambiar_perfil(
     canal: Channel<ProgresoModelo>,
 ) -> Result<Config, ErrorIa> {
     let estado = app.state::<Estado>();
-    let nuevo = estado
-        .catalogo
-        .perfil(&perfil)
-        .ok_or_else(|| format!("perfil desconocido: {perfil}"))?
-        .clone();
+    let nuevo = estado.catalogo.perfil(&perfil).ok_or_else(|| format!("perfil desconocido: {perfil}"))?.clone();
     let _ocupado = Ocupado::tomar(&estado.ocupado)?;
     let antes = estado.config();
     if antes.perfil.as_deref() == Some(perfil.as_str()) {
@@ -674,10 +598,7 @@ async fn modelos_sobrantes(app: tauri::AppHandle) -> Res<Vec<Sobrante>> {
         .map_err(|e| e.to_string())??;
     Ok(lista
         .into_iter()
-        .map(|(modelo, bytes)| Sobrante {
-            modelo,
-            gb: (bytes as f64 / 1e9 * 100.0).round() / 100.0,
-        })
+        .map(|(modelo, bytes)| Sobrante { modelo, gb: (bytes as f64 / 1e9 * 100.0).round() / 100.0 })
         .collect())
 }
 
@@ -752,11 +673,7 @@ async fn informe(app: tauri::AppHandle) -> Res<String> {
             ps: ps.as_ref().map(Vec::as_slice).map_err(String::as_str),
             registro: &registro,
         };
-        informe::componer(
-            &datos,
-            &informe::carpeta_personal().unwrap_or_default(),
-            &config.ia_efectiva(&estado.rutas),
-        )
+        informe::componer(&datos, &informe::carpeta_personal().unwrap_or_default(), &config.ia_efectiva(&estado.rutas))
     })
     .await
     .map_err(|e| e.to_string())
@@ -906,11 +823,7 @@ async fn reparar(
     })
     .await
     .map_err(|e| ErrorIa::from(e.to_string()))??;
-    Ok(Reparacion {
-        motor_reinstalado,
-        capas_repuestas,
-        modelos,
-    })
+    Ok(Reparacion { motor_reinstalado, capas_repuestas, modelos })
 }
 
 #[derive(Serialize)]
@@ -929,11 +842,7 @@ enum Comprobacion {
 #[tauri::command]
 async fn comprobar(app: tauri::AppHandle, id: String) -> Res<Comprobacion> {
     let estado = app.state::<Estado>();
-    let pendiente = || {
-        Ok(Comprobacion::Omitida {
-            motivo: "Llega con el juego empaquetado (fase 4).".into(),
-        })
-    };
+    let pendiente = || Ok(Comprobacion::Omitida { motivo: "Llega con el juego empaquetado (fase 4).".into() });
     match id.as_str() {
         "datos" => {
             let prueba = estado.rutas.datos.join(".prueba-escritura");
@@ -941,14 +850,9 @@ async fn comprobar(app: tauri::AppHandle, id: String) -> Res<Comprobacion> {
                 .and_then(|_| fs::write(&prueba, b"ok"))
                 .and_then(|_| fs::remove_file(&prueba))
                 .map_err(|e| {
-                    format!(
-                        "No se puede escribir en la carpeta de datos ({}): {e}",
-                        estado.rutas.datos.display()
-                    )
+                    format!("No se puede escribir en la carpeta de datos ({}): {e}", estado.rutas.datos.display())
                 })?;
-            Ok(Comprobacion::Ok {
-                detalle: format!("Se puede escribir en {}.", estado.rutas.datos.display()),
-            })
+            Ok(Comprobacion::Ok { detalle: format!("Se puede escribir en {}.", estado.rutas.datos.display()) })
         }
         "basedatos" | "juego" | "mundo" => pendiente(),
         "motor" => {
@@ -957,9 +861,7 @@ async fn comprobar(app: tauri::AppHandle, id: String) -> Res<Comprobacion> {
                 .await
                 .map_err(|e| e.to_string())?
                 .map_err(|e| e.to_string())?;
-            Ok(Comprobacion::Ok {
-                detalle: format!("En marcha (Ollama {v})."),
-            })
+            Ok(Comprobacion::Ok { detalle: format!("En marcha (Ollama {v}).") })
         }
         "modelos" => {
             let perfil = estado.perfil(&estado.config())?.clone();
@@ -970,14 +872,9 @@ async fn comprobar(app: tauri::AppHandle, id: String) -> Res<Comprobacion> {
                 .map_err(|e| e.to_string())?;
             let faltan: Vec<&str> = perfil.modelos().into_iter().filter(|m| !tiene(&hay, m)).collect();
             if !faltan.is_empty() {
-                return Err(format!(
-                    "Faltan modelos: {}. Vuelve al paso de descarga.",
-                    faltan.join(", ")
-                ));
+                return Err(format!("Faltan modelos: {}. Vuelve al paso de descarga.", faltan.join(", ")));
             }
-            Ok(Comprobacion::Ok {
-                detalle: "Todos presentes.".into(),
-            })
+            Ok(Comprobacion::Ok { detalle: "Todos presentes.".into() })
         }
         "narracion" => {
             let config = estado.config();
@@ -1071,14 +968,8 @@ mod tests {
     #[test]
     fn turno_si_parado_solo_cuando_no_corre() {
         let candado = Candado::default();
-        assert!(
-            tauri::async_runtime::block_on(candado.turno_si_parado(|| async { false })).is_some(),
-            "parado: turno"
-        );
-        assert!(
-            tauri::async_runtime::block_on(candado.turno_si_parado(|| async { true })).is_none(),
-            "en marcha: no"
-        );
+        assert!(tauri::async_runtime::block_on(candado.turno_si_parado(|| async { false })).is_some(), "parado: turno");
+        assert!(tauri::async_runtime::block_on(candado.turno_si_parado(|| async { true })).is_none(), "en marcha: no");
     }
 
     #[test]
@@ -1086,10 +977,7 @@ mod tests {
         let (uno, otro) = (Candado::default(), Candado::default());
         let turno = tauri::async_runtime::block_on(uno.coger());
         assert!(turno.es_de(&uno));
-        assert!(
-            !turno.es_de(&otro),
-            "el turno de otro candado no vale para Estado::arranque"
-        );
+        assert!(!turno.es_de(&otro), "el turno de otro candado no vale para Estado::arranque");
     }
 
     #[test]
@@ -1099,10 +987,7 @@ mod tests {
         let arranques = AtomicUsize::new(0);
         let uno = || async {
             // Como `asegurar`: el turno se tiene hasta acabar de arrancar.
-            if let Some(_turno) = candado
-                .turno_si_parado(|| async { en_marcha.load(Ordering::SeqCst) })
-                .await
-            {
+            if let Some(_turno) = candado.turno_si_parado(|| async { en_marcha.load(Ordering::SeqCst) }).await {
                 arranques.fetch_add(1, Ordering::SeqCst);
                 // El arranque tarda: el segundo espera el candado y, al entrar, ya lo ve en marcha.
                 tauri::async_runtime::spawn_blocking(|| std::thread::sleep(std::time::Duration::from_millis(100)))
