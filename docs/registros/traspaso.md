@@ -100,6 +100,8 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 
 Dos líneas cada una como mucho; el detalle está en el commit y la más antigua sale cuando hay más de 5.
 
+- ~~`FLU-5` · `cargo fmt` en el check~~ (2026-10-26): workspace formateado a 120 columnas en un commit aparte
+  (`a27489f`, ignorado por `git blame`) y `cargo fmt --all --check` en el check y en el CI.
 - ~~`INS-42` · Asistente real de punta a punta~~ (2026-10-26): autopausa por red con espera creciente en la
   Descarga, Ajustes y Reparar; calentar el narrador al entrar; perfil más ligero si falta memoria o narra lento.
 - ~~`INS-43` · Rendimiento de la IA y motor detenido~~ (2026-10-25): dónde corre la IA, cambiar de perfil con
@@ -108,5 +110,3 @@ Dos líneas cada una como mucho; el detalle está en el commit y la más antigua
   vuelve a pedir solo lo dañado, desde Ajustes y desde la comprobación.
 - ~~`INS-48` · Carpeta de la IA elegible y movible~~ (2026-10-25): espacio necesario frente a libre en cada
   tarjeta, «Cambiar carpeta» en el paso 4 y «Mover a otra carpeta» en Ajustes.
-- ~~`INS-14` · Perfiles por encima del máximo seguro~~ (2026-10-25): se pueden elegir con aviso y confirmación
-  en la tarjeta, sin interruptor; implementado el mismo día.
