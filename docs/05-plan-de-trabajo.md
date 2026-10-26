@@ -102,8 +102,9 @@ Ver [`02`](02-migracion-postgres-a-sqlite.md). Sin romper el modo de desarrollo 
 Ver [`06`](06-inventario-exclusiones.md).
 
 - [x] **INS-31** (2026-10-26) Frontend: URL del backend en tiempo de ejecución (`api.ts`). Hecho en el repo del
-  juego, rama `claude/ins-31-url-backend` (`1e9d9ad1`), [PR #78](https://github.com/Zeldris/World-Maker-Fantasy/pull/78)
-  en borrador, **sin fusionar** (CI sin comprobar: cuota agotada): `apiBaseUrl()` con el contrato
+  juego, rama `claude/ins-31-url-backend` ([PR #78](https://github.com/Zeldris/World-Maker-Fantasy/pull/78)),
+  **en `main` del juego** (`b76c66b2`, sin PR y con CI local por la cuota agotada, `QA-215`; retro `QA-259`…`QA-261`
+  aplicada allí): `apiBaseUrl()` con el contrato
   `window.__TARKOR__.apiUrl` de [`04`](04-empaquetado-tauri.md); todas las URLs de `api.ts` pasan por ella; 8 tests.
 - [ ] **INS-32** Frontend: fuentes Cinzel e Inter en local.
 - [ ] **INS-33** Frontend: quitar `ImagePromptSlot`; deshabilitar "Crear desde cero" como "en

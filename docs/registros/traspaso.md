@@ -14,7 +14,7 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #11 (2026-10-26, `a73f881`): `FLU-6`, con la confirmación de la usuaria. La CI de GitHub no arrancó (sin cuota); `ci-local` en verde sobre `f59202b`, Windows sin cubrir (pendiente de `INS-8`). |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-10-26: `INS-31` hecha en el repo del juego (rama `claude/ins-31-url-backend`, [PR #78](https://github.com/Zeldris/World-Maker-Fantasy/pull/78) en borrador). La usuaria dijo «fusiona»: la sesión `session_01EzaeVYQBXa4ivFEerT9eGJ` del juego la deja a un paso de `main` con sus reglas (revisión, retro, CI local; `QA-215` y `QA-238`) y para antes de `revisado.sh`. Siguiente: presentar su retro a la usuaria; con su confirmación, una sesión del juego la sube a `main`. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-10-26: `INS-31` en `main` del juego (`b76c66b2`, sin PR y con CI local, `QA-215`; [PR #78](https://github.com/Zeldris/World-Maker-Fantasy/pull/78) marcado como fusionado). La usuaria aprobó allí su retro (`QA-259`…`QA-261`: regla para las tareas `INS-*` en el juego, bitácora más corta). Siguiente: la fase 3 sigue con `INS-32` (fuentes Cinzel e Inter en local), cuando la usuaria lo pida. |
 | **Tests** | 2026-10-26: núcleo `cargo test -p tarkor-nucleo` 116, `cargo fmt --all --check` en verde, clippy 0 avisos, `tsc -b` 0, `cargo check` del núcleo y la app para Windows (mingw) en verde. Asistente `vitest` 27 y E2E con el Ollama falso: último verde el 2026-10-25. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -79,9 +79,9 @@ cada commit.**
     nunca un fallo); el job de Windows baja también rustfmt, clippy y el destino de Windows, que no usa; el test de
     la versión de Rust no entiende un `channel` que no sea número (`nightly-…`); `scout-updates` no lee `rust-toolchain.toml`, así que nadie avisa
     cuando la 1.94.1 se queda vieja.
-12. Pendientes leves de `INS-31` (PR #78 del juego): con `VITE_API_URL=""` la base queda vacía (igual que antes);
-    el comentario de `useEntityBanner.test.tsx` aún dice «concatena API_URL»; `docs/arquitectura/15-instalacion.md`
-    del juego no menciona `window.__TARKOR__`.
+12. Pendientes leves de `INS-31` (en `main` del juego): con `VITE_API_URL=""` la base queda vacía (igual que antes);
+    el aviso de `useReconnectionPolling.ts` no dice qué URL probó (útil para `INS-41`). El comentario de los tests y
+    `15-instalacion.md` ya se arreglaron allí.
 13. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
 
 ## Decisiones de la usuaria que bloquean algo
@@ -112,7 +112,7 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 Dos líneas cada una como mucho; el detalle está en el commit y la más antigua sale cuando hay más de 5.
 
 - ~~`INS-31` · URL del backend en tiempo de ejecución~~ (2026-10-26): `apiBaseUrl()` en el `api.ts` del juego con
-  `window.__TARKOR__.apiUrl`; PR #78 del juego en borrador, sin fusionar.
+  `window.__TARKOR__.apiUrl`; en `main` del juego (`b76c66b2`, sin PR, CI local).
 - ~~`FLU-6` · Versión de Rust fijada~~ (2026-10-26): Rust 1.94.1 en `app/rust-toolchain.toml`, con rustfmt, clippy
   y el destino de Windows; el CI y `instalar-entorno.sh` lo instalan de ahí.
 - ~~`FLU-5` · `cargo fmt` en el check~~ (2026-10-26): workspace formateado a 120 columnas en commits aparte
