@@ -102,6 +102,8 @@ Ver [`02`](02-migracion-postgres-a-sqlite.md). Sin romper el modo de desarrollo 
 Ver [`06`](06-inventario-exclusiones.md).
 
 - [ ] **INS-31** Frontend: URL del backend en tiempo de ejecución (`api.ts`).
+  En curso (2026-10-26) en el repo del juego, rama `claude/ins-31-url-backend` desde su `main`, por una sesión
+  propia (`session_01XdLgJee1jbp9j6iKsMcaaz`); contrato `window.__TARKOR__.apiUrl` en [`04`](04-empaquetado-tauri.md).
 - [ ] **INS-32** Frontend: fuentes Cinzel e Inter en local.
 - [ ] **INS-33** Frontend: quitar `ImagePromptSlot`; deshabilitar "Crear desde cero" como "en
   construcción"; revisar el texto de `ComingSoon.tsx`.

@@ -30,6 +30,11 @@ se lo pasa al backend por `PORT`. Consecuencias:
   antemano. Cambio necesario en el juego: que `frontend/src/lib/api.ts` pida la URL al arrancar
   (a Tauri, vía `window.__TAURI__` o una variable inyectada en la página) y solo use
   `VITE_API_URL`/`localhost:3001` como respaldo fuera de Tauri. Es un cambio pequeño y aislado.
+  **Contrato (`INS-31`, 2026-10-26):** Tauri inyecta, con `initialization_script` de la ventana
+  (corre antes que los scripts de la página, en cada carga), `window.__TARKOR__ = { apiUrl:
+  "http://127.0.0.1:<puerto>" }`. El juego la lee de forma síncrona: `__TARKOR__.apiUrl` si es una
+  cadena no vacía, si no `VITE_API_URL`, si no `http://localhost:3001`. Así el juego no depende de
+  `@tauri-apps/api` ni espera a nada al arrancar. La inyección es de `INS-41`.
 - **CORS:** el webview carga la página desde un origen propio de Tauri (`http://tauri.localhost`
   en Windows, `tauri://localhost` en Linux), no desde `localhost`. Hoy el backend acepta cualquier
   origen (`cors, { origin: true }` en `server.ts`); en la build empaquetada se restringe a esos
