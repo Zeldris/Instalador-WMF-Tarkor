@@ -208,5 +208,6 @@ ganchos, `.claude/gw/scripts`, `tools/qa` y las skills ([runbook](runbooks/skill
 - [x] **FLU-6** (2026-10-26, retro de `FLU-5`) `app/rust-toolchain.toml` fija Rust 1.94.1 (con `rustfmt`, `clippy` y
   el destino de Windows) para que local, el pre-push y el CI formateen y avisen igual; `comprobar.yml` y
   `tools/dev/instalar-entorno.sh` lo instalan con `rustup toolchain install` desde `app/`. Subir de versión es un
-  commit a mano (con el `rust-version` de los `Cargo.toml`). **Pendiente:** el CI de GitHub con la versión fijada no ha
-  corrido (sin cuota); lo comprueba la próxima subida con cuota, en la pestaña Actions, y el job de Windows con `INS-8`.
+  commit a mano (con el `rust-version` de los `Cargo.toml`, que `tools/qa/tests/test_version_rust.py` compara).
+  **Pendiente:** el CI de GitHub con la versión fijada no ha corrido (sin cuota); lo comprueba la próxima subida con
+  cuota, en la pestaña Actions, y el job de Windows con `INS-8`.
