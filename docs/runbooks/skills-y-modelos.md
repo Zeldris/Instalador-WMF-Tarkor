@@ -37,7 +37,7 @@ lanza la usuaria.
    `docs/adr/`.
 3. **Implementar** por pasos pequeños, cada uno con sus tests, y commit + push en cada punto estable
    (`AGENTS.md`). En cada paso, los tests de lo tocado: `cargo test -p tarkor-nucleo` (segundos) y
-   `npx vitest run <archivos>` en `app/`; el pre-push ya pasa `tsc`, clippy y los tests de lo que
+   `npx vitest run <archivos>` en `app/`; el pre-push ya pasa `tsc`, `cargo fmt --check`, clippy y los tests de lo que
    cambia. Al tocar pantallas o el arranque de procesos, las pruebas de punta a punta de `app/e2e`.
    Antes del commit de un arreglo, [`REVIEW.md`](../../REVIEW.md): Linux y Windows, procesos que se
    paran, compatibilidad de `config.json` y del catálogo.

@@ -105,7 +105,12 @@ pub fn instalar(
 
 /// Descarga, verifica y extrae el motor aunque ya esté instalado. El motor que hubiera sigue
 /// entero hasta el último paso, y vuelve a su sitio si ese paso falla.
-fn reinstalar(ia: &Path, motor: &Motor, cancelar: &AtomicBool, progreso: &mut dyn FnMut(Progreso)) -> Result<PathBuf, Error> {
+fn reinstalar(
+    ia: &Path,
+    motor: &Motor,
+    cancelar: &AtomicBool,
+    progreso: &mut dyn FnMut(Progreso),
+) -> Result<PathBuf, Error> {
     let destino = carpeta(ia, motor);
     let paquete = motor.paquete().ok_or(Error::SinPaquete)?;
     let descargas = ia.join("descargas");
@@ -125,7 +130,10 @@ fn reinstalar(ia: &Path, motor: &Motor, cancelar: &AtomicBool, progreso: &mut dy
     let tmp = destino.with_extension("extrayendo");
     let _ = fs::remove_dir_all(&tmp);
     fs::create_dir_all(&tmp)?;
-    if let Err(e) = extraer(&archivo, paquete, &tmp).and_then(|()| Ok(escribir_sumas(&tmp)?)).and_then(|()| sustituir(&tmp, &destino)) {
+    if let Err(e) = extraer(&archivo, paquete, &tmp)
+        .and_then(|()| Ok(escribir_sumas(&tmp)?))
+        .and_then(|()| sustituir(&tmp, &destino))
+    {
         let _ = fs::remove_dir_all(&tmp);
         return Err(e);
     }
@@ -140,7 +148,12 @@ fn reinstalar(ia: &Path, motor: &Motor, cancelar: &AtomicBool, progreso: &mut dy
 /// está dañado, lo vuelve a instalar entero (el «Verificar archivos» de Steam). Devuelve si hubo
 /// que reinstalarlo. Un motor sin sumas en `.completo` (instalado antes de que las llevara) no se
 /// puede comprobar y también se reinstala.
-pub fn reparar(ia: &Path, motor: &Motor, cancelar: &AtomicBool, progreso: &mut dyn FnMut(Progreso)) -> Result<bool, Error> {
+pub fn reparar(
+    ia: &Path,
+    motor: &Motor,
+    cancelar: &AtomicBool,
+    progreso: &mut dyn FnMut(Progreso),
+) -> Result<bool, Error> {
     progreso(Progreso::Verificando);
     if integro(ia, motor, cancelar)? {
         progreso(Progreso::Listo);
@@ -153,13 +166,17 @@ pub fn reparar(ia: &Path, motor: &Motor, cancelar: &AtomicBool, progreso: &mut d
 /// El motor está instalado y cada archivo apuntado en `.completo` conserva su suma.
 pub fn integro(ia: &Path, motor: &Motor, cancelar: &AtomicBool) -> Result<bool, Error> {
     let c = carpeta(ia, motor);
-    let Ok(sumas) = fs::read_to_string(c.join(MARCA_COMPLETO)) else { return Ok(false) };
+    let Ok(sumas) = fs::read_to_string(c.join(MARCA_COMPLETO)) else {
+        return Ok(false);
+    };
     let mut hay = false;
     for linea in sumas.lines() {
         if cancelar.load(Ordering::Relaxed) {
             return Err(Error::Cancelado);
         }
-        let Some((suma, ruta)) = linea.split_once("  ") else { return Ok(false) };
+        let Some((suma, ruta)) = linea.split_once("  ") else {
+            return Ok(false);
+        };
         if sha256(&c.join(ruta)).ok().as_deref() != Some(suma) {
             return Ok(false);
         }
@@ -218,7 +235,9 @@ fn listar(base: &Path, relativa: &Path, archivos: &mut Vec<PathBuf>) -> io::Resu
 
 /// Tras actualizar el motor, las versiones anteriores sobran.
 fn borrar_versiones_antiguas(ia: &Path, motor: &Motor) {
-    let Ok(entradas) = fs::read_dir(ia.join("motor")) else { return };
+    let Ok(entradas) = fs::read_dir(ia.join("motor")) else {
+        return;
+    };
     for e in entradas.flatten() {
         if e.file_name().to_string_lossy() != motor.version {
             let _ = fs::remove_dir_all(e.path());
@@ -227,7 +246,12 @@ fn borrar_versiones_antiguas(ia: &Path, motor: &Motor) {
 }
 
 /// Descarga reanudable: continúa `<destino>.part` si existe.
-pub fn descargar(url: &str, destino: &Path, cancelar: &AtomicBool, progreso: &mut dyn FnMut(Progreso)) -> Result<(), Error> {
+pub fn descargar(
+    url: &str,
+    destino: &Path,
+    cancelar: &AtomicBool,
+    progreso: &mut dyn FnMut(Progreso),
+) -> Result<(), Error> {
     let parcial = destino.with_extension(format!(
         "{}.part",
         destino.extension().map(|e| e.to_string_lossy().into_owned()).unwrap_or_default()
@@ -254,11 +278,7 @@ pub fn descargar(url: &str, destino: &Path, cancelar: &AtomicBool, progreso: &mu
         .unwrap_or(0);
     let (mut hecho, total) = if reanuda { (ya, ya + resto) } else { (0, resto) };
 
-    let mut salida = if reanuda {
-        File::options().append(true).open(&parcial)?
-    } else {
-        File::create(&parcial)?
-    };
+    let mut salida = if reanuda { File::options().append(true).open(&parcial)? } else { File::create(&parcial)? };
     let mut cuerpo = respuesta.into_body().into_reader();
     let mut buf = vec![0u8; 256 * 1024];
     let mut ultimo = 0u64;
@@ -309,11 +329,7 @@ fn error_de_peticion(e: ureq::Error) -> Error {
 /// Cliente HTTP para descargas de internet: respeta el proxy del sistema y usa sus certificados.
 pub(crate) fn agente() -> ureq::Agent {
     ureq::Agent::config_builder()
-        .tls_config(
-            ureq::tls::TlsConfig::builder()
-                .root_certs(ureq::tls::RootCerts::PlatformVerifier)
-                .build(),
-        )
+        .tls_config(ureq::tls::TlsConfig::builder().root_certs(ureq::tls::RootCerts::PlatformVerifier).build())
         .build()
         .into()
 }
@@ -344,7 +360,8 @@ fn extraer(archivo: &Path, _: &PaqueteMotor, destino: &Path) -> Result<(), Error
 
 #[cfg(windows)]
 fn extraer(archivo: &Path, _: &PaqueteMotor, destino: &Path) -> Result<(), Error> {
-    let mut zip = zip::ZipArchive::new(File::open(archivo)?).map_err(|e| Error::Disco(io::Error::other(e.to_string())))?;
+    let mut zip =
+        zip::ZipArchive::new(File::open(archivo)?).map_err(|e| Error::Disco(io::Error::other(e.to_string())))?;
     zip.extract(destino).map_err(|e| Error::Disco(io::Error::other(e.to_string())))?;
     Ok(())
 }
@@ -417,7 +434,9 @@ mod tests {
 
     /// Servidor que contesta con los bytes crudos que decida `respuesta(desde)` (el Range pedido, si lo hay);
     /// devuelve la URL y cuántas peticiones recibió.
-    fn servidor_crudo(respuesta: impl Fn(Option<u64>) -> Vec<u8> + Send + 'static) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+    fn servidor_crudo(
+        respuesta: impl Fn(Option<u64>) -> Vec<u8> + Send + 'static,
+    ) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
         let l = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let url = format!("http://127.0.0.1:{}/paquete", l.local_addr().unwrap().port());
         let peticiones = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
@@ -445,7 +464,8 @@ mod tests {
 
     #[test]
     fn un_404_no_es_de_red_y_dice_el_codigo() {
-        let (url, _) = servidor_crudo(|_| b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec());
+        let (url, _) =
+            servidor_crudo(|_| b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec());
         let dir = tempfile::tempdir().unwrap();
         let e = descargar(&url, &dir.path().join("x.zip"), &AtomicBool::new(false), &mut |_| {}).unwrap_err();
         assert!(matches!(&e, Error::Servidor(m) if m.contains("404")), "{e:?}");
@@ -459,9 +479,11 @@ mod tests {
         let cuerpo = datos.clone();
         let (url, peticiones) = servidor_crudo(move |desde| {
             if desde.is_some() {
-                return b"HTTP/1.1 416 Range Not Satisfiable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec();
+                return b"HTTP/1.1 416 Range Not Satisfiable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    .to_vec();
             }
-            let mut r = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", cuerpo.len()).into_bytes();
+            let mut r = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", cuerpo.len())
+                .into_bytes();
             r.extend_from_slice(&cuerpo);
             r
         });
@@ -476,7 +498,9 @@ mod tests {
 
     #[test]
     fn un_416_que_se_repite_se_intenta_una_sola_vez_y_no_es_de_red() {
-        let (url, peticiones) = servidor_crudo(|_| b"HTTP/1.1 416 Range Not Satisfiable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec());
+        let (url, peticiones) = servidor_crudo(|_| {
+            b"HTTP/1.1 416 Range Not Satisfiable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec()
+        });
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("x.zip.part"), b"abc").unwrap();
         let e = descargar(&url, &dir.path().join("x.zip"), &AtomicBool::new(false), &mut |_| {}).unwrap_err();
@@ -595,7 +619,10 @@ mod tests {
         // El servidor sirve otro paquete: llega a descargarlo, que es lo que se comprueba aquí.
         let url = servidor(b"no es ollama".to_vec());
         motor.url_base = url.trim_end_matches("paquete").to_string();
-        motor.paquetes.insert(std::env::consts::OS.into(), PaqueteMotor { archivo: "paquete".into(), sha256: "0".repeat(64), descarga_gb: 0.0 });
+        motor.paquetes.insert(
+            std::env::consts::OS.into(),
+            PaqueteMotor { archivo: "paquete".into(), sha256: "0".repeat(64), descarga_gb: 0.0 },
+        );
         let r = reparar(dir.path(), &motor, &AtomicBool::new(false), &mut |_| {});
         assert!(matches!(r, Err(Error::Danado)), "{r:?}");
         // Una reparación que falla no deja sin motor: el de antes sigue instalado como estaba.

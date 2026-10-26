@@ -32,5 +32,8 @@ fi
 if command -v rustup >/dev/null && ! rustup target list --installed 2>/dev/null | grep -q x86_64-pc-windows-gnu; then
   rustup target add x86_64-pc-windows-gnu >/dev/null 2>&1 || true
 fi
+# El check pasa `cargo fmt --check` y clippy (FLU-5); un rustup con el perfil mínimo no los trae.
+command -v rustup >/dev/null && { rustup component add rustfmt clippy >/dev/null 2>&1 || true; }
+git config blame.ignoreRevsFile .git-blame-ignore-revs
 command -v tauri-driver >/dev/null || echo "Para las e2e falta tauri-driver: cargo install tauri-driver --locked"
 echo "Entorno listo: dependencias de Tauri, npm del asistente y crates de Cargo."

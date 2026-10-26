@@ -66,7 +66,9 @@ pub enum Estado {
     /// Se cayó y se ha vuelto a arrancar (se gasta el único reinicio automático).
     Reiniciado,
     /// Se cayó otra vez, o no llegó a arrancar.
-    Detenido { motivo: String },
+    Detenido {
+        motivo: String,
+    },
 }
 
 /// Avisa una sola vez de una parada: `Some(motivo)` si el proceso está `Detenido` y todavía no se
@@ -151,11 +153,7 @@ impl Proceso {
         // Marca de arranque: separa en el registro un arranque de otro (`desde_ultimo_arranque`).
         writeln!(log, "{MARCA_ARRANQUE}{} ---", e.nombre)?;
         let mut cmd = Command::new(&e.programa);
-        cmd.args(&e.argumentos)
-            .envs(&e.entorno)
-            .stdin(Stdio::null())
-            .stdout(log.try_clone()?)
-            .stderr(log);
+        cmd.args(&e.argumentos).envs(&e.entorno).stdin(Stdio::null()).stdout(log.try_clone()?).stderr(log);
         morir_con_la_app(&mut cmd);
         let hijo = cmd.spawn()?;
         #[cfg(windows)]
@@ -345,9 +343,8 @@ mod tests {
     #[test]
     fn no_arranca_si_no_responde_y_lo_explica() {
         let dir = tempfile::tempdir().unwrap();
-        let err = Proceso::arrancar(espec(dir.path(), "echo arrancando; exit 3", puerto_libre().unwrap()))
-            .err()
-            .unwrap();
+        let err =
+            Proceso::arrancar(espec(dir.path(), "echo arrancando; exit 3", puerto_libre().unwrap())).err().unwrap();
         assert!(err.to_string().contains("se cerró al arrancar"), "{err}");
         // La salida del proceso queda en su registro.
         let log = fs::read_to_string(dir.path().join("registros/prueba.log")).unwrap();

@@ -124,7 +124,9 @@ pub enum Origen {
     Incrustado,
     Externo,
     /// Había un `catalogo.json` externo pero no era válido; se usó el incrustado.
-    ExternoInvalido { motivo: String },
+    ExternoInvalido {
+        motivo: String,
+    },
 }
 
 impl Catalogo {

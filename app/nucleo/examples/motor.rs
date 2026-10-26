@@ -52,7 +52,11 @@ fn main() {
     })
     .unwrap_or_else(|e| panic!("{e}"));
     let c = Cliente::new(proceso.url());
-    println!("Motor en marcha en {:.1} s: Ollama {}", t.elapsed().as_secs_f64(), c.version().unwrap_or_else(|e| e.to_string()));
+    println!(
+        "Motor en marcha en {:.1} s: Ollama {}",
+        t.elapsed().as_secs_f64(),
+        c.version().unwrap_or_else(|e| e.to_string())
+    );
 
     for m in perfil.modelos() {
         let r = c.descargar_modelo(m, &AtomicBool::new(false), &mut |p| {

@@ -92,14 +92,23 @@ pub fn evaluar(catalogo: &Catalogo, equipo: Option<&Equipo>, disco_libre_mb: Opt
         .expect("el catálogo validado tiene al menos un perfil no experimental");
 
     let Some(para_ia) = para_ia else {
-        return Evaluacion { memoria_para_ia_gb: None, disco_libre_gb: disco_gb, perfiles, maximo_seguro: None, recomendado: mas_ligero, equipo_insuficiente: false };
+        return Evaluacion {
+            memoria_para_ia_gb: None,
+            disco_libre_gb: disco_gb,
+            perfiles,
+            maximo_seguro: None,
+            recomendado: mas_ligero,
+            equipo_insuficiente: false,
+        };
     };
 
     let caben: Vec<&PerfilEvaluado> = perfiles.iter().filter(|p| p.cabe() && !p.perfil.experimental).collect();
     let maximo = caben.last().map(|p| p.perfil.id.clone());
     let recomendado = match caben.as_slice() {
         [] => mas_ligero,
-        [.., anterior, ultimo] if para_ia - ultimo.perfil.memoria_gb < reglas.margen_comodo_gb => anterior.perfil.id.clone(),
+        [.., anterior, ultimo] if para_ia - ultimo.perfil.memoria_gb < reglas.margen_comodo_gb => {
+            anterior.perfil.id.clone()
+        }
         [.., ultimo] => ultimo.perfil.id.clone(),
     };
 
@@ -120,8 +129,15 @@ pub(crate) mod tests {
 
     pub fn equipo(ram_gb: u64, vram_gb: Option<u64>, disco_gb: u64) -> Equipo {
         let gpus = match vram_gb {
-            Some(v) => vec![Gpu { nombre: "dedicada".into(), fabricante: Fabricante::Nvidia, vram_mb: Some(v * 1024), integrada: false }],
-            None => vec![Gpu { nombre: "integrada".into(), fabricante: Fabricante::Amd, vram_mb: None, integrada: true }],
+            Some(v) => vec![Gpu {
+                nombre: "dedicada".into(),
+                fabricante: Fabricante::Nvidia,
+                vram_mb: Some(v * 1024),
+                integrada: false,
+            }],
+            None => {
+                vec![Gpu { nombre: "integrada".into(), fabricante: Fabricante::Amd, vram_mb: None, integrada: true }]
+            }
         };
         Equipo {
             ram_total_mb: ram_gb * 1024,

@@ -185,7 +185,11 @@ fn mover_con(
         return Err(format!("No se pudo copiar a {}: {e}. La carpeta actual sigue como estaba.", destino.display()));
     }
     Ok(fs::remove_dir_all(origen).err().map(|e| {
-        format!("Se movió a {}, pero quedó parte de la carpeta anterior ({}): {e}. Puedes borrarla a mano.", destino.display(), origen.display())
+        format!(
+            "Se movió a {}, pero quedó parte de la carpeta anterior ({}): {e}. Puedes borrarla a mano.",
+            destino.display(),
+            origen.display()
+        )
     }))
 }
 

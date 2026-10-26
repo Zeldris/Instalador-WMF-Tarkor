@@ -11,11 +11,11 @@ cada commit.**
 | | |
 |---|---|
 | **Actualizado** | 2026-10-26 |
-| **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-25). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
-| **Último commit en `main`** | Fusión del PR #8 (2026-10-25, `f399a63`): `INS-43` (y `INS-42`), con la confirmación de la usuaria. La CI de GitHub no arrancó (pago); `ci-local` en verde sobre `98bda69`, Windows sin cubrir (pendiente de `INS-8`). |
+| **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
+| **Último commit en `main`** | Fusión del PR #9 (2026-10-26, `b4450fe`): `INS-42`, con la confirmación de la usuaria. La CI de GitHub no arrancó (sin cuota); `ci-local` en verde, Windows sin cubrir (pendiente de `INS-8`). |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 🚧 2026-10-26: fases 1 y 2 antes de `main` hechas; la retro ([`retro-2026-10-26-ins42.md`](retro-2026-10-26-ins42.md)) aplicada, con `FLU-5` aplazada a después de fusionar. Fase 3 hecha: arreglos del `Turno` revisados, marca de revisión (`f0aadbe`) y CI local en verde (`3eeb268`), descripción del PR escrita. Siguiente: con la confirmación de la usuaria, crear el PR a `main` y fusionarlo; luego `FLU-5`. |
-| **Tests** | 2026-10-25: núcleo `cargo test -p tarkor-nucleo` 104, asistente `vitest` 27, `tsc -b` 0, clippy 0 avisos, `cargo check` del núcleo para Windows (mingw) en verde; E2E del asistente con el Ollama falso en verde. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-10-26: `FLU-5` hecha; la usuaria pide llevarla a `main` con el CI local (GitHub sin cuota). Las tres fases hechas ([retro](retro-2026-10-26-flu5.md): O1 aplicada, R3 → `FLU-6`, R1 y R2 al flujo); marca de revisión `4641939` y [CI local](ci-local.md) en verde sobre ella (11 pasos; Windows sin cubrir). Presupuesto: 0 compactaciones (1 desde la fusión). Siguiente: PR a `main` y fusión. |
+| **Tests** | 2026-10-26: núcleo `cargo test -p tarkor-nucleo` 116, `cargo fmt --all --check` en verde, clippy 0 avisos, `tsc -b` 0, `cargo check` del núcleo y la app para Windows (mingw) en verde. Asistente `vitest` 27 y E2E con el Ollama falso: último verde el 2026-10-25. |
 
 ## Dónde está todo (para saber qué sigue)
 
@@ -50,8 +50,8 @@ cada commit.**
 7. Pendientes leves de la revisión del trozo B de `INS-42`: `calentar` no manda las `options` del juego (`num_thread`), que podrían
    recargar el modelo en el primer turno; al abrir con el motor ya caído, `Juego` puede arrancarlo a la vez que
    «Reintentar» de la pantalla del motor detenido; el test «calienta una sola vez» usa `rerender` y no prueba el
-   `[]` del efecto; la fila de fallo de la Comprobación ofrece «Probar un perfil más ligero» aunque no haya uno;
-   `lib.rs` no pasa `cargo fmt` (ya antes de este trozo; `FLU-5`). El candado compartido ya no pide test: arrancar
+   `[]` del efecto; la fila de fallo de la Comprobación ofrece «Probar un perfil más ligero» aunque no haya uno.
+   El candado compartido ya no pide test: arrancar
    sin él no compila (`Turno`, retro de `INS-42`).
 8. Pendientes leves de la revisión del trozo C de `INS-42`: `cambiar` y `empezar` no reinician la escalera tras
    Pausar y volver a pulsar (queda en 40/60 s); si un reintento de `reparar` falla por red tras reinstalar el motor o
@@ -71,7 +71,10 @@ cada commit.**
      uno que esté arrancando al cerrar queda vivo; un fallo pasajero de `version()` hace que `asegurar` reinicie un
      motor sano (las tres, ya en `main`); el test de dos arranques copia la forma de `asegurar` en vez de llamarlo (el
      tipo lo cubre: sin turno no se llama a `arrancar_con_turno`); `coger` reserva memoria para la guarda.
-10. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
+10. Pendientes leves de la revisión de `FLU-5` (no vuelven a revisarse en su PR): el commit de formato `a27489f` no
+    actualizó la bitácora (se hizo en los siguientes); la versión de Rust sin fijar pasa a `FLU-6`
+    (retro de `FLU-5`).
+11. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
 
 ## Decisiones de la usuaria que bloquean algo
 
@@ -100,6 +103,8 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 
 Dos líneas cada una como mucho; el detalle está en el commit y la más antigua sale cuando hay más de 5.
 
+- ~~`FLU-5` · `cargo fmt` en el check~~ (2026-10-26): workspace formateado a 120 columnas en commits aparte
+  (`a27489f` y `9b0035c`, ignorados por `git blame`) y `cargo fmt --all --check` en el check y en el CI.
 - ~~`INS-42` · Asistente real de punta a punta~~ (2026-10-26): autopausa por red con espera creciente en la
   Descarga, Ajustes y Reparar; calentar el narrador al entrar; perfil más ligero si falta memoria o narra lento.
 - ~~`INS-43` · Rendimiento de la IA y motor detenido~~ (2026-10-25): dónde corre la IA, cambiar de perfil con
@@ -108,5 +113,3 @@ Dos líneas cada una como mucho; el detalle está en el commit y la más antigua
   vuelve a pedir solo lo dañado, desde Ajustes y desde la comprobación.
 - ~~`INS-48` · Carpeta de la IA elegible y movible~~ (2026-10-25): espacio necesario frente a libre en cada
   tarjeta, «Cambiar carpeta» en el paso 4 y «Mover a otra carpeta» en Ajustes.
-- ~~`INS-14` · Perfiles por encima del máximo seguro~~ (2026-10-25): se pueden elegir con aviso y confirmación
-  en la tarjeta, sin interruptor; implementado el mismo día.

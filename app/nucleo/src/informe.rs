@@ -106,7 +106,11 @@ pub fn anonimizar(texto: &str, carpeta_personal: &Path, carpeta_ia: &Path) -> St
 
 fn sustituir(texto: &str, forma: &str, cambio: &str) -> String {
     // El paso a minúsculas ASCII conserva las posiciones en bytes.
-    let (pajar, aguja) = if cfg!(windows) { (texto.to_ascii_lowercase(), forma.to_ascii_lowercase()) } else { (texto.to_string(), forma.to_string()) };
+    let (pajar, aguja) = if cfg!(windows) {
+        (texto.to_ascii_lowercase(), forma.to_ascii_lowercase())
+    } else {
+        (texto.to_string(), forma.to_string())
+    };
     let mut salida = String::with_capacity(texto.len());
     let mut resto = 0;
     while let Some(pos) = pajar[resto..].find(&aguja) {
@@ -136,7 +140,9 @@ fn describir_origen(o: &Origen) -> String {
     match o {
         Origen::Incrustado => "incrustado en la app".into(),
         Origen::Externo => "catalogo.json externo (válido)".into(),
-        Origen::ExternoInvalido { motivo } => format!("catalogo.json externo no válido ({motivo}); se usa el incrustado"),
+        Origen::ExternoInvalido { motivo } => {
+            format!("catalogo.json externo no válido ({motivo}); se usa el incrustado")
+        }
     }
 }
 
@@ -151,7 +157,11 @@ fn describir_equipo(e: Option<&Equipo>) -> String {
     }
     for g in &e.gpus {
         let vram = g.vram_mb.map_or("memoria desconocida".to_string(), |v| format!("{v} MB"));
-        s.push_str(&format!("\nGráfica: {} ({}, {vram})", g.nombre, if g.integrada { "integrada" } else { "dedicada" }));
+        s.push_str(&format!(
+            "\nGráfica: {} ({}, {vram})",
+            g.nombre,
+            if g.integrada { "integrada" } else { "dedicada" }
+        ));
     }
     s
 }
@@ -168,10 +178,14 @@ pub fn componer(d: &Datos, carpeta_personal: &Path, carpeta_ia: &Path) -> String
     seccion("Equipo analizado", describir_equipo(d.equipo));
     seccion(
         "Perfil",
-        format!("Perfil: {}\nUso del procesador: {}", d.perfil.unwrap_or("sin elegir"), match d.uso_cpu {
-            UsoCpu::Moderado => "moderado",
-            UsoCpu::Alto => "alto",
-        }),
+        format!(
+            "Perfil: {}\nUso del procesador: {}",
+            d.perfil.unwrap_or("sin elegir"),
+            match d.uso_cpu {
+                UsoCpu::Moderado => "moderado",
+                UsoCpu::Alto => "alto",
+            }
+        ),
     );
     seccion(
         "Ajustes de Ollama del perfil",
@@ -211,7 +225,10 @@ pub fn componer(d: &Datos, carpeta_personal: &Path, carpeta_ia: &Path) -> String
             Ok([]) => "Nada cargado".into(),
             Ok(c) => {
                 let u = resumen_uso(c);
-                let mut s: Vec<String> = c.iter().map(|x| format!("{}: {} MB, {} % en la gráfica", x.modelo, x.memoria_mb, x.porcentaje_gpu)).collect();
+                let mut s: Vec<String> = c
+                    .iter()
+                    .map(|x| format!("{}: {} MB, {} % en la gráfica", x.modelo, x.memoria_mb, x.porcentaje_gpu))
+                    .collect();
                 s.push(format!("Total: {} MB, {} % en la gráfica", u.memoria_mb, u.porcentaje_gpu.unwrap_or(0)));
                 s.join("\n")
             }
@@ -266,7 +283,10 @@ mod tests {
     #[test]
     fn anonimiza_la_carpeta_personal() {
         let casa = Path::new("/home/ana");
-        assert_eq!(anonimizar("cargando /home/ana/.local/share/tarkor/ia y /home/ana", casa, Path::new("")), "cargando ~/.local/share/tarkor/ia y ~");
+        assert_eq!(
+            anonimizar("cargando /home/ana/.local/share/tarkor/ia y /home/ana", casa, Path::new("")),
+            "cargando ~/.local/share/tarkor/ia y ~"
+        );
         // Otro usuario con el mismo comienzo no se toca.
         assert_eq!(anonimizar("/home/ana2/x", casa, Path::new("")), "/home/ana2/x");
         // Con barra final en la carpeta, igual.
@@ -311,13 +331,23 @@ mod tests {
             cpu_modelo: "AMD Ryzen 5".into(),
             nucleos: 6,
             hilos: 12,
-            gpus: vec![Gpu { nombre: "NVIDIA RTX 3060".into(), fabricante: Fabricante::Nvidia, vram_mb: Some(12288), integrada: false }],
+            gpus: vec![Gpu {
+                nombre: "NVIDIA RTX 3060".into(),
+                fabricante: Fabricante::Nvidia,
+                vram_mb: Some(12288),
+                integrada: false,
+            }],
             disco_libre_mb: 200_000,
             sistema: "Linux 6.1".into(),
         }
     }
 
-    fn datos<'a>(equipo: Option<&'a Equipo>, ps: Result<&'a [Cargado], &'a str>, registro: &'a str, origen: &'a Origen) -> Datos<'a> {
+    fn datos<'a>(
+        equipo: Option<&'a Equipo>,
+        ps: Result<&'a [Cargado], &'a str>,
+        registro: &'a str,
+        origen: &'a Origen,
+    ) -> Datos<'a> {
         Datos {
             version_app: "0.1.0",
             sistema: "linux x86_64",
@@ -343,8 +373,18 @@ mod tests {
     fn el_informe_lleva_todas_las_secciones_y_anonimiza() {
         let e = equipo();
         let o = Origen::Incrustado;
-        let ps = [Cargado { modelo: "qwen2.5:7b".into(), porcentaje_gpu: 60, memoria_mb: 5000, tamano_bytes: 5000 * 1024 * 1024, vram_bytes: 3000 * 1024 * 1024 }];
-        let i = componer(&datos(Some(&e), Ok(&ps), "error en /home/ana/.local/share/tarkor/ia/ollama\nout of memory", &o), Path::new("/home/ana"), Path::new(""));
+        let ps = [Cargado {
+            modelo: "qwen2.5:7b".into(),
+            porcentaje_gpu: 60,
+            memoria_mb: 5000,
+            tamano_bytes: 5000 * 1024 * 1024,
+            vram_bytes: 3000 * 1024 * 1024,
+        }];
+        let i = componer(
+            &datos(Some(&e), Ok(&ps), "error en /home/ana/.local/share/tarkor/ia/ollama\nout of memory", &o),
+            Path::new("/home/ana"),
+            Path::new(""),
+        );
         for esperado in [
             "Versión de la app: 0.1.0",
             "linux x86_64",
@@ -370,7 +410,11 @@ mod tests {
     #[test]
     fn el_informe_sin_analisis_ni_motor_dice_por_que() {
         let o = Origen::ExternoInvalido { motivo: "json roto".into() };
-        let i = componer(&datos(None, Err("El motor de IA no está en marcha."), "", &o), Path::new("/home/ana"), Path::new(""));
+        let i = componer(
+            &datos(None, Err("El motor de IA no está en marcha."), "", &o),
+            Path::new("/home/ana"),
+            Path::new(""),
+        );
         assert!(i.contains("== Equipo analizado ==\nsin analizar"), "{i}");
         assert!(i.contains("No se pudo leer: El motor de IA no está en marcha."), "{i}");
         assert!(i.contains("(registro vacío o inexistente)"), "{i}");

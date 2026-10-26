@@ -53,7 +53,8 @@ fn clasificar(e: &str) -> Clase {
     let m = e.to_ascii_lowercase();
     if m.contains("memory") || contiene_palabra(&m, "oom") {
         Clase::SinMemoria
-    } else if m.contains("forbidden") || contiene_numero(&m, "403") || m.contains("proxy") || m.contains("certificate") {
+    } else if m.contains("forbidden") || contiene_numero(&m, "403") || m.contains("proxy") || m.contains("certificate")
+    {
         Clase::RedBloqueada
     } else if ["dial tcp", "no such host", "connection", "timeout", "unreachable", "max retries exceeded"]
         .iter()
@@ -171,9 +172,7 @@ pub fn tiene(hay: &[String], modelo: &str) -> bool {
 
 /// Modelos descargados que no son de ninguno de `del_perfil` (con el sufijo `:latest` de `tiene`).
 pub fn sobrantes(hay: Vec<(String, u64)>, del_perfil: &[&str]) -> Vec<(String, u64)> {
-    hay.into_iter()
-        .filter(|(h, _)| !del_perfil.iter().any(|m| tiene(std::slice::from_ref(h), m)))
-        .collect()
+    hay.into_iter().filter(|(h, _)| !del_perfil.iter().any(|m| tiene(std::slice::from_ref(h), m))).collect()
 }
 
 /// Tiempo máximo para cargar el modelo en memoria (`calentar`): un equipo justo de memoria puede tardar, pero no
@@ -198,7 +197,9 @@ pub struct Cliente {
 /// Un fallo de `ureq`; el de tiempo de espera lo dice con esas palabras.
 fn sin_conexion(e: ureq::Error) -> Error {
     match e {
-        ureq::Error::Timeout(_) => Error::SinConexion("tiempo de espera agotado: el motor aceptó la conexión pero no respondió".into()),
+        ureq::Error::Timeout(_) => {
+            Error::SinConexion("tiempo de espera agotado: el motor aceptó la conexión pero no respondió".into())
+        }
         e => Error::SinConexion(e.to_string()),
     }
 }
@@ -215,7 +216,12 @@ impl Cliente {
 
     /// Como `con_espera`, con otro tope para cargar el modelo (los tests lo acortan).
     fn con_esperas(base: impl Into<String>, espera: Duration, tope_calentar: Duration) -> Cliente {
-        let base_config = || ureq::Agent::config_builder().proxy(None).http_status_as_error(false).timeout_connect(Some(Duration::from_secs(3)));
+        let base_config = || {
+            ureq::Agent::config_builder()
+                .proxy(None)
+                .http_status_as_error(false)
+                .timeout_connect(Some(Duration::from_secs(3)))
+        };
         let agente = base_config().timeout_recv_response(Some(espera)).timeout_recv_body(Some(espera)).build().into();
         let agente_largo = base_config().build().into();
         let agente_calentar = base_config().timeout_global(Some(tope_calentar)).build().into();
@@ -231,7 +237,13 @@ impl Cliente {
         self.post_con(&self.agente_largo, ruta, cuerpo, sin_conexion)
     }
 
-    fn post_con(&self, agente: &ureq::Agent, ruta: &str, cuerpo: Value, error: fn(ureq::Error) -> Error) -> Result<Value, Error> {
+    fn post_con(
+        &self,
+        agente: &ureq::Agent,
+        ruta: &str,
+        cuerpo: Value,
+        error: fn(ureq::Error) -> Error,
+    ) -> Result<Value, Error> {
         let mut r = agente.post(format!("{}{ruta}", self.base)).send_json(cuerpo).map_err(error)?;
         leer_json(r.status().as_u16(), r.body_mut().read_to_string().map_err(error)?)
     }
@@ -258,7 +270,12 @@ impl Cliente {
     }
 
     /// Descarga un modelo. Ollama reanuda solo lo que falte si se corta.
-    pub fn descargar_modelo(&self, modelo: &str, cancelar: &AtomicBool, progreso: &mut dyn FnMut(ProgresoModelo)) -> Result<(), Error> {
+    pub fn descargar_modelo(
+        &self,
+        modelo: &str,
+        cancelar: &AtomicBool,
+        progreso: &mut dyn FnMut(ProgresoModelo),
+    ) -> Result<(), Error> {
         let r = self
             .agente_largo
             .post(format!("{}/api/pull", self.base))
@@ -277,7 +294,8 @@ impl Cliente {
             if linea.trim().is_empty() {
                 continue;
             }
-            let v: Value = serde_json::from_str(&linea).map_err(|e| Error::Ollama(format!("respuesta no válida: {e}")))?;
+            let v: Value =
+                serde_json::from_str(&linea).map_err(|e| Error::Ollama(format!("respuesta no válida: {e}")))?;
             if let Some(err) = v["error"].as_str() {
                 return Err(Error::Ollama(err.to_string()));
             }
@@ -431,7 +449,11 @@ mod tests {
             if let Some(fin) = texto.find("\r\n\r\n") {
                 let largo = texto[..fin]
                     .lines()
-                    .find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0)))
+                    .find_map(|l| {
+                        l.to_ascii_lowercase()
+                            .strip_prefix("content-length:")
+                            .map(|v| v.trim().parse::<usize>().unwrap_or(0))
+                    })
                     .unwrap_or(0);
                 if datos.len() >= fin + 4 + largo {
                     return texto;
@@ -497,7 +519,12 @@ mod tests {
             assert!(!o(m).sin_memoria(), "{m}");
         }
         // Red bloqueada: reintentar solo no lo arregla, no se autopausa.
-        for m in ["Get \"https://registry.ollama.ai/v2\": Forbidden", "proxyconnect tcp: connection refused", "x509: certificate signed by unknown authority", "unexpected status 403"] {
+        for m in [
+            "Get \"https://registry.ollama.ai/v2\": Forbidden",
+            "proxyconnect tcp: connection refused",
+            "x509: certificate signed by unknown authority",
+            "unexpected status 403",
+        ] {
             assert!(!o(m).es_de_red(), "{m}");
         }
         // Sin memoria (tiene prioridad sobre "connection" en el mismo texto).
@@ -562,7 +589,13 @@ mod tests {
         let ps = c.cargados().unwrap();
         assert_eq!(
             ps,
-            [Cargado { modelo: "qwen2.5:7b".into(), porcentaje_gpu: 75, memoria_mb: 4000, tamano_bytes: 4_194_304_000, vram_bytes: 3_145_728_000 }]
+            [Cargado {
+                modelo: "qwen2.5:7b".into(),
+                porcentaje_gpu: 75,
+                memoria_mb: 4000,
+                tamano_bytes: 4_194_304_000,
+                vram_bytes: 3_145_728_000
+            }]
         );
         assert_eq!(resumen_uso(&ps), Uso { porcentaje_gpu: Some(75), memoria_mb: 4000 });
     }
@@ -599,7 +632,11 @@ mod tests {
 
     #[test]
     fn sobrantes_respeta_el_sufijo_latest() {
-        let hay = vec![("qwen2.5:7b".to_string(), 5), ("nomic-embed-text:latest".to_string(), 1), ("llama3:8b".to_string(), 7)];
+        let hay = vec![
+            ("qwen2.5:7b".to_string(), 5),
+            ("nomic-embed-text:latest".to_string(), 1),
+            ("llama3:8b".to_string(), 7),
+        ];
         let s = sobrantes(hay.clone(), &["qwen2.5:7b", "nomic-embed-text"]);
         assert_eq!(s, [("llama3:8b".to_string(), 7)]);
         // Con otro perfil, sobran el narrador y el de embeddings.
@@ -623,7 +660,11 @@ mod tests {
     #[test]
     fn calentar_tiene_tope_y_dice_que_el_narrador_no_cargo() {
         let l = TcpListener::bind(("127.0.0.1", 0)).unwrap();
-        let c = Cliente::con_esperas(format!("http://127.0.0.1:{}", l.local_addr().unwrap().port()), ESPERA_LECTURA, Duration::from_millis(300));
+        let c = Cliente::con_esperas(
+            format!("http://127.0.0.1:{}", l.local_addr().unwrap().port()),
+            ESPERA_LECTURA,
+            Duration::from_millis(300),
+        );
         // Acepta la conexión y nunca responde: el modelo "sigue cargando".
         let aceptador = thread::spawn(move || {
             let s = l.accept().unwrap();
@@ -642,7 +683,10 @@ mod tests {
     #[test]
     fn un_motor_que_no_responde_falla_por_tiempo() {
         let l = TcpListener::bind(("127.0.0.1", 0)).unwrap();
-        let c = Cliente::con_espera(format!("http://127.0.0.1:{}", l.local_addr().unwrap().port()), Duration::from_millis(300));
+        let c = Cliente::con_espera(
+            format!("http://127.0.0.1:{}", l.local_addr().unwrap().port()),
+            Duration::from_millis(300),
+        );
         // Acepta la conexión y no contesta; se guarda para que no se cierre.
         let aceptador = thread::spawn(move || {
             let s = l.accept().unwrap();
