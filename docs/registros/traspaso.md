@@ -12,9 +12,9 @@ cada commit.**
 |---|---|
 | **Actualizado** | 2026-10-26 |
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
-| **Último commit en `main`** | Fusión del PR #9 (2026-10-26, `b4450fe`): `INS-42`, con la confirmación de la usuaria. La CI de GitHub no arrancó (sin cuota); `ci-local` en verde, Windows sin cubrir (pendiente de `INS-8`). |
+| **Último commit en `main`** | Fusión del PR #10 (2026-10-26, `76acfb3`): `FLU-5`, con la confirmación de la usuaria. La CI de GitHub no arrancó (sin cuota); `ci-local` en verde sobre `4641939`, Windows sin cubrir (pendiente de `INS-8`). |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-10-26: `FLU-5` hecha; la usuaria pide llevarla a `main` con el CI local (GitHub sin cuota). Las tres fases hechas ([retro](retro-2026-10-26-flu5.md): O1 aplicada, R3 → `FLU-6`, R1 y R2 al flujo); marca de revisión `4641939` y [CI local](ci-local.md) en verde sobre ella (11 pasos; Windows sin cubrir). Presupuesto: 0 compactaciones (1 desde la fusión). Siguiente: PR a `main` y fusión. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-10-26: `FLU-5` fusionada en `main` por el PR #10 (`76acfb3`), con commit de merge para que valga `.git-blame-ignore-revs`. Sin tarea en curso. Siguiente: `FLU-6` (fijar la versión de Rust con `app/rust-toolchain.toml`) o lo que pida la usuaria. |
 | **Tests** | 2026-10-26: núcleo `cargo test -p tarkor-nucleo` 116, `cargo fmt --all --check` en verde, clippy 0 avisos, `tsc -b` 0, `cargo check` del núcleo y la app para Windows (mingw) en verde. Asistente `vitest` 27 y E2E con el Ollama falso: último verde el 2026-10-25. |
 
 ## Dónde está todo (para saber qué sigue)
