@@ -121,6 +121,9 @@ Ver [`06`](06-inventario-exclusiones.md).
   `oxlint` y vitest (798) en verde. El juego no tiene E2E de frontend.
 - [ ] **INS-34** Backend: build sin rutas ni servicios de curación (ruta de image-prompt, orquestador
   cloud, `LiveTeacherCapture`, scripts).
+  En curso (2026-10-27) en la rama del juego `claude/ins-34-backend-sin-curacion`. Mecanismo: esbuild sustituye
+  `process.env.TARKOR_EMPAQUETADO` por `"1"` (`define`) y lo de curación se carga con `import()` dinámico en la rama
+  que queda muerta. Falta aquí: el mismo `define` en `herramientas/empaquetar-backend.mjs`.
 - [ ] **INS-35** Backend: `SYSTEM` del narrador incrustado en build; narrador con modelo base +
   `system` por petición detrás de variable de entorno; leer `TARKOR_NUM_THREAD`,
   `TARKOR_NUM_BATCH`, `TARKOR_NUM_CTX_NARRADOR` y `TARKOR_MODELOS_SIN_PENSAR` (ver `12`).
