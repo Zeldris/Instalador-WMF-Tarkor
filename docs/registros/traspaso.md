@@ -10,11 +10,11 @@ cada commit.**
 
 | | |
 |---|---|
-| **Actualizado** | 2026-10-26 |
+| **Actualizado** | 2026-10-27 |
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #11 (2026-10-26, `a73f881`): `FLU-6`, con la confirmación de la usuaria. La CI de GitHub no arrancó (sin cuota); `ci-local` en verde sobre `f59202b`, Windows sin cubrir (pendiente de `INS-8`). |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-10-26: `INS-33` en la rama del juego `claude/ins-33-frontend-sin-admin` (`180027a6`): fase 1 sin graves ni medios, CI local en verde salvo Chromium (proxy). La usuaria aprobó las cuatro propuestas de su retro y la subida a `main` del juego sin PR (`QA-215`, `QA-238`). Encargado a la sesión del juego `session_01VdeHmAjX5x2dzkt8DJwr7a`. Siguiente: comprobar `INS-33` en `main` del juego y cerrarla en el plan; luego `INS-34`. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-10-27: `INS-33` en `main` del juego (`aae4a755`, sin PR, CI local, `QA-215`), con su retro aprobada (`QA-262`…`QA-265`) y comprobada desde aquí. Siguiente: `INS-34` (backend sin rutas ni servicios de curación), encargada a una sesión del juego como `INS-31` y `INS-33`. |
 | **Tests** | 2026-10-26: núcleo `cargo test -p tarkor-nucleo` 116, `cargo fmt --all --check` en verde, clippy 0 avisos, `tsc -b` 0, `cargo check` del núcleo y la app para Windows (mingw) en verde. Asistente `vitest` 27 y E2E con el Ollama falso: último verde el 2026-10-25. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -82,8 +82,10 @@ cada commit.**
 12. Pendientes leves de `INS-31` (en `main` del juego): con `VITE_API_URL=""` la base queda vacía (igual que antes);
     el aviso de `useReconnectionPolling.ts` no dice qué URL probó (útil para `INS-41`). El comentario de los tests y
     `15-instalacion.md` ya se arreglaron allí.
-13. Pendiente leve de `INS-33` (rama del juego): la pestaña `custom` de `CharacterSelect` y su formulario quedan sin
-    alcanzar, a propósito, para retomar «Crear desde cero». Los tres leves anteriores, arreglados en `2a91903b`.
+13. Leves de `INS-33` en el juego, para la próxima sesión que toque esos archivos: el formulario de «Crear desde cero»
+    queda sin alcanzar, a propósito; en `docs/mapa-agente.md`, «Crear desde cero» se atribuye a `Home.tsx` (es
+    `CharacterSelect.tsx`, cuyo test falta en la lista); y `import/first` (`QA-263`) no caza un `import` tras un
+    comentario, el caso que la motivó (comprobado con oxlint: solo salta con código delante).
 14. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
 
 ## Decisiones de la usuaria que bloquean algo
@@ -113,6 +115,8 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 
 Dos líneas cada una como mucho; el detalle está en el commit y la más antigua sale cuando hay más de 5.
 
+- ~~`INS-33` · Frontend sin admin en el juego empaquetado~~ (2026-10-27): `esEmpaquetado()` quita enlace, rutas
+  `/admin/*` y herramientas; «Crear desde cero» en construcción. En `main` del juego (`aae4a755`, sin PR, CI local).
 - ~~`INS-32` · Fuentes Cinzel e Inter en local~~ (2026-10-26): ya hecho en `main` del juego por su `BAS-1`
   (`4a150259`, `frontend/src/assets/fonts/` con licencias OFL); sin cambios.
 - ~~`INS-31` · URL del backend en tiempo de ejecución~~ (2026-10-26): `apiBaseUrl()` en el `api.ts` del juego con
@@ -121,5 +125,3 @@ Dos líneas cada una como mucho; el detalle está en el commit y la más antigua
   y el destino de Windows; el CI y `instalar-entorno.sh` lo instalan de ahí.
 - ~~`FLU-5` · `cargo fmt` en el check~~ (2026-10-26): workspace formateado a 120 columnas en commits aparte
   (`a27489f` y `9b0035c`, ignorados por `git blame`) y `cargo fmt --all --check` en el check y en el CI.
-- ~~`INS-42` · Asistente real de punta a punta~~ (2026-10-26): autopausa por red con espera creciente en la
-  Descarga, Ajustes y Reparar; calentar el narrador al entrar; perfil más ligero si falta memoria o narra lento.
