@@ -119,14 +119,15 @@ Ver [`06`](06-inventario-exclusiones.md).
   retro aprobada por la usuaria, `QA-262`…`QA-265`): `esEmpaquetado()` en `frontend/src/lib/empaquetado.ts`, que
   comparte la lectura de `window.__TARKOR__` con `apiBaseUrl()`; 9 tests nuevos que fallan sin el arreglo; `tsc`,
   `oxlint` y vitest (798) en verde. El juego no tiene E2E de frontend.
-- [ ] **INS-34** Backend: build sin rutas ni servicios de curación (ruta de image-prompt, orquestador
-  cloud, `LiveTeacherCapture`, scripts).
-  En curso (2026-10-27) en la rama del juego `claude/ins-34-backend-sin-curacion`. Mecanismo: esbuild sustituye
-  `process.env.TARKOR_EMPAQUETADO` por `"1"` (`define`) y lo de curación se carga con `import()` dinámico en la rama
-  que queda muerta; plegarla exige `minify` (o `minifySyntax`). Hecho en la rama (4 commits, revisada desde aquí):
-  `empaquetado.test.ts` y `world.test.ts` fallan sin el arreglo. Aquí, `herramientas/empaquetar-backend.mjs` lleva el
-  `define` y se para si el `metafile` trae `lib/aiProviders/`, `imagePromptGenerator`, `liveTeacherCapture` o scripts
-  de curación (probado: pasa con la rama y para con `main` del juego). Falta: CI local del juego, retro y `main`.
+- [x] **INS-34** (2026-10-27) Backend: build sin rutas ni servicios de curación (ruta de image-prompt, orquestador
+  cloud, `LiveTeacherCapture`, scripts). **En `main` del juego** (`c7f0e5f9`, sin PR, CI local, `QA-215`; retro
+  aprobada por la usuaria, `QA-266`): esbuild sustituye `process.env.TARKOR_EMPAQUETADO` por `"1"` (`define`) y la
+  ruta `POST /world/:slug/image-prompt` y la captura en vivo se cargan con `import()` dinámico en la rama que queda
+  muerta (plegarla exige `minify` o `minifySyntax`); `empaquetado.test.ts` y `world.test.ts` fallan sin el arreglo.
+  Aquí, `herramientas/empaquetar-backend.mjs` lleva el `define` y se para si el `metafile` trae `lib/aiProviders/`,
+  `imagePromptGenerator`, `liveTeacherCapture` o scripts de curación (pasa con la rama, para con el `main` anterior).
+  CI local: 3958 tests de backend y 798 de frontend; el test de navegador de `tools/qa`, que allí se saltó por la
+  descarga de Chromium, pasado desde aquí (382 tests de `tools/qa`).
 - [ ] **INS-35** Backend: `SYSTEM` del narrador incrustado en build; narrador con modelo base +
   `system` por petición detrás de variable de entorno; leer `TARKOR_NUM_THREAD`,
   `TARKOR_NUM_BATCH`, `TARKOR_NUM_CTX_NARRADOR` y `TARKOR_MODELOS_SIN_PENSAR` (ver `12`).
