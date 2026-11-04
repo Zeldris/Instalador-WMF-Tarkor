@@ -3,7 +3,7 @@ name: pr
 description: "Use when writing a PR body."
 license: MIT (see LICENSE-mattpocock-skills)
 metadata:
-  version: "0.3.0"
+  version: "0.5.0"
   source: "mattpocock/skills@5beb35b"
   credits:
     skill: show-me
@@ -17,6 +17,8 @@ If `.claude/gw/pr.md` exists in the project, read it first: it holds what is spe
 > Original skill by Matt Pocock ([mattpocock/skills](https://github.com/mattpocock/skills), MIT).
 
 If the PR description is saved as a file in the repo, its links are relative to its own folder, unless that folder is listed in `linkRoots` of `.claude/gw.json` (then they are relative to the repo root).
+
+Once the PR is merged and the log is up to date, recommend a `/clear` to the user in one line: the next task starts from the log, not from this context.
 
 Use this template for writing the PR body:
 

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<!-- Quote card: one sentence with its author and where it comes from. Only quote what is written in the source,
+     word for word, and give the source in sheet.md. Fill every gap written between double braces. -->
+<meta name="gw-size" content="1200x675">
+<title>Quote</title>
+<style>
+  :root {
+    /* Palette: override these to match the project (brand colors, dark or light). Nothing else needs to change. */
+    --background: #0f172a; --surface: #1e293b; --border: #334155;
+    --text: #f1f5f9; --muted: #94a3b8; --accent: #38bdf8; --accent-text: #0f172a;
+    --good: #4ade80; --bad: #f87171;
+    --font: system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, "DejaVu Sans", "Liberation Sans", sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Liberation Mono", monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { width: 1200px; height: 675px; overflow: hidden; background: var(--background); color: var(--text); font-family: var(--font);
+         padding: 64px 96px; display: flex; flex-direction: column; justify-content: center; position: relative; }
+  body::before { content: "\201C"; position: absolute; left: 56px; top: 20px; font-size: 220px; line-height: 1; color: var(--accent); opacity: .35; }
+  blockquote { font-size: 46px; line-height: 1.25; font-weight: 600; max-width: 960px; position: relative; }
+  .author { margin-top: 40px; display: flex; align-items: center; gap: 18px; font-size: 24px; }
+  .author::before { content: ""; width: 56px; height: 4px; border-radius: 2px; background: var(--accent); }
+  .author b { color: var(--text); }
+  .author span { color: var(--muted); }
+  .footer { position: absolute; left: 96px; right: 96px; bottom: 40px; display: flex; justify-content: space-between; font-size: 20px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <blockquote>{{la cita, literal}}</blockquote>
+  <div class="author"><b>{{quién lo dijo}}</b><span>{{dónde o cuándo}}</span></div>
+  <div class="footer"><span>{{proyecto}}</span><span>{{fecha}}</span></div>
+</body>
+</html>

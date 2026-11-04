@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<!-- Code snippet: paste the code into pre#code as plain text (the "<" of the code written as &lt;) and set
+     the language class on the pre: lang-js, lang-py, lang-sh or lang-json for the keyword list; any other value
+     only colors strings, numbers and comments. Highlighting is a few lines of script in this file, no library.
+     Ten lines of about 65 characters fit (the render fails if the code does not); show only the lines that matter. Fill every gap written between double braces. -->
+<meta name="gw-size" content="1200x675">
+<title>Code</title>
+<style>
+  :root {
+    /* Palette: override these to match the project (brand colors, dark or light). Nothing else needs to change. */
+    --background: #0f172a; --surface: #1e293b; --border: #334155;
+    --text: #f1f5f9; --muted: #94a3b8; --accent: #38bdf8; --accent-text: #0f172a;
+    --good: #4ade80; --bad: #f87171;
+    --font: system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, "DejaVu Sans", "Liberation Sans", sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Liberation Mono", monospace;
+  }
+  :root { --k: #c084fc; --s: #86efac; --n: #fbbf24; --c: #64748b; }
+  * { box-sizing: border-box; margin: 0; }
+  body { width: 1200px; height: 675px; overflow: hidden; background: var(--background); color: var(--text); font-family: var(--font);
+         padding: 44px 64px; display: flex; flex-direction: column; }
+  .brand { font-size: 18px; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+  h1 { font-size: 36px; margin: 14px 0 22px; }
+  .window { background: var(--surface); border: 2px solid var(--border); border-radius: 14px; overflow: hidden; }
+  .bar { display: flex; align-items: center; gap: 8px; padding: 12px 18px; border-bottom: 2px solid var(--border); font-size: 18px; color: var(--muted); }
+  .bar i { width: 12px; height: 12px; border-radius: 50%; background: var(--border); }
+  .bar span { margin-left: 10px; font-family: var(--mono); }
+  pre { font-family: var(--mono); font-size: 24px; line-height: 1.5; padding: 22px 28px; white-space: pre; tab-size: 2; }
+  .k { color: var(--k); font-weight: 700; } .s { color: var(--s); } .n { color: var(--n); } .c { color: var(--c); font-style: italic; }
+  .footer { margin-top: auto; font-size: 20px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <div class="brand">{{proyecto}}</div>
+  <h1>{{qué hace este código}}</h1>
+  <div class="window">
+    <div class="bar"><i></i><i></i><i></i><span>{{nombre del archivo}}</span></div>
+<pre id="code" class="lang-js">{{código}}</pre>
+  </div>
+  <div class="footer">{{una frase: qué se ve aquí}}</div>
+  <script>
+    var WORDS = {
+      "lang-js": "const let var function return if else for while of in new class import export from await async try catch throw true false null undefined",
+      "lang-py": "def class return if elif else for while in import from as with try except raise lambda True False None and or not is yield async await",
+      "lang-sh": "if then else fi for do done while case esac in function export local echo cd set",
+      "lang-json": "true false null"
+    };
+    var pre = document.getElementById("code");
+    var key = (pre.className.match(/lang-[a-z]+/) || [""])[0];
+    var keys = {};
+    (WORDS[key] || "").split(" ").forEach(function (p) { keys[p] = true; });
+    var code = pre.textContent;
+    var re = /(\/\/[^\n]*|(?:^|\s)#[^\n]*)|("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`)|(\b\d+(?:\.\d+)?\b)|(\b[A-Za-z_]\w*\b)/gm;
+    pre.textContent = "";
+    var last = 0, m;
+    function put(text, cls) {
+      if (!text) return;
+      if (!cls) { pre.appendChild(document.createTextNode(text)); return; }
+      var s = document.createElement("span");
+      s.className = cls;
+      s.textContent = text;
+      pre.appendChild(s);
+    }
+    while ((m = re.exec(code)) !== null) {
+      put(code.slice(last, m.index));
+      if (m[1]) put(m[1], "c");
+      else if (m[2]) put(m[2], "s");
+      else if (m[3]) put(m[3], "n");
+      else put(m[4], keys[m[4]] ? "k" : "");
+      last = re.lastIndex;
+    }
+    put(code.slice(last));
+  </script>
+</body>
+</html>

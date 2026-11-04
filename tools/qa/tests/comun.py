@@ -34,7 +34,7 @@ def carpeta() -> str:
 
 
 # QA-119 (retro del 2026-10-19): líneas de un registro de sesión de Claude Code (`~/.claude/projects/…/*.jsonl`) con la
-# forma de las reales, para todos los tests de herramientas que leen registros (`medir.py`, `recuperar.py`). Los tests
+# forma de las reales, para todos los tests de herramientas que leen registros (`measure.py`, `recover.py`). Los tests
 # hechos a mano a la medida del código dejaron pasar seis fallos; el que lea registros parte de aquí.
 HORA = '2026-10-19T10:00:00.000Z'
 _UUID = itertools.count()

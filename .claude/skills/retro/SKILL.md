@@ -1,9 +1,9 @@
 ---
 name: retro
-description: "Conduct a retrospective on a coding session. Use before each push or PR to the protected branch (after /code-review and /opt-tokens), when a phase or milestone closes, or when the user asks for a retro."
+description: "Conduct a retrospective on a coding session. Use before each push or PR to the protected branch (after /code-review and /gw-opt-tokens), when a phase or milestone closes, or when the user asks for a retro."
 license: MIT (see LICENSE-mattpocock-skills)
 metadata:
-  version: "0.3.0"
+  version: "0.5.0"
   source: "mattpocock/skills@5beb35b"
 ---
 
@@ -54,15 +54,20 @@ You have access to several files in the repo:
 
 This section is the only change to the upstream skill.
 
-- The reviewer's standards file is `REVIEW.md`, not `CODING_STANDARDS.md`; the hand-off log path is `log` in `.claude/gw.json`.
-- Save the retro as a dated file next to the log (for example `docs/registros/retro-YYYY-MM-DD-<topic>.md`) with a `**Estado:**`/`**Status:**` line; `revisado.sh` may require one when `requireRetro` is set.
-- The exact form of that line, which `revisado.sh` reads: it starts the line (`**Estado:** …` / `**Status:** …`) and its paragraph (up to the next blank line) holds a whole word among `aplicad*`, `rechazad*`, `aplazad*`, `decidid*`, `aprobad*` (`applied`, `rejected`, `deferred`, `decided`, `approved`), for example `**Estado:** aprobada y aplicada (P1, P2); P3 rechazada`. The words `pendiente`, `pending`, `undecided`, `sin decidir`, `aún no` and `not yet` anywhere in that paragraph cancel it, so write the decisions that are still open in another paragraph. The retro file must be new on the branch.
+- The reviewer's standards file is `REVIEW.md`, not `CODING_STANDARDS.md`; the hand-off log path is `log` in `.claude/gw.json` (`python3 .claude/gw/scripts/config.py get log`).
+- Save the retro as a dated file in the records folder, `python3 .claude/gw/scripts/config.py get recordsDir` (`<recordsDir>/retro-YYYY-MM-DD-<topic>.md`) with a `**Estado:**`/`**Status:**` line; `reviewed.sh` may require one when `requireRetro` is set.
+- The exact form of that line, which `reviewed.sh` reads: it starts the line (`**Estado:** …` / `**Status:** …`) and its paragraph (up to the next blank line) holds a whole word among `aplicad*`, `rechazad*`, `aplazad*`, `decidid*`, `aprobad*` (`applied`, `rejected`, `deferred`, `decided`, `approved`), for example `**Estado:** aprobada y aplicada (P1, P2); P3 rechazada`. The words `pendiente`, `pending`, `undecided`, `sin decidir`, `aún no` and `not yet` anywhere in that paragraph cancel it, so write the decisions that are still open in another paragraph. The retro file must be new on the branch.
 - Sort each candidate into one of two outlets and say which:
   - **Project-specific** (paths, stack, domain rules): propose the patch in this repo.
   - **General** (would help any project using the workflow: a skill, a hook, a template, a rule in `AGENTS.md`): propose it **to the workflow itself** as an issue or PR on the `Galivelop-workflow` repository, or leave it in the retro file under a `## For Galivelop-workflow` heading so `gw-harvest` collects it. Do not patch the copied workflow files locally; local edits drift and are overwritten by the next update.
-- **Review the project's own skills too.** Look at how `selector`, `orchestrate-dealer`, `opt-tokens`, `pr`, the code
+- **Review the project's own skills too.** Look at how `gw-selector`, `gw-orchestrate-dealer`, `gw-opt-tokens`, `pr`, the code
   review and this retro performed; read the skill list before proposing. When a skill failed, the proposal changes
   that skill (or proposes the change to the workflow), not a loose new rule in `AGENTS.md`/`CLAUDE.md`.
 - **Present the retro before the PR**, even when the user said "merge directly": that skips waiting for reviews, not
   the retro. Its `**Estado:**`/`**Status:**` line records what the user decided (applied, rejected, deferred), not just
-  "done"; `revisado.sh` checks it when `requireRetro` is set.
+  "done"; `reviewed.sh` checks it when `requireRetro` is set.
+- **The person asked for the protected branch but is not there to decide the retro:** leave everything ready and stop
+  before `reviewed.sh`. Ready means the retro written with `**Status:** pending` (`reviewed.sh` refuses it), the check
+  green on the merge with the protected branch, and the PR description. Tell them their decision on the retro is the
+  one missing step; when it arrives, write it into the `**Status:**` line and run `reviewed.sh`. Never fill in the
+  decision for them.

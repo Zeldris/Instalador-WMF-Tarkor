@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<!-- Flow diagram, left to right: how something works in four steps. Copy one per language (diagram.es.html,
+     diagram.en.html), fill every gap written between double braces and render with render.mjs. Three to five
+     steps: delete or copy an li. The return arrow (.loop) says what closes the cycle; delete it if the flow
+     does not go back to the start. -->
+<meta name="gw-size" content="1200x675">
+<title>Diagram</title>
+<style>
+  :root {
+    /* Palette: override these to match the project (brand colors, dark or light). Nothing else needs to change. */
+    --background: #0f172a; --surface: #1e293b; --border: #334155;
+    --text: #f1f5f9; --muted: #94a3b8; --accent: #38bdf8; --accent-text: #0f172a;
+    --good: #4ade80; --bad: #f87171;
+    --font: system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, "DejaVu Sans", "Liberation Sans", sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Liberation Mono", monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { width: 1200px; height: 675px; overflow: hidden; background: var(--background); color: var(--text); font-family: var(--font);
+         padding: 52px 60px; display: flex; flex-direction: column; }
+  .brand { font-size: 18px; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+  h1 { font-size: 42px; margin-top: 14px; }
+  ol { list-style: none; display: flex; align-items: stretch; gap: 44px; margin-top: auto; counter-reset: step; }
+  li { flex: 1; position: relative; background: var(--surface); border: 2px solid var(--border); border-radius: 16px; padding: 22px 20px; counter-increment: step; }
+  li::before { content: counter(step); display: inline-grid; place-items: center; width: 38px; height: 38px; border-radius: 50%;
+               background: var(--accent); color: var(--accent-text); font-weight: 700; font-size: 20px; }
+  li:not(:last-child)::after { content: "\2192"; position: absolute; right: -36px; top: 50%; transform: translateY(-50%); font-size: 32px; color: var(--accent); }
+  li b { display: block; font-size: 24px; margin-top: 14px; line-height: 1.2; }
+  li span { display: block; font-size: 18px; color: var(--muted); margin-top: 10px; line-height: 1.4; }
+  .loop { margin-top: 26px; border: 2px dashed var(--accent); border-top: none; border-radius: 0 0 16px 16px; height: 36px; position: relative; }
+  .loop span { position: absolute; left: 50%; bottom: -14px; transform: translateX(-50%); background: var(--background); padding: 0 16px; font-size: 20px; color: var(--accent); white-space: nowrap; }
+  .footer { margin-top: auto; padding-top: 30px; font-size: 20px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <div class="brand">{{proyecto}}</div>
+  <h1>{{título del diagrama}}</h1>
+  <ol>
+    <li><b>{{paso}}</b><span>{{detalle}}</span></li>
+    <li><b>{{paso}}</b><span>{{detalle}}</span></li>
+    <li><b>{{paso}}</b><span>{{detalle}}</span></li>
+    <li><b>{{paso}}</b><span>{{detalle}}</span></li>
+  </ol>
+  <div class="loop"><span>{{qué cierra el ciclo}}</span></div>
+  <div class="footer">{{una frase: por qué importa}}</div>
+</body>
+</html>

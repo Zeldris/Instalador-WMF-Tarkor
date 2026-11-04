@@ -5,3 +5,5 @@
 !.claude/gw.json
 !.claude/gw/
 __pycache__/
+# galivelop-workflow: private, never committed
+.claude/gw.local.json

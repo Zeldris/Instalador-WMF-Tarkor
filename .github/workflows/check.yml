@@ -1,0 +1,104 @@
+# galivelop-workflow v0.5.0
+# The project's check in CI: each `ciInstall` command (else each `install` command), then each `check` command of
+# .claude/gw.json, on every push outside the protected branch and on every pull request. On a pull request it also
+# runs the BASE branch's copy of .githooks/pre-commit over the PR's commits, so a pull request cannot weaken the check
+# that reviews it. `checkWrapper` is not applied here (CI runners do not need it).
+# Node, Python and Java are set up when package.json, pyproject.toml / requirements*.txt or pom.xml / build.gradle*
+# exist (so this file stays the workflow's, untouched; `ciPython` makes Python a matrix); another toolchain
+# (rust-toolchain...) goes before "Install".
+name: Check
+
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  versions:
+    # The Python matrix comes from `ciPython` of .claude/gw.json at run time (absent: one job, "3.x"), so this file
+    # stays the workflow's, untouched.
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.python.outputs.python }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: python
+        run: |
+          python3 .claude/gw/scripts/config.py validate >/dev/null
+          # Without Python project files setup-python is skipped: N equal jobs would only spend quota.
+          if ! compgen -G 'pyproject.toml' >/dev/null && ! compgen -G 'requirements*.txt' >/dev/null; then
+            echo 'python=["3.x"]' >> "$GITHUB_OUTPUT"
+          elif versions="$(python3 .claude/gw/scripts/config.py get ciPython --json 2>/dev/null)"; then
+            echo "python=$versions" >> "$GITHUB_OUTPUT"
+          else
+            echo 'python=["3.x"]' >> "$GITHUB_OUTPUT"
+          fi
+  check:
+    # `check` as ever without `ciPython`; `check (<version>)` with it (required checks and `ciIgnore` match the name).
+    name: "${{ matrix.python == '3.x' && 'check' || format('check ({0})', matrix.python) }}"
+    needs: versions
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ${{ fromJSON(needs.versions.outputs.python) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        if: hashFiles('package.json') != ''
+        with:
+          node-version: lts/*
+      - uses: actions/setup-python@v5
+        if: hashFiles('pyproject.toml', 'requirements*.txt') != ''
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-java@v4
+        if: hashFiles('pom.xml', 'build.gradle', 'build.gradle.kts') != ''
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Install
+        run: |
+          # `ciInstall` when the config sets it (even empty); otherwise `install`. `setup` is for cloud sessions only.
+          # A config that fails to load fails the job with its message; only an absent `ciInstall` falls back.
+          python3 .claude/gw/scripts/config.py validate >/dev/null
+          if python3 .claude/gw/scripts/config.py get ciInstall --json >/dev/null 2>&1; then
+            cmds="$(python3 .claude/gw/scripts/config.py get ciInstall)"
+          else
+            cmds="$(python3 .claude/gw/scripts/config.py get install)"
+          fi
+          while IFS= read -r cmd; do
+            [ -n "$cmd" ] || continue
+            echo "== $cmd"
+            bash -c "$cmd"
+          done <<<"$cmds"
+      - name: Git hooks path
+        # `doctor.py` in `check` fails on an unset core.hooksPath; the hooks are in the checkout, so point git at them.
+        run: git config core.hooksPath .githooks
+      - name: Check
+        run: |
+          cmds="$(python3 .claude/gw/scripts/config.py get check)"
+          while IFS= read -r cmd; do
+            [ -n "$cmd" ] || continue
+            echo "== $cmd"
+            bash -c "$cmd"
+          done <<<"$cmds"
+      - name: Base branch's pre-commit over the pull request
+        if: github.event_name == 'pull_request'
+        run: |
+          base="origin/$GITHUB_BASE_REF"
+          if ! git cat-file -e "$base:.githooks/pre-commit" 2>/dev/null; then
+            echo "the base branch has no .githooks/pre-commit yet; skipped"
+            exit 0
+          fi
+          mkdir -p .gw-ci
+          git show "$base:.githooks/pre-commit" > .gw-ci/pre-commit
+          # The base branch's hook may still be the one that only knows --rango (the old name of --range)
+          flag=--range
+          grep -q -- '--range' .gw-ci/pre-commit || flag=--rango
+          bash .gw-ci/pre-commit "$flag" "$(git merge-base "$base" HEAD)..HEAD"

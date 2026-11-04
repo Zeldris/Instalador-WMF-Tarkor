@@ -12,7 +12,7 @@ Dónde se trabaja cada fase:
 
 Marcar cada punto al terminarlo. Cada tarea tiene su identificador `INS-<fase><n>` (la fase 0 va
 sin el 0: `INS-1` es la antigua 0.1, y por eso no admite más de nueve tareas: lo nuevo entra en la
-fase que toque), que nombran los commits y la [bitácora](registros/traspaso.md);
+fase que toque), que nombran los commits y la [bitácora](records/traspaso.md);
 las del flujo de trabajo llevan `FLU-n` y van en su [sección](#flujo-de-trabajo).
 
 ## Dónde lo dejamos (2026-09-28)
@@ -202,34 +202,41 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
 
 ## Flujo de trabajo
 
-Cómo trabaja Claude en este repo: [`AGENTS.md`](../AGENTS.md), la [bitácora](registros/traspaso.md), los
+Cómo trabaja Claude en este repo: [`AGENTS.md`](../AGENTS.md), la [bitácora](records/traspaso.md), los
 ganchos, `.claude/gw/scripts`, `tools/qa` y las skills ([runbook](runbooks/skills-y-modelos.md)).
 
 - [x] **FLU-1** (2026-10-21) Traer de Tarkor su flujo de trabajo y sus skills, adaptados al instalador: `CLAUDE.md`,
   [`REVIEW.md`](../REVIEW.md), bitácora, ganchos de sesión y de antes de subir, `tools/qa` con sus
   tests (job `qa` de la CI) y las skills de `.claude/skills/` con sus notas para el instalador.
   Hecho, con `/code-review` (dos rondas), `/opt-tokens` y la
-  [retro](registros/retro-2026-10-21-flujo.md), cuyas cuatro propuestas se aplicaron.
+  [retro](records/retro-2026-10-21-flujo.md), cuyas cuatro propuestas se aplicaron.
 - [ ] 🚧 **FLU-2** (2026-10-22) Piloto de [Galivelop-workflow](https://github.com/Zeldris/galivelop-workflow) v0.2.0:
   sus scripts (`.claude/gw/scripts/`), skills, ganchos, `AGENTS.md` con `CLAUDE.md` que lo importa, y una sola CI
   (Linux, Windows y `qa` con el pre-commit de la rama base). Lo propio del instalador queda en `.claude/gw.json`,
   `.claude/gw/*.md`, `tools/qa/{en-app,tests-app}.sh`, `tools/dev/instalar-entorno.sh` y `tools/banco/`. Hecho:
   aplicado con el check en verde, la prueba del paso 6 de `aplicar.md` y `doctor.py` sin FAIL; revisión de código
-  y [retro](registros/retro-2026-10-22-piloto-galivelop.md). Falta: la CI de GitHub en verde (agotada; mientras,
-  `FLU-3`) y el [registro del piloto](registros/piloto-galivelop-workflow.md) cerrado.
+  y [retro](records/retro-2026-10-22-piloto-galivelop.md). Falta: la CI de GitHub en verde (agotada; mientras,
+  `FLU-3`) y el [registro del piloto](records/piloto-galivelop-workflow.md) cerrado.
 - [x] **FLU-3** (2026-10-22) `tools/qa/ci-local.py` (retro del piloto): con la CI de GitHub agotada, corre en local
-  los pasos de los jobs de Ubuntu de `comprobar.yml` (los lee del workflow, no los copia) y, con `--apuntar`, deja
-  fecha, commit y resultado en [`ci-local.md`](registros/ci-local.md). El job de Windows sale como «sin cubrir».
+  los pasos de los jobs de Ubuntu del CI (los lee del workflow, no los copia) y, con `--apuntar`, deja
+  fecha, commit y resultado en [`ci-local.md`](records/ci-local.md). El job de Windows sale como «sin cubrir».
 - [x] **FLU-4** (2026-10-25) `/gw-update` a Galivelop-workflow v0.3.0: scripts, esquema, skills y ganchos al día;
-  `comprobar.yml` conserva sus jobs (el cambio de `ciInstall` no le toca) y `REVIEW.md` gana dos reglas de la plantilla.
+  el CI conserva sus jobs (el cambio de `ciInstall` no le toca) y `REVIEW.md` gana dos reglas de la plantilla.
 - [x] **FLU-5** (2026-10-26, retro de `INS-42`) `cargo fmt` del workspace en commits aparte (`a27489f` y `9b0035c`, a
   120 columnas y `use_small_heuristics = "Max"` en `app/rustfmt.toml`, el estilo del resto del repo) y `cargo fmt --all --check` en `check` de
-  `.claude/gw.json` y en `comprobar.yml` (con `rustfmt` y `clippy` declarados en el toolchain). Los commits de formato van
+  `.claude/gw.json` y en el CI (con `rustfmt` y `clippy` declarados en el toolchain). Los commits de formato van
   en `.git-blame-ignore-revs`, que `tools/dev/instalar-entorno.sh` activa.
 - [x] **FLU-6** (2026-10-26, retro de `FLU-5`) `app/rust-toolchain.toml` fija Rust 1.94.1 (con `rustfmt`, `clippy` y
-  el destino de Windows) para que local, el pre-push y el CI formateen y avisen igual; `comprobar.yml` y
+  el destino de Windows) para que local, el pre-push y el CI formateen y avisen igual; el CI y
   `tools/dev/instalar-entorno.sh` lo instalan con `rustup toolchain install` desde `app/`. Subir de versión es un
   commit a mano (con el `rust-version` de `[workspace.package]` en `app/Cargo.toml`, que heredan los miembros y
   compara `tools/qa/tests/test_version_rust.py`).
   **Pendiente:** el CI de GitHub con la versión fijada no ha corrido (sin cuota); lo comprueba la próxima subida con
   cuota, en la pestaña Actions, y el job de Windows con `INS-8`.
+- [x] **FLU-7** (2026-11-04) `/gw-update` a Galivelop-workflow v0.5.0, con las rutas en inglés (`docs/records/`,
+  `reviewed.txt`), `commitNext` y commits sin firmas del agente (`agentSignatures: false`). El CI se parte en
+  `check.yml` (del flujo: el `check` de `.claude/gw.json`) y `app.yml` (del instalador: `npm test`, el build,
+  `cargo test` en Linux y Windows y la compilación para Windows); el job `qa` y los tests de los scripts de las skills
+  salen del CI del proyecto (los prueba el repo del flujo). `tools/qa` deja `ci-local.py` y sus tests, que ya trae el
+  flujo; `instalar-entorno.sh` instala con `sudo -n` si no es root. `REVIEW.md` etiqueta cada regla con
+  `(check: …)` o `(criterio)`. **Pendiente:** el CI de GitHub sigue sin cuota; `app.yml` no ha corrido allí.

@@ -2,7 +2,7 @@
 
 Compara modelos generativos con los **prompts reales** del proyecto, a ciegas y por pares, como hace
 [EQ-Bench Creative Writing v3](https://eqbench.com/creative_writing.html). Mide calidad; la latencia es de otra
-herramienta (en este repositorio, `opt-ai`) y no se mezcla.
+herramienta (en este repositorio, `gw-opt-ai`) y no se mezcla.
 
 ## Casos
 

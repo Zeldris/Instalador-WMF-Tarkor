@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.3.0
+# galivelop-workflow v0.5.0
 # Git pre-push hook (copied into projects as .githooks/pre-push; enable with: git config core.hooksPath .githooks).
+#   - While it runs, keeps a marker `gw-push-in-progress.<pid>` in this worktree's own git dir (one per linked worktree, one per push) with its pid
+#     and, per pushed ref, the LOCAL sha and local branch, so the Stop hook (before-stop.py) does not tell an agent to
+#     push again while this one is still checking that very commit. Best effort and silent: it never makes the push fail; removed on every exit (only while
+#     it still holds this hook's pid).
 #   - Says which commits each ref pushes, or that it pushes nothing new.
 #   - Refuses conflict markers and added *.rej / *.orig files in what is pushed (to the protected branch, in all it
 #     gains from the remote tip, commits other branches already have included).
+#   - Runs scripts/private-check.py (when the project has it) on the commits each ref pushes: key formats, e-mail
+#     addresses not allowed and the private names of the local .claude/gw.local.json, in their added lines, added
+#     paths and messages; privateCheck: false in the pushed commit's config turns it off. Fails closed.
 #   - Reads .claude/gw.json as each pushed commit has it (never the working tree's); a pushed commit without a valid
 #     one is refused.
 #   - Runs every `check` command of that config on the commit being pushed (a temporary worktree when it is not
@@ -13,13 +20,17 @@
 #     gets the `worktreeLinks` paths symlinked from the main checkout, and is removed on every exit (also on
 #     Ctrl-C or kill; one left by a hard kill is removed by a later push once it is over 24 h old and its pid is
 #     gone). Each command logs to its own mktemp file, kept only when it fails.
+#   - Skips that `check` when the same tree already passed it with the same commands and wrapper less than 24 h ago
+#     (a push that is not to the protected branch only; scripts/check-green.sh keeps the record in the git common dir,
+#     scripts/check.sh writes it, and a green push records it). Protected pushes never read nor write it; if the helper
+#     is missing or fails the check just runs. GW_CHECK_CACHE=0 git push runs it anyway.
 #   - To the protected branch, in both pushToProtected modes (with `pr` the PR hook also guards PRs): code needs the
-#     review mark (scripts/revisado.sh) to name an ancestor with no code after it. The branch is protected when the
+#     review mark (scripts/reviewed.sh) to name an ancestor with no code after it. The branch is protected when the
 #     pushed commit, the remote tip or the working tree names it so; what is content and where the mark lives come
 #     from the remote tip's config, so a commit cannot relax the rule that judges it (only a protected branch without
 #     a config yet takes the pushed commit's, with a warning). Fails closed when a commit is missing (shallow clones
 #     included).
-#   - Then calls prepush-ramas.sh <changed-file> <pushed-file> and tests-relacionados.sh <changed-file> <checkout-dir>
+#   - Then calls prepush-branches.sh <changed-file> <pushed-file> and related-tests.sh <changed-file> <checkout-dir>
 #     (the folder where the last pushed commit is checked out) from the workflow's scripts folder whenever they exist
 #     (run with bash, executable or not), with git's ref lines on stdin.
 # Skipping it (git push --no-verify) is only for a WIP: commit with red tests.
@@ -31,7 +42,10 @@ remote="${1:-origin}"
 # Git's ref lines come on stdin: save them before anything else can read it.
 work="$(mktemp -d "${TMPDIR:-/tmp}/gw-pre-push.XXXXXX")" || { echo "pre-push: cannot create a temp dir; free space in ${TMPDIR:-/tmp} and retry: git push" >&2; exit 1; }
 worktree=""
+pushmark=""  # <this worktree's git dir>/gw-push-in-progress.<pid of this hook>: line 1 the pid of this hook, then one "<local sha> <branch>" line per ref pushed
 cleanup() {
+  # The marker name holds this hook's pid, so no other push ever rewrites it.
+  if [ -n "$pushmark" ]; then rm -f "$pushmark" 2>/dev/null; fi
   if [ -n "$worktree" ]; then git -C "$root" worktree remove --force "$worktree" >/dev/null 2>&1; rm -rf "$worktree" "${worktree%.d}"; fi
   rm -rf "$work"
 }
@@ -44,10 +58,25 @@ cat > "$work/input"
 : > "$work/pushed"
 
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE  # git sets GIT_DIR in linked worktrees: toplevel would be the cwd
+# The git dir of the worktree that pushes, taken where git runs the hook (its top level), not from the hook's path:
+# with an absolute core.hooksPath the hook file belongs to another worktree.
+pushgit="$(git rev-parse --absolute-git-dir 2>/dev/null)" || pushgit=""
 hookdir="$(cd "$(dirname "$0")" && pwd)"
 root="$(git -C "$hookdir" rev-parse --show-toplevel 2>/dev/null)" || {
   echo "pre-push: $hookdir is not inside a git work tree; point git at the project's hooks: git config core.hooksPath .githooks" >&2; exit 1; }
 cd "$root" || exit 1
+{  # best effort: any failure here is silent and leaves the push untouched
+  gitcommon="$pushgit"  # per worktree: linked worktrees must not share one marker
+  if [ -n "$gitcommon" ]; then
+    pushed_to="$(awk '$2 !~ /^0+$/ { sub(/^refs\/heads\//, "", $1); print $2, $1 }' "$work/input" 2>/dev/null)"
+    if printf '%s\n%s\n' "$$" "$pushed_to" > "$gitcommon/gw-push-tmp.$$" \
+        && mv -f "$gitcommon/gw-push-tmp.$$" "$gitcommon/gw-push-in-progress.$$"; then
+      pushmark="$gitcommon/gw-push-in-progress.$$"
+    else
+      rm -f "$gitcommon/gw-push-tmp.$$"
+    fi
+  fi
+} >/dev/null 2>&1
 if [ -d "$root/.claude/gw/scripts" ]; then scripts="$root/.claude/gw/scripts"; else scripts="$root/scripts"; fi
 config="$scripts/config.py"
 fail() {  # fail <message lines...>: the last line is the command that fixes it
@@ -55,8 +84,9 @@ fail() {  # fail <message lines...>: the last line is the command that fixes it
   echo "pre-push: (only a WIP: commit may skip this hook: git push --no-verify)" >&2
   exit 1
 }
-cfg_at() {  # cfg_at <sha> <key>: the key as commit <sha>'s .claude/gw.json has it (the pushed one or the remote tip)
-  python3 "$config" --root "$root" --rev "$1" get "$2" \
+cfg_at() {  # cfg_at <sha> <key> [<paths-sha>]: the key as commit <sha>'s .claude/gw.json has it (the pushed one or the
+  # remote tip); an absent path key falls back to the old name if that exists in <paths-sha> (the commit pushed)
+  python3 "$config" --root "$root" --rev "$1" --paths-at "${3:-$1}" get "$2" \
     || fail "cannot read '$2' from .claude/gw.json in commit ${1:0:7}; commit a valid one and push again: python3 $config --root $root --rev ${1:0:7} validate"
 }
 [ -f "$config" ] || fail "the workflow scripts are missing ($config); reinstall them: /gw-update"
@@ -115,7 +145,7 @@ link_shared() {  # link_shared <sha> <worktree>: worktreeLinks from the main che
   done <<<"$links"
 }
 checkdir=""
-run_checks() {  # run_checks <sha>: every check command on that commit, in $checkdir (kept for tests-relacionados.sh)
+run_checks() {  # run_checks <sha>: every check command on that commit, in $checkdir (kept for related-tests.sh)
   local sha="$1" dir wrapper marker
   if [ -n "$worktree" ]; then
     git worktree remove --force "$worktree" >/dev/null 2>&1; rm -rf "$worktree" "${worktree%.d}"; worktree=""
@@ -145,7 +175,18 @@ run_checks() {  # run_checks <sha>: every check command on that commit, in $chec
     dir="$worktree"
   fi
   checkdir="$dir"
-  local cmd n=0 log
+  local cmd n=0 log key="" tree age
+  if [ "$is_protected" != "true" ] && [ "${GW_CHECK_CACHE:-}" != "0" ] && [ -f "$scripts/check-green.sh" ]; then
+    # Any failure of the helper just means the check runs, as it always did.
+    tree="$(git rev-parse "$sha^{tree}" 2>/dev/null)" || tree=""
+    if [ -n "$tree" ]; then
+      key="$(printf '%s\n' "$checks" | bash "$scripts/check-green.sh" key "$tree" "$wrapper" 2>/dev/null)" || key=""
+    fi
+    if [ -n "$key" ] && age="$(bash "$scripts/check-green.sh" has "$key" 2>/dev/null < /dev/null)"; then
+      echo "pre-push: check already green on this tree (${tree:0:7}) with the same commands $age min ago; skipping it (to run it anyway: GW_CHECK_CACHE=0 git push)"
+      return 0
+    fi
+  fi
   while IFS= read -r cmd; do
     [ -n "$cmd" ] || continue
     n=$((n + 1))
@@ -158,6 +199,13 @@ run_checks() {  # run_checks <sha>: every check command on that commit, in $chec
     fi
     rm -f "$log"
   done <<<"$checks"
+  # Run in the project itself (HEAD clean), the check must leave it clean: if it wrote a tracked or untracked file,
+  # what it saw is not the pushed tree, so it is not recorded.
+  if [ -n "$key" ] && [ "$dir" = "$root" ] && [ -n "$(git status --porcelain)" ]; then
+    echo "pre-push: the check left changes in the work tree, so it is not recorded and the next push runs it again; see them with: git status"
+    key=""
+  fi
+  [ -z "$key" ] || bash "$scripts/check-green.sh" add "$key" < /dev/null
 }
 
 scan_leftovers() {  # scan_leftovers <sha> <files> <what>: conflict markers and *.rej / *.orig files among <files> in <sha>
@@ -225,6 +273,10 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     printf '%s\n' "$files" | grep . >> "$work/changed"
 
     scan_leftovers "$local_sha" "$files" "the push"
+    if [ -f "$scripts/private-check.py" ]; then  # an older project without it: skipped, like the optional scripts
+      printf '%s\n' "$new" | python3 "$scripts/private-check.py" --root "$root" --rev "$local_sha" --commits - \
+        || fail "the push carries private data or a key (above); remove it from those commits and push again: git rebase -i $remote/${remote_ref#refs/heads/}"
+    fi
   fi
 
   # Protected if any config names this branch: the pushed commit's, the remote tip's or the working tree's (a commit
@@ -276,8 +328,8 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     else
       echo "pre-push: WARNING: $protected has no .claude/gw.json on the remote yet; judging this push by the pushed commit's config"
     fi
-    mark_file="$(cfg_at "$policy" reviewMark)" || exit 1
-    code="$(bash "$scripts/es-codigo.sh" --rev "$policy" "$base" "$local_sha")" || fail "cannot tell code from content; fix the error above and push again: $(fetch_hint)"
+    mark_file="$(cfg_at "$policy" reviewMark "$local_sha")" || exit 1
+    code="$(bash "$scripts/is-code.sh" --rev "$policy" "$base" "$local_sha")" || fail "cannot tell code from content; fix the error above and push again: $(fetch_hint)"
     if [ -n "$code" ]; then
       mark="$(git show "$local_sha:$mark_file" 2>/dev/null | tr -d '[:space:]')"
       reason=""
@@ -288,7 +340,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       elif ! git merge-base --is-ancestor "$mark" "$local_sha" 2>/dev/null; then
         reason="the review mark (${mark:0:7}) is not an ancestor of ${local_sha:0:7}"
       else
-        after="$(bash "$scripts/es-codigo.sh" --rev "$policy" "$mark" "$local_sha")" || fail "cannot tell code from content; fix the error above and push again: $(fetch_hint)"
+        after="$(bash "$scripts/is-code.sh" --rev "$policy" "$mark" "$local_sha")" || fail "cannot tell code from content; fix the error above and push again: $(fetch_hint)"
         [ -z "$after" ] || { reason="code changed after the review mark (${mark:0:7})"; code="$after"; }
       fi
       if [ -n "$reason" ]; then
@@ -298,7 +350,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
                "this clone is shallow, so the mark may be beyond its history; deepen it and push again: $(fetch_hint)"
         fi
         fail "$reason; this push to $protected brings unreviewed code (above)." \
-             "run /code-review of the diff against $remote/$protected, push the fixes, then mark and push: bash $scripts/revisado.sh && git push"
+             "run /code-review of the diff against $remote/$protected, push the fixes, then mark and push: bash $scripts/reviewed.sh && git push"
       fi
     fi
   fi
@@ -307,10 +359,10 @@ done < "$work/input"
 # Hook points for the optional per-project scripts, with git's ref lines on stdin. Present means run (with bash, so
 # a lost exec bit cannot switch a check off).
 sort -u -o "$work/changed" "$work/changed"
-if [ -f "$scripts/prepush-ramas.sh" ]; then
-  bash "$scripts/prepush-ramas.sh" "$work/changed" "$work/pushed" < "$work/input" || fail "prepush-ramas.sh refused the push; fix what it reports and push again: git push"
+if [ -f "$scripts/prepush-branches.sh" ]; then
+  bash "$scripts/prepush-branches.sh" "$work/changed" "$work/pushed" < "$work/input" || fail "prepush-branches.sh refused the push; fix what it reports and push again: git push"
 fi
-if [ -f "$scripts/tests-relacionados.sh" ] && [ -n "$checkdir" ]; then
-  bash "$scripts/tests-relacionados.sh" "$work/changed" "$checkdir" < "$work/input" || fail "the related tests failed; fix them, commit and push again: git push"
+if [ -f "$scripts/related-tests.sh" ] && [ -n "$checkdir" ]; then
+  bash "$scripts/related-tests.sh" "$work/changed" "$checkdir" < "$work/input" || fail "the related tests failed; fix them, commit and push again: git push"
 fi
 echo "pre-push: all green."

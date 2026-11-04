@@ -1,11 +1,11 @@
 ---
 name: gw-doctor
-description: Check that Galivelop-workflow is set up correctly in the current project and explain every failure with its fix. Run by hand with /gw-doctor when something in the workflow misbehaves or after applying or updating it.
+description: Check that Galivelop-workflow is set up correctly in the current project and explain every failure with its fix. Use when something in the workflow misbehaves or after applying or updating it (run by hand with /gw-doctor).
 disable-model-invocation: true
 license: MIT
 compatibility: Claude Code or any Agent Skills agent; git and python3 3.8+; reads .claude/gw.json
 metadata:
-  version: "0.3.0"
+  version: "0.5.0"
   source: "Galivelop workshop"
 ---
 
@@ -44,9 +44,13 @@ prints and applies fixes the user approves. Reply in the project's `language` (`
 
 - **`hooks-path` WARN:** another hook manager owns the hooks. Chain the workflow's hooks from it with the line the
   warning gives; never overwrite the manager's files or point `core.hooksPath` back without asking.
+- **`check syntax-only` WARN:** a `bash -n`/`sh -n` check command reads only its first file (several files, a glob or
+  a substitution). Offer the one-command-per-file or `for` loop the warning gives; edit `check` only if the user agrees.
 - **`check command` FAIL:** the tool is missing or the command is wrong. Ask the user which; do not invent one.
 - **`session` WARN:** the session was opened outside the repo. The fix is to reopen it from the repo, so tell the
   user; the script cannot do it.
+- **`ci access` WARN:** the agent cannot read the CI state of GitHub pushes. Installing `gh` and logging in
+  (`gh auth login`) or exporting a token is the user's call (credentials): tell them; never ask for or print the token.
 - **`config` FAIL:** run `python3 .claude/gw/scripts/config.py validate` for the exact line; keys are in
   `docs/en/config.md`.
 

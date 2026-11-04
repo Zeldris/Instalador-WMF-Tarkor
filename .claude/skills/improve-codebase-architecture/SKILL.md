@@ -1,10 +1,10 @@
 ---
 name: improve-codebase-architecture
-description: Scan a codebase for deepening opportunities, present them as a visual HTML report, then grill through whichever one you pick.
+description: Scan a codebase for deepening opportunities, present them as a visual HTML report, then grill through whichever one you pick. Use when the user wants to find architecture or refactoring opportunities.
 disable-model-invocation: true
 license: MIT (see LICENSE-mattpocock-skills)
 metadata:
-  version: "0.3.0"
+  version: "0.5.0"
   source: "mattpocock/skills@5beb35b"
 ---
 

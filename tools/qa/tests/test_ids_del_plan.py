@@ -19,7 +19,7 @@ class IdsDelPlan(unittest.TestCase):
         malas = []
         for ruta in archivos:
             # Las retros cuentan lo que pasó, con las palabras de entonces.
-            if not ruta or ruta.startswith('docs/registros/retro-'):
+            if not ruta or ruta.startswith('docs/records/retro-'):
                 continue
             with open(os.path.join(RAIZ, ruta), encoding='utf-8') as f:
                 for n, linea in enumerate(f, 1):
