@@ -35,6 +35,11 @@ se lo pasa al backend por `PORT`. Consecuencias:
   "http://127.0.0.1:<puerto>" }`. El juego la lee de forma síncrona: `__TARKOR__.apiUrl` si es una
   cadena no vacía, si no `VITE_API_URL`, si no `http://localhost:3001`. Así el juego no depende de
   `@tauri-apps/api` ni espera a nada al arrancar. La inyección es de `INS-41`.
+  **Enlace a Ajustes (`INS-37`, 2026-11-04):** el mismo objeto lleva `abrirAjustes()`, que lleva a Ajustes →
+  Rendimiento de la IA del asistente. El juego muestra «Rendimiento de la IA» en su menú solo si
+  `__TARKOR__.abrirAjustes` es una función, y al pulsarlo la llama sin argumentos; fuera de Tauri el enlace no sale.
+  Cómo llega a Ajustes (navegar a la ruta del asistente, avisar a la página que contiene el juego) y que la partida no
+  pierda nada al ir y volver lo decide `INS-41`, que la inyecta: el juego no cambia si cambia eso.
 - **CORS:** el webview carga la página desde un origen propio de Tauri (`http://tauri.localhost`
   en Windows, `tauri://localhost` en Linux), no desde `localhost`. Hoy el backend acepta cualquier
   origen (`cors, { origin: true }` en `server.ts`); en la build empaquetada se restringe a esos

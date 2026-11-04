@@ -221,5 +221,7 @@ pantalla es una ruta del asistente, como Ajustes, para que con el juego cargado 
 - Reutiliza los tokens de `frontend/src/index.css` (copiados o importados en el build) para no
   duplicar decisiones de diseño.
 - Ajustes → Rendimiento de la IA vive también en el asistente (ruta propia), y el juego solo
-  necesita un enlace a ella en su menú.
+  necesita un enlace a ella en su menú: «Rendimiento de la IA», que llama a `window.__TARKOR__.abrirAjustes()`
+  (contrato en `04`, `INS-37`). Es el «Ajustes» que Steam abre sobre el juego con su overlay, sin salir de él; LM
+  Studio e itch.io lo tienen igual en el menú de su propia ventana.
 - Todo el texto del asistente en un único fichero de textos, para revisarlo de una vez.

@@ -133,7 +133,9 @@ Ver [`06`](06-inventario-exclusiones.md).
   `TARKOR_NUM_BATCH`, `TARKOR_NUM_CTX_NARRADOR` y `TARKOR_MODELOS_SIN_PENSAR` (ver `12`).
 - [ ] **INS-36** Backend: CORS restringido y escucha solo en `127.0.0.1` en modo empaquetado; rutas de
   imágenes y datos por variable de entorno.
-- [ ] **INS-37** Menú del juego: enlace a Ajustes → Rendimiento de la IA.
+- [ ] **INS-37** Menú del juego: enlace a Ajustes → Rendimiento de la IA. Contrato fijado (2026-11-04, `04`):
+  «Rendimiento de la IA» en el menú solo si `window.__TARKOR__.abrirAjustes` es una función, y la llama al pulsarlo.
+  Falta: hacerlo en el juego (encargo a una sesión del juego) e inyectar la función en `INS-41`.
 
 ## Fase 4 — Empaquetado completo y CI
 
