@@ -1,6 +1,7 @@
 # Retro del 2026-11-05: licencia MIT (`INS-12`) antes de `main`
 
-**Estado:** presentada a la usuaria el 2026-11-05; falta su decisión.
+**Estado:** presentada a la usuaria el 2026-11-05: aprobadas P1 a P5. Todas son del flujo y quedan propuestas en
+«For Galivelop-workflow»; en este repo, P3 y P4 ya están aplicadas a mano (`8edd0a2`).
 
 Lo revisado: la tarea de la licencia MIT (`e6d33d8`) y la fase 1 sobre todo el diff de la rama contra `origin/main`
 (`FLU-7`, `INS-35` a `INS-37` e `INS-12`: 152 archivos, +14,6k líneas). La revisión dio 12 hallazgos. Siete se
