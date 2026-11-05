@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<!-- Document carousel for LinkedIn: each section.slide is one page of media/carousel.pdf (the file name must
+     start with "carousel"). 4:5 portrait, 1080x1350. One idea per slide: cover, two to eight content slides,
+     closing. Copy a section to add a slide, delete one to remove it. Keep the text short: a slide whose
+     content does not fit makes the render fail. The page size of the PDF is the gw-size below. Fill every gap written between double braces. -->
+<meta name="gw-size" content="1080x1350">
+<title>Carousel</title>
+<style>
+  :root {
+    /* Palette: override these to match the project (brand colors, dark or light). Nothing else needs to change. */
+    --background: #0f172a; --surface: #1e293b; --border: #334155;
+    --text: #f1f5f9; --muted: #94a3b8; --accent: #38bdf8; --accent-text: #0f172a;
+    --good: #4ade80; --bad: #f87171;
+    --font: system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, "DejaVu Sans", "Liberation Sans", sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Liberation Mono", monospace;
+  }
+  @page { margin: 0; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { background: var(--background); }
+  body { font-family: var(--font); color: var(--text); }
+  .slide { width: 1080px; height: 1350px; overflow: hidden; background: var(--background); padding: 96px 88px; display: flex; flex-direction: column;
+           break-after: page; page-break-after: always; position: relative; }
+  .slide:last-child { break-after: auto; page-break-after: auto; }
+  .brand { font-size: 26px; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+  .slide h1 { font-size: 92px; line-height: 1.05; margin-top: auto; }
+  .slide h2 { font-size: 64px; line-height: 1.1; margin-top: 40px; }
+  .slide p { font-size: 40px; line-height: 1.4; color: var(--muted); margin-top: 36px; }
+  .slide ul { list-style: none; margin-top: 44px; display: flex; flex-direction: column; gap: 22px; }
+  .slide li { font-size: 38px; line-height: 1.3; background: var(--surface); border: 2px solid var(--border); border-radius: 18px; padding: 24px 30px; }
+  .stat { font-size: 200px; line-height: 1; font-weight: 800; color: var(--accent); margin-top: auto; }
+  .num { position: absolute; right: 88px; bottom: 72px; font-size: 26px; color: var(--muted); }
+  .cover p, .closing p { margin-bottom: auto; }
+</style>
+</head>
+<body>
+  <section class="slide cover">
+    <div class="brand">{{proyecto}}</div>
+    <h1>{{titular de la portada}}</h1>
+    <p>{{una frase: de qué trata}}</p>
+    <div class="num">1</div>
+  </section>
+  <section class="slide">
+    <div class="brand">{{proyecto}}</div>
+    <h2>{{idea de esta página}}</h2>
+    <p>{{dos frases como mucho}}</p>
+    <div class="stat">{{cifra}}</div>
+    <div class="num">2</div>
+  </section>
+  <section class="slide">
+    <div class="brand">{{proyecto}}</div>
+    <h2>{{idea de esta página}}</h2>
+    <ul>
+      <li>{{punto}}</li>
+      <li>{{punto}}</li>
+      <li>{{punto}}</li>
+    </ul>
+    <div class="num">3</div>
+  </section>
+  <section class="slide closing">
+    <div class="brand">{{proyecto}}</div>
+    <h1>{{cierre: qué hacer ahora}}</h1>
+    <p>{{enlace o dónde seguir}}</p>
+    <div class="num">4</div>
+  </section>
+</body>
+</html>

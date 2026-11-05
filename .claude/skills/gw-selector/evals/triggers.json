@@ -1,0 +1,15 @@
+[
+  {"query": "Vamos a empezar la tarea 4.2 del plan, ¿qué skill y qué modelo uso?", "should_trigger": true},
+  {"query": "which workflow fits adding a login screen to this app?", "should_trigger": true},
+  {"query": "el test de ganchos falla a veces y no sé por qué, por dónde empiezo", "should_trigger": true},
+  {"query": "I want to design a new notification system, how should we approach it?", "should_trigger": true},
+  {"query": "we are about to open the PR to main, what is the review flow?", "should_trigger": true},
+  {"query": "acabamos de cerrar la fase 3, ¿qué toca ahora?", "should_trigger": true},
+  {"query": "¿qué modelo conviene para arreglar este bug de una línea?", "should_trigger": true},
+  {"query": "rename the variable `total` to `sum` in utils.py", "should_trigger": false},
+  {"query": "what does the pre-push hook do?", "should_trigger": false},
+  {"query": "explícame la diferencia entre merge y rebase", "should_trigger": false},
+  {"query": "write a SQL query that returns the ten latest orders", "should_trigger": false},
+  {"query": "translate this README paragraph to English", "should_trigger": false},
+  {"query": "run the tests and tell me the result", "should_trigger": false}
+]

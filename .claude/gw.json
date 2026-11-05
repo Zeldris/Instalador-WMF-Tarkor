@@ -1,9 +1,10 @@
 {
   "$schema": "gw/schema/gw.schema.json",
-  "version": "0.3.0",
+  "version": "0.5.0",
+  "schemaVersion": 1,
   "language": "es",
   "visibleLanguages": [],
-  "log": "docs/registros/traspaso.md",
+  "log": "docs/records/traspaso.md",
   "logRows": true,
   "protectedBranch": "main",
   "pushToProtected": "pr",
@@ -14,12 +15,15 @@
     "bash tools/qa/en-app.sh npx tsc -b",
     "bash tools/qa/en-app.sh cargo fmt --all --check",
     "bash tools/qa/en-app.sh cargo clippy -q --workspace --all-targets -- -D warnings",
-    "python3 .claude/gw/scripts/enlaces-md.py",
+    "python3 .claude/gw/scripts/md-links.py",
     "python3 tools/qa/sin-find-forzado.py",
     "python3 -m unittest discover -s tools/qa/tests",
-    "python3 -m unittest discover -s tools/banco"
+    "python3 -m unittest discover -s tools/banco",
+    "python3 -m unittest discover -s .claude/skills/gw-media-content/scripts",
+    "python3 -m unittest discover -s .claude/skills/gw-opt-ai/scripts",
+    "python3 -m unittest discover -s .claude/skills/gw-opt-tokens/scripts",
+    "python3 -m unittest discover -s .claude/skills/gw-scout-updates/scripts"
   ],
-  "reviewMark": "docs/registros/revisado.txt",
   "requireRetro": true,
   "content": [
     "^docs/",
@@ -30,7 +34,7 @@
     "cases": [
       {
         "case": "Procesos, descargas, formato de config.json o del catálogo, Linux y Windows a la vez",
-        "skill": "diagnosing-bugs si falla; si no, orchestrate-dealer",
+        "skill": "diagnosing-bugs si falla; si no, gw-orchestrate-dealer",
         "sessionModel": "grande",
         "subagentModel": "medio con el plan cerrado"
       }
@@ -45,10 +49,22 @@
     "instalador de Ollama"
   ],
   "protectedPaths": [],
-  "staleRefs": [
-    "tools/qa/(recuperar|revisado|bitacora|enlaces-md|fusionar|prepush-ramas|rojo-sin-arreglo|tests-relacionados)\\.",
-    "revision-main\\.sha"
-  ],
+  "staleRefs": {
+    "patterns": [
+      "tools/qa/(ci-local|recuperar|revisado|bitacora|enlaces-md|fusionar|prepush-ramas|rojo-sin-arreglo|tests-relacionados)\\.",
+      "revision-main\\.sha",
+      "\\.claude/gw/scripts/(recuperar|revisado|bitacora|enlaces-md|fusionar|prepush-ramas|rojo-sin-arreglo|tests-relacionados|revision-antes-de-main|es-codigo|registro_sesion)\\.",
+      "docs/registro[s]/",
+      "comprobar\\.yml",
+      "\\.claude/gw/(opt-ai|opt-tokens|scout-updates|orchestrate-dealer)\\.md",
+      "\\.claude/skills/(opt-ai|opt-tokens|scout-updates|orchestrate-dealer|selector|media-content)/"
+    ],
+    "skip": [
+      "docs/records/retro-*.md",
+      "docs/records/piloto-*.md",
+      "docs/records/ci-local.md"
+    ]
+  },
   "relatedTests": {
     "fast": [
       "bash tools/qa/tests-app.sh {files}"
@@ -58,5 +74,7 @@
   "plan": [
     "docs/05-plan-de-trabajo.md"
   ],
-  "taskId": "(?:INS|FLU)-\\d+"
+  "taskId": "(?:INS|FLU)-\\d+",
+  "commitNext": true,
+  "agentSignatures": false
 }

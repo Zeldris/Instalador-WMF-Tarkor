@@ -1,0 +1,174 @@
+{
+  "_doc": "Single place for the per-network limits that gw-media-content checks (scripts/check.py reads this file; no other file may repeat these numbers). Each rule has value, mark, source (URL) and checked (date read). Marks: P = read in the primary source; S = secondary source or search excerpt only; NV = not verified (the check still applies it as a cautious cap, and the skill asks the user to confirm); C = convention of the skill, not a network limit. To refresh: re-read each source, update value/mark/checked, keep the same keys (check.py looks them up by key and fails closed when one of its RULE_KEYS is missing), run `python3 skills/gw-media-content/scripts/test_check.py`, and update docs/research/social-media.md section 5 with the new reading. Keys read by check.py: x.length, x.url_weight, x.wide_symbol_weight, x.thread_posts, x.image_bytes, x.alt_max, reddit.title, reddit.rules_days, reddit.rules_min_chars, extra_channel.image_formats, linkedin.length, linkedin.image_pixels, linkedin.image_formats, linkedin.alt_max, linkedin.document_bytes, linkedin.document_pages, discord.message, discord.image_bytes, discord.alt_max.",
+  "x": {
+    "length": {
+      "value": 280,
+      "mark": "P",
+      "source": "https://docs.x.com/fundamentals/counting-characters",
+      "checked": "2026-10-25",
+      "note": "weighted count: Latin = 1, emoji and CJK = 2"
+    },
+    "url_weight": {
+      "value": 23,
+      "mark": "P",
+      "source": "https://docs.x.com/fundamentals/counting-characters",
+      "checked": "2026-10-25",
+      "note": "every link counts 23"
+    },
+    "wide_symbol_weight": {
+      "value": 2,
+      "mark": "P",
+      "source": "https://docs.x.com/fundamentals/counting-characters",
+      "checked": "2026-10-25",
+      "note": "weight of an emoji or wide character"
+    },
+    "thread_posts": {
+      "value": {
+        "min": 1,
+        "max": 4
+      },
+      "mark": "C",
+      "source": "skill convention",
+      "checked": "2026-10-25",
+      "note": "a thread of 1 to 4 posts; X has no thread limit"
+    },
+    "image_bytes": {
+      "value": 5000000,
+      "mark": "P",
+      "source": "https://docs.x.com/x-api/media/introduction",
+      "checked": "2026-10-25",
+      "note": "5 MB per image; JPG, PNG, GIF, WEBP"
+    },
+    "alt_max": {
+      "value": 1000,
+      "mark": "NV",
+      "source": "https://docs.x.com/x-api/media/introduction",
+      "checked": "2026-10-25",
+      "note": "X does not publish the alt text limit; 1000 is a cautious cap"
+    },
+    "premium_length": {
+      "value": 25000,
+      "mark": "S",
+      "source": "https://help.x.com/en/using-x/x-premium",
+      "checked": "2026-10-25",
+      "note": "not applied by the check"
+    }
+  },
+  "reddit": {
+    "title": {
+      "value": 300,
+      "mark": "NV",
+      "source": "no source read (reddit.com blocks automatic reading)",
+      "checked": "2026-10-25",
+      "note": "applied as a cautious cap on the title"
+    },
+    "rules": {
+      "value": "The subreddit rules must be pasted by the user under «### Rules of r/<subreddit>» in sheet.md, with the date read and the self-promotion rule",
+      "mark": "NV",
+      "source": "https://www.reddit.com/r/<subreddit>/about/rules (403 to automatic readers)",
+      "checked": "2026-10-25"
+    },
+    "rules_days": {
+      "value": 90,
+      "mark": "C",
+      "source": "skill convention",
+      "checked": "2026-10-25",
+      "note": "«Rules read:» may be at most this many days old and not in the future; subreddits change their rules without notice"
+    },
+    "rules_min_chars": {
+      "value": 200,
+      "mark": "C",
+      "source": "skill convention",
+      "checked": "2026-10-25",
+      "note": "the pasted rules block of each subreddit has at least this many characters (whitespace collapsed); it proves the rules were pasted, not that they were read"
+    }
+  },
+  "extra_channel": {
+    "image_formats": {
+      "value": [
+        ".webp",
+        ".png",
+        ".jpg"
+      ],
+      "mark": "C",
+      "source": "skill convention",
+      "checked": "2026-10-25",
+      "note": "image formats of a channel that is not x, reddit, linkedin or discord (render.mjs writes .webp and .png; a .jpg is accepted as is)"
+    }
+  },
+  "linkedin": {
+    "length": {
+      "value": 3000,
+      "mark": "P",
+      "source": "https://www.linkedin.com/help/linkedin/answer/a528176",
+      "checked": "2026-10-25",
+      "note": "post text; longer is an article"
+    },
+    "image_pixels": {
+      "value": 36152320,
+      "mark": "P",
+      "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/images-api",
+      "checked": "2026-10-25",
+      "note": "an image must have fewer pixels than this; weight and aspect ratio are not published"
+    },
+    "image_formats": {
+      "value": [
+        ".png",
+        ".jpg",
+        ".gif"
+      ],
+      "mark": "P",
+      "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/images-api",
+      "checked": "2026-10-25",
+      "note": "LinkedIn takes JPG, PNG and GIF, not WebP (section 5.3 of docs/research/social-media.md); every channel without this key takes .webp (a convention of the skill)"
+    },
+    "alt_max": {
+      "value": 4086,
+      "mark": "P",
+      "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/images-api",
+      "checked": "2026-10-25",
+      "note": "recommended under 120"
+    },
+    "document_bytes": {
+      "value": 100000000,
+      "mark": "P",
+      "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/documents-api",
+      "checked": "2026-10-25",
+      "note": "100 MB; a PDF is the organic carousel"
+    },
+    "document_pages": {
+      "value": 300,
+      "mark": "P",
+      "source": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/documents-api",
+      "checked": "2026-10-25"
+    }
+  },
+  "discord": {
+    "message": {
+      "value": 2000,
+      "mark": "P",
+      "source": "https://docs.discord.com/developers/resources/message",
+      "checked": "2026-10-25",
+      "note": "characters per message; split longer text into blocks separated by a line with ---"
+    },
+    "image_bytes": {
+      "value": 20971520,
+      "mark": "P",
+      "source": "https://docs.discord.com/developers/reference",
+      "checked": "2026-10-25",
+      "note": "20 MiB per file by default"
+    },
+    "alt_max": {
+      "value": 1024,
+      "mark": "P",
+      "source": "https://docs.discord.com/developers/resources/message",
+      "checked": "2026-10-25"
+    },
+    "self_promotion": {
+      "value": "Set by each server; no verified rule",
+      "mark": "NV",
+      "source": "no source read",
+      "checked": "2026-10-25"
+    }
+  }
+}

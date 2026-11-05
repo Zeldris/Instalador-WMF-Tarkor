@@ -12,7 +12,7 @@ Dónde se trabaja cada fase:
 
 Marcar cada punto al terminarlo. Cada tarea tiene su identificador `INS-<fase><n>` (la fase 0 va
 sin el 0: `INS-1` es la antigua 0.1, y por eso no admite más de nueve tareas: lo nuevo entra en la
-fase que toque), que nombran los commits y la [bitácora](registros/traspaso.md);
+fase que toque), que nombran los commits y la [bitácora](records/traspaso.md);
 las del flujo de trabajo llevan `FLU-n` y van en su [sección](#flujo-de-trabajo).
 
 ## Dónde lo dejamos (2026-09-28)
@@ -75,7 +75,9 @@ Objetivo: demostrar que el patrón completo funciona en Windows y en la Steam De
 Se pueden resolver en paralelo a la fase 0. Ver la tabla del [README](../README.md).
 
 - [ ] **INS-11** Firma de código en Windows.
-- [ ] **INS-12** Licencia del juego (propuesta: todos los derechos reservados) y de este repo.
+- [ ] **INS-12** Licencia del juego (propuesta: todos los derechos reservados) y de este repo. Hecha la del
+  repo (2026-11-05): MIT, con `LICENSE` en la raíz y `license` en `package.json` y los `Cargo.toml` (ver `08`).
+  Falta la del juego.
 - [x] **INS-13** Perfiles pequeños: se ofrecen Mínimo y Ligero con modelos Apache 2.0, avisando del
   resultado (calidad a confirmar en `INS-8`).
 - [x] **INS-14** (2026-10-25) Perfiles por encima del máximo seguro: se pueden elegir con aviso y
@@ -101,18 +103,41 @@ Ver [`02`](02-migracion-postgres-a-sqlite.md). Sin romper el modo de desarrollo 
 
 Ver [`06`](06-inventario-exclusiones.md).
 
-- [ ] **INS-31** Frontend: URL del backend en tiempo de ejecución (`api.ts`).
-- [ ] **INS-32** Frontend: fuentes Cinzel e Inter en local.
-- [ ] **INS-33** Frontend: quitar `ImagePromptSlot`; deshabilitar "Crear desde cero" como "en
-  construcción"; revisar el texto de `ComingSoon.tsx`.
-- [ ] **INS-34** Backend: build sin rutas ni servicios de curación (ruta de image-prompt, orquestador
-  cloud, `LiveTeacherCapture`, scripts).
+- [x] **INS-31** (2026-10-26) Frontend: URL del backend en tiempo de ejecución (`api.ts`). Hecho en el repo del
+  juego, rama `claude/ins-31-url-backend` ([PR #78](https://github.com/Zeldris/World-Maker-Fantasy/pull/78)),
+  **en `main` del juego** (`b76c66b2`, sin PR y con CI local por la cuota agotada, `QA-215`; retro `QA-259`…`QA-261`
+  aplicada allí): `apiBaseUrl()` con el contrato
+  `window.__TARKOR__.apiUrl` de [`04`](04-empaquetado-tauri.md); todas las URLs de `api.ts` pasan por ella; 8 tests.
+- [x] **INS-32** (2026-10-26) Frontend: fuentes Cinzel e Inter en local. Ya estaba hecho en `main` del juego por
+  su tarea `BAS-1` (`4a150259`, 2026-10-25): `frontend/src/assets/fonts/fonts.css` con Cinzel e Inter variables
+  (latin y latin-ext, de `@fontsource-variable` 5.3.0) y sus `LICENSE-*.txt` (OFL, ver `08`); en `frontend` no
+  queda ninguna petición a Google Fonts. Sin cambios en el juego.
+- [x] **INS-33** (2026-10-27) Frontend: quitar `ImagePromptSlot`; deshabilitar "Crear desde cero" como "en
+  construcción"; revisar el texto de `ComingSoon.tsx`. Decidido por la usuaria (2026-10-26): en el juego
+  empaquetado (`window.__TARKOR__` presente) desaparece todo lo de admin: el enlace de `Home.tsx`, las rutas
+  `/admin/*` y `ImagePromptSlot` en cualquier sitio (ya estaba tras el modo desarrollador, `CFG-33` del juego); en
+  desarrollo sigue igual. «Crear desde cero» deshabilitada y el texto de `ComingSoon.tsx` («en construcción para
+  futuras versiones») cambian en todas partes. **En `main` del juego** (`aae4a755`, sin PR, CI local, `QA-215`;
+  retro aprobada por la usuaria, `QA-262`…`QA-265`): `esEmpaquetado()` en `frontend/src/lib/empaquetado.ts`, que
+  comparte la lectura de `window.__TARKOR__` con `apiBaseUrl()`; 9 tests nuevos que fallan sin el arreglo; `tsc`,
+  `oxlint` y vitest (798) en verde. El juego no tiene E2E de frontend.
+- [x] **INS-34** (2026-10-27) Backend: build sin rutas ni servicios de curación (ruta de image-prompt, orquestador
+  cloud, `LiveTeacherCapture`, scripts). **En `main` del juego** (`c7f0e5f9`, sin PR, CI local, `QA-215`; retro
+  aprobada por la usuaria, `QA-266`): esbuild sustituye `process.env.TARKOR_EMPAQUETADO` por `"1"` (`define`) y la
+  ruta `POST /world/:slug/image-prompt` y la captura en vivo se cargan con `import()` dinámico en la rama que queda
+  muerta (plegarla exige `minify` o `minifySyntax`); `empaquetado.test.ts` y `world.test.ts` fallan sin el arreglo.
+  Aquí, `herramientas/empaquetar-backend.mjs` lleva el `define` y se para si el `metafile` trae `lib/aiProviders/`,
+  `imagePromptGenerator`, `liveTeacherCapture` o scripts de curación (pasa con la rama, para con el `main` anterior).
+  CI local: 3958 tests de backend y 798 de frontend; el test de navegador de `tools/qa`, que allí se saltó por la
+  descarga de Chromium, pasado desde aquí (382 tests de `tools/qa`).
 - [ ] **INS-35** Backend: `SYSTEM` del narrador incrustado en build; narrador con modelo base +
   `system` por petición detrás de variable de entorno; leer `TARKOR_NUM_THREAD`,
   `TARKOR_NUM_BATCH`, `TARKOR_NUM_CTX_NARRADOR` y `TARKOR_MODELOS_SIN_PENSAR` (ver `12`).
 - [ ] **INS-36** Backend: CORS restringido y escucha solo en `127.0.0.1` en modo empaquetado; rutas de
   imágenes y datos por variable de entorno.
-- [ ] **INS-37** Menú del juego: enlace a Ajustes → Rendimiento de la IA.
+- [ ] **INS-37** Menú del juego: enlace a Ajustes → Rendimiento de la IA. Contrato fijado (2026-11-04, `04`):
+  «Rendimiento de la IA» en el menú solo si `window.__TARKOR__.abrirAjustes` es una función, y la llama al pulsarlo.
+  Falta: hacerlo en el juego (encargo a una sesión del juego) e inyectar la función en `INS-41`.
 
 ## Fase 4 — Empaquetado completo y CI
 
@@ -181,34 +206,41 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
 
 ## Flujo de trabajo
 
-Cómo trabaja Claude en este repo: [`AGENTS.md`](../AGENTS.md), la [bitácora](registros/traspaso.md), los
+Cómo trabaja Claude en este repo: [`AGENTS.md`](../AGENTS.md), la [bitácora](records/traspaso.md), los
 ganchos, `.claude/gw/scripts`, `tools/qa` y las skills ([runbook](runbooks/skills-y-modelos.md)).
 
 - [x] **FLU-1** (2026-10-21) Traer de Tarkor su flujo de trabajo y sus skills, adaptados al instalador: `CLAUDE.md`,
   [`REVIEW.md`](../REVIEW.md), bitácora, ganchos de sesión y de antes de subir, `tools/qa` con sus
   tests (job `qa` de la CI) y las skills de `.claude/skills/` con sus notas para el instalador.
   Hecho, con `/code-review` (dos rondas), `/opt-tokens` y la
-  [retro](registros/retro-2026-10-21-flujo.md), cuyas cuatro propuestas se aplicaron.
+  [retro](records/retro-2026-10-21-flujo.md), cuyas cuatro propuestas se aplicaron.
 - [ ] 🚧 **FLU-2** (2026-10-22) Piloto de [Galivelop-workflow](https://github.com/Zeldris/galivelop-workflow) v0.2.0:
   sus scripts (`.claude/gw/scripts/`), skills, ganchos, `AGENTS.md` con `CLAUDE.md` que lo importa, y una sola CI
   (Linux, Windows y `qa` con el pre-commit de la rama base). Lo propio del instalador queda en `.claude/gw.json`,
   `.claude/gw/*.md`, `tools/qa/{en-app,tests-app}.sh`, `tools/dev/instalar-entorno.sh` y `tools/banco/`. Hecho:
   aplicado con el check en verde, la prueba del paso 6 de `aplicar.md` y `doctor.py` sin FAIL; revisión de código
-  y [retro](registros/retro-2026-10-22-piloto-galivelop.md). Falta: la CI de GitHub en verde (agotada; mientras,
-  `FLU-3`) y el [registro del piloto](registros/piloto-galivelop-workflow.md) cerrado.
-- [x] **FLU-3** (2026-10-22) `tools/qa/ci-local.py` (retro del piloto): con la CI de GitHub agotada, corre en local
-  los pasos de los jobs de Ubuntu de `comprobar.yml` (los lee del workflow, no los copia) y, con `--apuntar`, deja
-  fecha, commit y resultado en [`ci-local.md`](registros/ci-local.md). El job de Windows sale como «sin cubrir».
+  y [retro](records/retro-2026-10-22-piloto-galivelop.md). Falta: la CI de GitHub en verde (agotada; mientras,
+  `FLU-3`) y el [registro del piloto](records/piloto-galivelop-workflow.md) cerrado.
+- [x] **FLU-3** (2026-10-22) `ci-local.py` (retro del piloto; hoy en `.claude/gw/scripts/`): con la CI de GitHub agotada, corre en local
+  los pasos de los jobs de Ubuntu del CI (los lee del workflow, no los copia) y, con `--apuntar`, deja
+  fecha, commit y resultado en [`ci-local.md`](records/ci-local.md). El job de Windows sale como «sin cubrir».
 - [x] **FLU-4** (2026-10-25) `/gw-update` a Galivelop-workflow v0.3.0: scripts, esquema, skills y ganchos al día;
-  `comprobar.yml` conserva sus jobs (el cambio de `ciInstall` no le toca) y `REVIEW.md` gana dos reglas de la plantilla.
+  el CI conserva sus jobs (el cambio de `ciInstall` no le toca) y `REVIEW.md` gana dos reglas de la plantilla.
 - [x] **FLU-5** (2026-10-26, retro de `INS-42`) `cargo fmt` del workspace en commits aparte (`a27489f` y `9b0035c`, a
   120 columnas y `use_small_heuristics = "Max"` en `app/rustfmt.toml`, el estilo del resto del repo) y `cargo fmt --all --check` en `check` de
-  `.claude/gw.json` y en `comprobar.yml` (con `rustfmt` y `clippy` declarados en el toolchain). Los commits de formato van
+  `.claude/gw.json` y en el CI (con `rustfmt` y `clippy` declarados en el toolchain). Los commits de formato van
   en `.git-blame-ignore-revs`, que `tools/dev/instalar-entorno.sh` activa.
 - [x] **FLU-6** (2026-10-26, retro de `FLU-5`) `app/rust-toolchain.toml` fija Rust 1.94.1 (con `rustfmt`, `clippy` y
-  el destino de Windows) para que local, el pre-push y el CI formateen y avisen igual; `comprobar.yml` y
+  el destino de Windows) para que local, el pre-push y el CI formateen y avisen igual; el CI y
   `tools/dev/instalar-entorno.sh` lo instalan con `rustup toolchain install` desde `app/`. Subir de versión es un
   commit a mano (con el `rust-version` de `[workspace.package]` en `app/Cargo.toml`, que heredan los miembros y
   compara `tools/qa/tests/test_version_rust.py`).
   **Pendiente:** el CI de GitHub con la versión fijada no ha corrido (sin cuota); lo comprueba la próxima subida con
   cuota, en la pestaña Actions, y el job de Windows con `INS-8`.
+- [x] **FLU-7** (2026-11-04) `/gw-update` a Galivelop-workflow v0.5.0, con las rutas en inglés (`docs/records/`,
+  `reviewed.txt`), `commitNext` y commits sin firmas del agente (`agentSignatures: false`). El CI se parte en
+  `check.yml` (del flujo: el `check` de `.claude/gw.json`) y `app.yml` (del instalador: `npm test`, el build,
+  `cargo test` en Linux y Windows y la compilación para Windows); el job `qa` y los tests de los scripts de las skills
+  salen del CI del proyecto (los prueba el repo del flujo). `tools/qa` deja `ci-local.py` y sus tests, que ya trae el
+  flujo; `instalar-entorno.sh` instala con `sudo -n` si no es root. `REVIEW.md` etiqueta cada regla con
+  `(check: …)` o `(criterio)`. **Pendiente:** el CI de GitHub sigue sin cuota; `app.yml` no ha corrido allí.

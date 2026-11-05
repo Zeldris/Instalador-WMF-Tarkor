@@ -5,13 +5,17 @@
 # y xvfb para las e2e, mingw para comprobar el núcleo para Windows), las de npm del asistente y las crates de Cargo.
 # Idempotente: lo que ya está, no se toca. El Ollama falso de las e2e (`app/e2e/ollama-falso.mjs`) lo lanza quien
 # corre las e2e (cabecera de `app/e2e/asistente.e2e.mjs`).
-# Uso: bash tools/dev/instalar-entorno.sh   (los paquetes de sistema, solo con apt y como root)
+# Uso: bash tools/dev/instalar-entorno.sh   (los paquetes de sistema, solo con apt y como root o con sudo sin contraseña)
 set -uo pipefail
 cd "$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 
 paquetes=(libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libxdo-dev libssl-dev
   gcc-mingw-w64-x86-64 webkit2gtk-driver xvfb)
-if command -v apt-get >/dev/null && command -v dpkg >/dev/null && [ "$(id -u)" = 0 ]; then
+# Como root, apt-get directo; si no, con un sudo que no pida contraseña (el runner de GitHub Actions, donde lo corre
+# el `check` de .github/workflows/check.yml).
+como_root=()
+[ "$(id -u)" = 0 ] || { sudo -n true 2>/dev/null && como_root=(sudo -n); }
+if command -v apt-get >/dev/null && command -v dpkg >/dev/null && { [ "$(id -u)" = 0 ] || [ ${#como_root[@]} -gt 0 ]; }; then
   faltan=()
   for p in "${paquetes[@]}"; do
     dpkg -s "$p" >/dev/null 2>&1 || faltan+=("$p")
@@ -19,7 +23,7 @@ if command -v apt-get >/dev/null && command -v dpkg >/dev/null && [ "$(id -u)" =
   if [ ${#faltan[@]} -gt 0 ]; then
     log="$(mktemp)"
     echo "Instalando ${#faltan[@]} paquetes de sistema (${faltan[*]})…"
-    (apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${faltan[@]}") >"$log" 2>&1 \
+    ("${como_root[@]}" apt-get update -qq && "${como_root[@]}" env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${faltan[@]}") >"$log" 2>&1 \
       || echo "AVISO: no se pudieron instalar (log en $log); sin ellos no compila src-tauri ni corren las e2e."
   fi
 else

@@ -8,9 +8,9 @@ aquí**: se actualizan con la skill `gw-update`.
 
 Lo propio del instalador vive fuera de ellas:
 
-- `opt-ai`, `opt-tokens` y `scout-updates`: sus notas en [`.claude/gw/`](../gw/) (`opt-ai.md`, `opt-tokens.md`,
-  `scout-updates.md`), que la skill lee primero.
+- `gw-opt-ai`, `gw-opt-tokens` y `gw-scout-updates`: sus notas en [`.claude/gw/`](../gw/) (`gw-opt-ai.md`,
+  `gw-opt-tokens.md`, `gw-scout-updates.md`), que la skill lee primero.
 - El resto: la sección «Notas del proyecto por skill» de
   [`docs/runbooks/skills-y-modelos.md`](../../docs/runbooks/skills-y-modelos.md#notas-del-proyecto-por-skill), que
   dice también cuándo usar cada una.
-- El banco de calidad de modelos (antes en `scout-updates`): [`tools/banco/`](../../tools/banco/banco-calidad.md).
+- El banco de calidad de modelos (antes en `gw-scout-updates`): [`tools/banco/`](../../tools/banco/banco-calidad.md).

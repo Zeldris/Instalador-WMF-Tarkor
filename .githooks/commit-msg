@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+# galivelop-workflow v0.5.0
+# Git commit-msg hook (copied into projects as .githooks/commit-msg; enable with: git config core.hooksPath .githooks).
+#   - When the commit stages the config's `log` file, runs the workflow's `handoff.py check --date <today>` on the
+#     staged version of it, so a log error (the "Updated" date, a malformed or oversized row) stops the commit
+#     instead of surfacing at pre-push with several commits already stacked.
+#     Its WARNING: lines (a long state-table cell, a bad "Done" section) are printed to stderr but do not stop it.
+#   - Does nothing when the commit does not touch the log, deletes it, or the config has no `log`.
+#   - Skipped while finishing a merge, revert or cherry-pick (MERGE_HEAD, REVERT_HEAD, CHERRY_PICK_HEAD) and during
+#     a rebase.
+#   - With `commitFormat: "conventional"`, requires `type(scope)!: text` as the first line; with `commitRefs: true`,
+#     a `Refs: <task id>` trailer whose ids open an entry in `refsSources` (default `plan` + `log`; staged versions);
+#     with `commitNext: true`, a `Siguiente:`/`Next:` trailer (GW_NO_NEXT=1 skips it);
+#     an `Agent:` trailer must not name a model with `agentSignatures: false`. All in scripts/commit-message.py (merges,
+#     reverts, cherry-picks and rebases skip format, Refs and Next; see its header).
+#   - Fails closed when the workflow's config.py or (with the log staged) handoff.py is missing.
+#   - A `WIP: ` commit passes, with a warning and the reason, when .claude/gw.json is missing or is not JSON (this hook
+#     does not block an emergency handoff; pre-commit then skips protectedPaths, which it cannot read either). It still
+#     rejects an agent signature (as if agentSignatures were false) and skips the log check. Any other commit fails
+#     closed with the reason, and so does a gw.json that is JSON but breaks the schema, WIP or not.
+#   - Outside a work tree (a bare repository with no GIT_WORK_TREE) there is nothing to check: it exits 0.
+#   - With `agentSignatures: false` in the config, rejects a message that carries an agent's signature: a
+#     Co-Authored-By trailer with noreply@anthropic.com or naming Claude Code/Opus/Sonnet/Haiku/Fable, a
+#     Claude-Session trailer, or a line that starts with "Generated with Claude Code" (after any emoji) or with a
+#     claude.ai/code/session link. A human co-author (even one called Claude) and a body that only quotes those texts
+#     pass. Comment lines (core.commentString or core.commentChar) and the --verbose diff below the scissors line are
+#     ignored (git strips them). Checked on merges too; skipped during a rebase (old messages are replayed).
+# Bash 3.2 compatible. Root from this hook's path, never from $CLAUDE_PROJECT_DIR or the current directory.
+set -uo pipefail
+hookdir="$(cd "$(dirname "$0")" && pwd)"
+# Git exports GIT_DIR/GIT_INDEX_FILE to the hook (in a linked worktree too), and with GIT_DIR set `rev-parse
+# --show-toplevel` answers the hook's own folder. Unset them for this one call (a subshell); the checks below keep them.
+root="$(unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; git -C "$hookdir" rev-parse --show-toplevel 2>/dev/null)" || {
+  if [ -n "${GIT_WORK_TREE:-}" ]; then  # a bare repository used with a separate work tree (dotfiles): git's own answer
+    root="$(git rev-parse --show-toplevel 2>/dev/null)" || root=""
+  elif [ "$(unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; git -C "$hookdir" rev-parse --is-bare-repository 2>/dev/null)" = true ]; then
+    echo "commit-msg: $hookdir belongs to a bare repository, which has no work tree to check; skipped" >&2; exit 0
+  fi
+  [ -n "${root:-}" ] || {
+    echo "commit-msg: $hookdir is not inside a git work tree; point git at the project's hooks: git config core.hooksPath .githooks" >&2; exit 1; }
+}
+msg="${1:-}"
+case "$msg" in ""|/*) ;; *) msg="$PWD/$msg" ;; esac
+cd "$root" || exit 1
+if [ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" != true ]; then
+  echo "commit-msg: not inside a git work tree, so there is no staged content to check; skipped" >&2; exit 0
+fi
+if [ -d "$root/.claude/gw/scripts" ]; then scripts="$root/.claude/gw/scripts"; else scripts="$root/scripts"; fi
+config="$scripts/config.py"
+[ -f "$config" ] || { echo "commit-msg: the workflow scripts are missing ($config); reinstall them: /gw-update" >&2; exit 1; }
+
+# git >= 2.45 reads core.commentString first; "auto" picks a free character, and its comments carry no signature.
+comment_prefix() {
+  local cc
+  cc="$(git config core.commentString 2>/dev/null)" || cc="$(git config core.commentChar 2>/dev/null)" || cc=""
+  case "$cc" in ""|auto) cc="#" ;; esac
+  printf '%s' "$cc"
+}
+# A WIP commit: its first non-blank line starts with "WIP: " (no leading spaces). Comment lines are not skipped: only
+# cleanup=strip removes them, and -m/-F keep them, so a "# x" first line is the real subject there.
+is_wip() {
+  [ -n "$msg" ] && [ -r "$msg" ] || return 1
+  local subject
+  subject="$(awk '/^[[:space:]]*$/ { next } { print; exit }' "$msg")"
+  case "$subject" in "WIP: "*) return 0 ;; esac
+  return 1
+}
+# The first agent-signature line of the message, if any (the header says what counts and what is ignored).
+find_signature() {
+  awk -v cc="$(comment_prefix)" '
+    substr($0, 1, length(cc)) == cc && $0 ~ / -+ >8 -+$/ { exit }
+    substr($0, 1, length(cc)) == cc { next }
+    { print }' "$msg" | grep -iE \
+      -e '^[[:space:]]*co-authored-by:.*noreply@anthropic\.com' \
+      -e '^[[:space:]]*co-authored-by:[[:space:]]*claude (code|opus|sonnet|haiku|fable)' \
+      -e '^[[:space:]]*claude-session:' \
+      -e '^[^[:alnum:]]*generated (with|by) \[?claude code' \
+      -e '^[[:space:]]*<?https?://claude\.ai/code/session' | head -n 1
+}
+reject_signature() {
+  echo "commit-msg: the message carries an agent signature, which this project forbids (agentSignatures: false in .claude/gw.json): $1" >&2
+  echo "commit-msg: remove that line and commit again: git commit -e -F $msg" >&2
+  exit 1
+}
+config_err="$(python3 "$config" --root "$root" validate 2>&1 >/dev/null)" || {
+  [ -z "$config_err" ] || printf '%s\n' "$config_err" >&2
+  # Only a missing or non-JSON gw.json lets a WIP through; anything else (schema, schemaVersion, a crash) is a mistake
+  # to fix, WIP or not. The two texts are those of scripts/config.py (load); keep both in step (a test pins them).
+  if is_wip && [ "$(printf '%s\n' "$config_err" | wc -l)" -eq 1 ] &&
+     printf '%s\n' "$config_err" | grep -Eq '^gw config: .*gw\.json( not found; |: invalid JSON at line )'; then
+    found="$(find_signature)"
+    [ -z "$found" ] || reject_signature "$found"  # the setting is unknown: treat it as the strict one
+    echo "commit-msg: WARNING: cannot read .claude/gw.json, so this WIP commit was not checked (agent signatures apart); fix it: python3 $config --root $root validate" >&2
+    exit 0
+  fi
+  echo "commit-msg: cannot read or validate .claude/gw.json; fix it (a missing or non-JSON file does not stop a commit whose first line is WIP:): python3 $config --root $root validate" >&2; exit 1; }
+
+in_rebase=false
+for dir in rebase-merge rebase-apply; do
+  [ -d "$(git rev-parse --git-path "$dir")" ] && in_rebase=true
+done
+
+signatures="$(python3 "$config" --root "$root" get agentSignatures 2>/dev/null)" || {
+  echo "commit-msg: cannot read agentSignatures from .claude/gw.json; check it: python3 $config --root $root get agentSignatures" >&2; exit 1; }
+if [ "$signatures" = false ] && [ "$in_rebase" = false ]; then
+  if [ -z "$msg" ] || [ ! -r "$msg" ]; then
+    echo "commit-msg: cannot read the commit message file '${1:-}'; commit again: git commit" >&2; exit 1
+  fi
+  found="$(find_signature)"
+  [ -z "$found" ] || reject_signature "$found"
+fi
+
+# Format, Refs trailer and Agent trailer (commitFormat, commitRefs, agentSignatures): the rules in commit-message.py.
+[ -f "$scripts/commit-message.py" ] || { echo "commit-msg: $scripts/commit-message.py is missing; reinstall the workflow scripts: /gw-update" >&2; exit 1; }
+if [ -z "$msg" ] || [ ! -r "$msg" ]; then
+  echo "commit-msg: cannot read the commit message file '${1:-}'; commit again: git commit" >&2; exit 1
+fi
+python3 "$scripts/commit-message.py" --root "$root" "$msg" || exit 1
+
+log="$(python3 "$config" --root "$root" get log 2>/dev/null)" || log=""
+[ -n "$log" ] || exit 0
+# `git diff --name-only` prints normalised paths: compare with the log as before-stop.py does (./docs/x.md, a//b).
+log_raw="$log"
+log="$(python3 -c 'import posixpath, sys; print(posixpath.normpath(sys.argv[1]))' "$log_raw")" || {
+  echo "commit-msg: cannot normalise the log path '$log_raw'; check python3: python3 --version" >&2; exit 1; }
+
+for head in MERGE_HEAD REVERT_HEAD CHERRY_PICK_HEAD; do
+  [ -e "$(git rev-parse --git-path "$head")" ] && exit 0
+done
+[ "$in_rebase" = false ] || exit 0
+
+# core.quotepath=false: otherwise git prints a path with accents quoted ("docs/bit\303\241cora.md") and it never matches.
+staged="$(git -c core.quotepath=false diff --cached --name-only --no-renames --diff-filter=d)" || {
+  echo "commit-msg: git diff failed; check the repository: git status" >&2; exit 1; }
+printf '%s\n' "$staged" | grep -Fxq -- "$log" || exit 0
+
+[ -f "$scripts/handoff.py" ] || { echo "commit-msg: $scripts/handoff.py is missing; reinstall the workflow scripts: /gw-update" >&2; exit 1; }
+tmp="$(mktemp "${TMPDIR:-/tmp}/gw-commit-msg.XXXXXX")" || {
+  echo "commit-msg: cannot create a temp file; free space in ${TMPDIR:-/tmp} and retry: git commit" >&2; exit 1; }
+trap 'rm -f "$tmp"' EXIT
+git show ":$log" > "$tmp" || { echo "commit-msg: cannot read the staged $log; stage it again: git add $log" >&2; exit 1; }
+if ! out="$(python3 "$scripts/handoff.py" --root "$root" check "$tmp" --date "$(date +%F)" 2>&1)"; then
+  printf '%s\n' "$out" >&2
+  echo "commit-msg: the staged $log fails the log check; fix it, stage it and commit again: git add $log && git commit" >&2
+  exit 1
+fi
+[ -z "$out" ] || printf '%s\n' "$out" >&2  # WARNING: lines (size and "Done" rules) do not stop the commit
+exit 0

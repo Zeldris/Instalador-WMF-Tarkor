@@ -1,15 +1,15 @@
-<!-- galivelop-workflow v0.3.0 -->
+<!-- galivelop-workflow v0.5.0 -->
 # Instalador-WMF-Tarkor — instrucciones para agentes
 
 Este proyecto se trabaja por relevos: una sesión puede acabarse en cualquier momento (tokens, contenedor, cambio de
 cuenta) y la siguiente tiene que seguir **sin perder nada y sin preguntar por dónde iba**. Todo lo de este archivo
-existe para eso. El flujo es Galivelop-workflow v0.3.0; sus scripts están en `.claude/gw/scripts/`, sus skills
+existe para eso. El flujo es Galivelop-workflow v0.5.0; sus scripts están en `.claude/gw/scripts/`, sus skills
 en `.claude/skills/` y su configuración en `.claude/gw.json` (solo la lee `.claude/gw/scripts/config.py`).
 
 ## Al empezar cualquier sesión
 
-1. La bitácora, `docs/registros/traspaso.md`: rama, tarea en curso, qué falta y siguiente paso. Basta la fila de tu
-   rama que da el gancho de inicio (`recuperar.py --estado`); «Siguiente paso» solo si la fila no lo da, y
+1. La bitácora, `docs/records/traspaso.md`: rama, tarea en curso, qué falta y siguiente paso. Basta la fila de tu
+   rama que da el gancho de inicio (`recover.py --state`); «Siguiente paso» solo si la fila no lo da, y
    siempre «Decisiones de la usuaria que bloquean algo» (es corta).
 2. `git fetch origin <rama>` y comprueba que el último commit coincide con lo que dice la bitácora.
 3. Comprueba que el check está en verde antes de tocar nada: las órdenes de `check` en `.claude/gw.json`.
@@ -36,23 +36,29 @@ Cada sesión puede correr en un contenedor temporal: **lo que no está subido no
 - Si hay que parar con algo a medias o en rojo: commit igualmente con `WIP:` al principio del mensaje y, en la
   bitácora, qué falla y por qué. Nunca dejar trabajo solo en local.
 - Push a la rama de trabajo (`git push -u origin <rama>`); si falla por red, reintentar con espera 2, 4, 8 y 16 s.
+  El push y el check largo se lanzan en segundo plano y se espera su aviso, sin bucles de espera.
 - **Tras una llamada interrumpida o rechazada, `git status` y `git diff` antes de repetirla**: el cambio puede
   haberse guardado, o incluso subido, y repetirlo lo duplica.
 - Si la usuaria dice que se para, se para: se sube lo que haya, se deja la bitácora al día y no se sigue con nada más.
-- **Al cerrar una fase** (o una tarea grande), con la bitácora al día, se recomienda `/clear` antes de la siguiente: el contexto
-  largo es casi todo el gasto, y la bitácora basta para retomar.
+- **Al cerrar cada tarea o PR** (y cada fase), con todo subido y la bitácora al día, se pide a la usuaria un `/clear` en
+  una línea, con el porqué: el contexto largo es casi todo el gasto, y la bitácora basta para retomar.
 - **Al cerrar cada bloque o fase, mira el CI de la última subida.** Un CI que no arranca (sin cuota, sin runners)
-  cuenta como rojo: se dice a la usuaria y no se da nada por comprobado en el CI.
+  cuenta como rojo: se dice a la usuaria y no se da nada por comprobado en el CI. Entonces vale el check pasado en
+  local sobre el mismo commit (el de `.githooks/pre-push`) **solo si la usuaria lo confirma**, y se dice y se apunta en
+  la bitácora como «comprobado solo en local». Un CI que arrancó y falló nunca se sustituye así.
 
 ## Comprobar
 
 - **El check del proyecto:** las órdenes de `check` en `.claude/gw.json`. `.githooks/pre-push` lo corre sobre el commit que se sube, y el CI
-  (`.github/workflows/comprobar.yml`) en cada push fuera de `main` y en cada pull request.
+  (`.github/workflows/check.yml`) en cada push fuera de `main` y en cada pull request; las pruebas propias del
+  instalador (`npm test`, el build, `cargo test` en Linux y Windows) van en `.github/workflows/app.yml`.
+- **Antes de subir, pásalo con `bash .claude/gw/scripts/check.sh`**: corre el check y, si sale en verde, lo apunta; el
+  `pre-push` no lo repite sobre el mismo árbol (`GW_CHECK_CACHE=0` lo desactiva).
 - **Lo comprobable lo hace un script**, no un agente: las skills y guías solo deciden lo que exige criterio. Si una
   regla se sigue rompiendo, se convierte en una comprobación.
 - **Lo que depende de una máquina concreta no se da por probado con tests** (otro sistema operativo, un dispositivo,
   el equipo de la usuaria): se apunta como pendiente en el plan, con quién lo comprueba y dónde.
-- Un test nuevo tiene que fallar sin su arreglo: `bash .claude/gw/scripts/rojo-sin-arreglo.sh "<orden del test>"
+- Un test nuevo tiene que fallar sin su arreglo: `bash .claude/gw/scripts/red-without-fix.sh "<orden del test>"
   <archivo-del-arreglo>...`.
 - Un test que espera un fallo comprueba **el motivo** (el mensaje o la causa), no solo el código de salida: si no,
   pasa también cuando falla por otra razón.
@@ -60,9 +66,14 @@ Cada sesión puede correr en un contenedor temporal: **lo que no está subido no
 
 ## Mensajes de commit
 
-- Primera línea: qué cambia, en el idioma del proyecto, con los identificadores de las tareas tocadas.
+- Primera línea: qué cambia, en el idioma del proyecto, con los identificadores de las tareas tocadas. Con
+  `commitFormat: "conventional"` en `.claude/gw.json`, en la forma `tipo(id): …` (`feat`, `fix`, `docs`…), y con
+  `commitRefs: true`, un trailer `Refs: <id>` en el último párrafo, antes de `Siguiente:`; lo comprueba `commit-msg`.
 - Cuerpo: qué se hizo, qué queda de esa tarea si no está cerrada, y estado del check.
-- **Última línea: `Siguiente: <próximo paso concreto>`**, en el mismo bloque final que las líneas de atribución.
+- **Última línea: `Siguiente: <próximo paso concreto>`**, en el mismo bloque final que las líneas de atribución, si las hay.
+- Con `agentSignatures: false` en `.claude/gw.json`, el commit **no lleva firmas del agente** (ni `Co-Authored-By` de
+  Claude, ni `Claude-Session`, ni «Generated with Claude Code», ni enlaces de sesión) y el gancho `commit-msg` rechaza
+  el mensaje que las traiga.
 
 ## Ramas y `main`
 
@@ -76,9 +87,12 @@ Cada sesión puede correr en un contenedor temporal: **lo que no está subido no
   de `.claude/gw.json`, se sube directo (`direct`: `.githooks/pre-push` pide la marca de revisión) o por pull request
   (`pr`: un gancho de Claude Code pide la marca antes de crearlo o fusionarlo; un push directo la sigue pidiendo).
 - **Se fusiona solo con el CI en verde**, también cuando la usuaria dice «fusiona directamente»: eso quita esperar a
-  más revisiones, nunca el CI ni la retro presentada a la usuaria.
-- La rama de un subagente vuelve con `bash .claude/gw/scripts/fusionar.sh <rama> "<mensaje>"`, que corre el check y
-  limpia su worktree.
+  más revisiones, nunca el CI ni la retro presentada a la usuaria. Si el CI no arranca, vale el check en local de
+  «Relevos» con la confirmación de la usuaria: se sube directo (el `pre-push` corre el check) o, para un pull
+  request, `python3 .claude/gw/scripts/ci-local.py --record` corre el CI en local y lo apunta; con esa línea verde
+  subida, el gancho deja fusionar.
+- La rama de un subagente vuelve con `bash .claude/gw/scripts/merge-branch.sh <rama> "<mensaje>"`, que corre el check
+  y los tests relacionados, y limpia su worktree.
 
 ## Antes de ir a `main`: tres fases
 
@@ -89,18 +103,21 @@ Nunca sobre trabajo ya fusionado.
    con commit y subidos: lo grave o medio y lo que el propio arreglo rompe; lo leve se apunta como pendiente en la
    bitácora y no vuelve a revisarse en ese PR. Solo el código necesita revisión: lo que casa con `content` de `.claude/gw.json` es
    contenido.
-2. **Entorno:** la skill `opt-tokens` y luego `retro` (más `opt-ai` si hubo medidas con un modelo de IA local). Sus
+2. **Entorno:** la skill `gw-opt-tokens` y luego `retro` (más `gw-opt-ai` si hubo medidas con un modelo de IA local). Sus
    propuestas se **presentan a la usuaria**; lo que confirme se aplica en la rama. Una retro escrita sin presentarla no
-   vale.
+   vale. Si la usuaria pidió ir a `main` y no está para decidir la retro, se deja todo listo (retro con
+   `**Estado:** pendiente`, check en verde sobre la fusión con `main`, descripción del pull request) y
+   se para antes de `reviewed.sh`: su confirmación de la retro es el único paso que falta; la decisión no se escribe
+   por ella.
 3. **Cierre:** si la fase 2 trajo código, revisión solo de esos commits y sus arreglos; luego
-   `bash .claude/gw/scripts/revisado.sh` (escribe la marca de revisión, `docs/registros/revisado.txt`, y hace su commit) y
+   `bash .claude/gw/scripts/reviewed.sh` (escribe la marca de revisión, `docs/records/reviewed.txt`, y hace su commit) y
    `git push`; para un pull request, su descripción con la skill `pr`. Solo entonces se sube a `main`
    o se crea el pull request. Sin la marca del mismo commit, los ganchos lo rechazan.
 
 ## Subagentes
 
 **Reparto a subagentes autorizado:** el trabajo de más de un paso se reparte a subagentes de contexto limpio con la
-skill `orchestrate-dealer` (y los modelos que elija la skill `selector`) sin preguntar cada vez; la sesión principal
+skill `gw-orchestrate-dealer` (y los modelos que elija la skill `gw-selector`) sin preguntar cada vez; la sesión principal
 planea, decide y revisa. Esta línea es la autorización que piden las instrucciones del propio agente.
 
 - Cada subagente recibe un encargo: objetivo, rutas, restricciones, el check que debe pasar y qué tiene que devolver.

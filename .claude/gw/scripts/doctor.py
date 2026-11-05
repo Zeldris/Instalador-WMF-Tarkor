@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.3.0
+# galivelop-workflow v0.5.0
 """Check that a project has the workflow set up (used by /gw-doctor and CI). No AI, no network.
 
   python3 doctor.py            # one line per check: OK / WARN / FAIL, each problem with the command that fixes it
@@ -7,13 +7,19 @@
   python3 doctor.py --root R   # check the project at R (default: config.find_root)
 
 Exit 1 if any check FAILs (WARNs do not fail). Checks: the config; core.hooksPath and other hook managers; the git
-hooks (present, executable, version); the log and its next step; the `check`, `install` and `setup` commands exist; a CI
-workflow; .claude/settings.json (WMF P4: SessionStart matchers, `compact` only runs recuperar.py --estado, hook
+hooks (present, executable, version); the log and its next step; the `check`, `install` and `setup` commands exist (and a
+`bash -n`/`sh -n` `check` command that reads only one file: `check syntax-only`); a CI
+workflow; .claude/settings.json (WMF P4: SessionStart matchers, `compact` only runs recover.py --state, hook
 commands point to existing files, the PR guard on PreToolUse); AGENTS.md/CLAUDE.md authorise dealing work to
-subagents (VeriNews P1); copied skills at the config's version; a session opened outside the repo (VeriNews P3);
+subagents (private-project-1 P1); copied skills at the config's version; a session opened outside the repo (private-project-1 P3);
 in a cloud session (CLAUDE_CODE_REMOTE=true), the compaction window the project's settings.json sets is in the
-environment. That last check and the session one read the machine running doctor, not only the project, so their
-lines can differ between a person's machine, CI and a cloud session.
+environment; a skill script under .claude/skills/*/scripts/ without a test_<name>.py next to it (WMF 2026-10-25 P2); and,
+only in a project that uses gw-media-content (its note .claude/gw/gw-media-content.md or its folder exists), node,
+Playwright and ImageMagick with WebP (WMF 2026-10-25 P1), and a leftover docs/difusion (the folder before A8; warns
+while the note names no other); and, when `origin` is on GitHub, a way to read the CI state
+(`gh` logged in, or GITHUB_TOKEN/GH_TOKEN set). The compaction check, the session one, the media tools one and the CI
+access one read the machine running doctor, not only the project, so their lines can differ between a person's machine,
+CI and a cloud session.
 Python 3.8+ standard library only.
 """
 import argparse
@@ -30,17 +36,33 @@ HERE = Path(__file__).resolve().parent
 sys.dont_write_bytecode = True  # no __pycache__ in the project's .claude/gw/scripts
 sys.path.insert(0, str(HERE))
 import config  # noqa: E402
-import registro_sesion  # noqa: E402
+import session_log  # noqa: E402
 
 HEADER = re.compile(r"^# galivelop-workflow v(\S+)\s*$", re.M)
 NEXT_STEP = re.compile(r"siguientes? pasos?|next steps?", re.I)
 PR_TOOLS = ("create_pull_request", "merge_pull_request")
-PR_GUARD = "revision-antes-de-main.sh"
+PR_GUARD = "review-before-main.sh"
 INTERPRETERS = {"bash", "sh", "zsh", "python", "python3", "node", "env", "exec"}
 SOURCES = re.compile(r"galivelop|workflow|mattpocock", re.I)
-PROPOSAL = ".gw-nuevo"  # aplicar.py's proposals for files with local edits
-FLOW_HOOK_SCRIPTS = ("session-start.sh", "recuperar.py", "revision-antes-de-main.sh")  # the settings template's
-SKILL_LICENSE = "LICENSE-mattpocock-skills"  # aplicar.py copies it next to the skills that cite it
+PROPOSAL = ".gw-new"  # apply.py's proposals for files with local edits
+OLD_PROPOSAL = ".gw-nuevo"  # A8 (0.x): the suffix before the rename; still recognized, with a warning
+FLOW_HOOK_SCRIPTS = ("session-start.sh", "recover.py", "review-before-main.sh", "before-stop.py",
+                     "config-guard.py", "subagent-cap.py", "agent-signatures.py")  # the settings template's
+# Zero-width, bidi and BOM characters, written as escapes so the fix command can embed them. A zero width joiner (U+200D)
+# is fine only inside an emoji sequence (family, profession, flag, heart): after an emoji, a variation selector or a
+# skin tone, and before an emoji. Between letters, accents or punctuation (`и‍г`, `é‍ñ`), next to ASCII, a line edge
+# or another invisible character it is flagged like the rest, since it can hide a split inside a word.
+ALWAYS_INVISIBLE = r"\u200b\u200c\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff"  # flagged wherever they are
+EMOJI = r"\U0001f000-\U0001faff\u2600-\u27bf\u2b00-\u2bff"  # symbols and pictographs, dingbats, arrows and stars
+BEFORE_JOINER = rf"{EMOJI}\ufe0f\U0001f3fb-\U0001f3ff"  # an emoji, its variation selector or a skin tone
+INVISIBLE_PATTERN = (rf"[{ALWAYS_INVISIBLE}]"
+                     rf"|(?<![{BEFORE_JOINER}])\u200d"
+                     rf"|\u200d(?![{EMOJI}])")
+INVISIBLE = re.compile(INVISIBLE_PATTERN)
+MEDIA_NOTE = ".claude/gw/gw-media-content.md"  # the project's note of gw-media-content (skills/gw-media-content/note.md)
+MEDIA_FOLDER = "docs/media"  # its default `Folder`
+OLD_MEDIA_FOLDER = "docs/difusion"  # A8 (0.x): the default before the rename; used, with a warning, while it is the only one
+SKILL_LICENSE = "LICENSE-mattpocock-skills"  # apply.py copies it next to the skills that cite it
 
 
 class Report:
@@ -85,7 +107,7 @@ def header_version(path):
 
 
 def chain_hint(hooks_dir):
-    return (f"add as the last line of {hooks_dir}/pre-push and {hooks_dir}/pre-commit (with <hook> = the file's "
+    return (f"add as the last line of {hooks_dir}/pre-push, {hooks_dir}/pre-commit and {hooks_dir}/commit-msg (with <hook> = the file's "
             f"name): \"$(git rev-parse --show-toplevel)/.githooks/<hook>\" \"$@\" || exit 1")
 
 
@@ -124,16 +146,26 @@ def check_config(rep, root):
         rep.fail("config", str(exc).splitlines()[0], f"python3 {HERE / 'config.py'} --root {root} validate")
         return None
     rep.ok("config", f".claude/gw.json valid (version {cfg['version']})")
+    found = cfg.get("_schemaFrom", config.SCHEMA_VERSION)
+    if found < config.SCHEMA_VERSION:  # a newer one already failed in config.load
+        rep.warn("config schema", f".claude/gw.json has schemaVersion {found} (absent = 0) and the workflow's format is "
+                 f"{config.SCHEMA_VERSION}; it is migrated in memory on every read until it is written",
+                 "run /gw-update (apply.py writes the migrated config)")
+    else:
+        rep.ok("config schema", f".claude/gw.json schemaVersion {found} is the workflow's format")
     return cfg
 
 # What a commit must carry for the workflow to work; a `.gitignore` with `.claude/*` would leave it out.
 MUST_BE_TRACKED = (".claude/gw.json", ".claude/gw/scripts/config.py", ".claude/settings.json",
-                   ".claude/skills/selector/SKILL.md", ".githooks/pre-push")
+                   ".claude/skills/gw-selector/SKILL.md", ".githooks/pre-push")
 
 
 def must_be_tracked(root):
     """MUST_BE_TRACKED plus the config's `reviewMark` file: git ignoring it breaks the pre-push without saying why."""
     paths = list(MUST_BE_TRACKED)
+    new, old = ".claude/skills/gw-selector/SKILL.md", ".claude/skills/selector/SKILL.md"  # A8: both names in 0.x
+    if not (root / new).is_file() and (root / old).is_file():
+        paths[paths.index(new)] = old
     try:
         mark = config.load(root).get("reviewMark")
     except config.ConfigError:
@@ -148,8 +180,9 @@ def ignored_paths(root):
     out = []
     for rel in must_be_tracked(root):
         r = subprocess.run(["git", "-C", str(root), "check-ignore", "-v", "--", rel], capture_output=True, text=True)
-        if r.returncode == 0:
-            rule = r.stdout.split("\t")[0].strip()
+        # -v also prints (and exits 0 on) a matching `!` rule, which un-ignores the path: <source>:<line>:<pattern>
+        rule = r.stdout.split("\t")[0].strip()
+        if r.returncode == 0 and not rule.split(":", 2)[-1].startswith("!"):
             out.append((rel, rule))
     return out
 
@@ -167,8 +200,18 @@ def check_ignored(rep, root):
 
 def check_hooks_path(rep, root):
     current = git(root, "config", "--get", "core.hooksPath")
-    if current in (".githooks", str(root / ".githooks")):
+    if current and os.path.isabs(current) and Path(current).name == ".githooks":
+        # config is shared by every worktree: an absolute path makes each one run the hooks of the checkout it names
+        linked = (git(root, "worktree", "list", "--porcelain") or "").count("\n\n")
+        why = ("every worktree runs the hooks of that checkout (another branch's hooks) instead of its own" if linked
+               else "any worktree you add will run the hooks of that checkout instead of its own")
+        rep.warn("hooks-path", f"core.hooksPath is the absolute path '{current}', so {why}",
+                 "git config core.hooksPath .githooks")
+    elif current == ".githooks":
         rep.ok("hooks-path", "core.hooksPath is .githooks")
+    elif not current and os.environ.get("GITHUB_ACTIONS") == "true":
+        rep.warn("hooks-path", "core.hooksPath is unset (GitHub Actions run: git hooks are not installed there, so "
+                 "this is not a failure); locally it is a FAIL", "git config core.hooksPath .githooks")
     elif not current:
         rep.fail("hooks-path", "core.hooksPath is unset, so the workflow's git hooks do not run",
                  "git config core.hooksPath .githooks")
@@ -177,8 +220,87 @@ def check_hooks_path(rep, root):
                  f"only if chained", chain_hint(current))
 
 
+def had_own_commits(root, branch):
+    """True when the branch ever moved past the commit it was created at (its oldest reflog entry is not its tip);
+    False when it never did, and also when there is no reflog to tell: a branch just created from the protected branch
+    looks merged once that branch moves on."""
+    entries = (git(root, "reflog", "show", "--format=%H", branch) or "").split()
+    return bool(entries) and entries[-1] != entries[0]
+
+
+def check_worktrees(rep, root, cfg):
+    """WARN with every worktree whose branch is already merged into the protected branch, local or origin/ (it only
+    takes disk and clutters `git worktree list`), with the command that removes it. Branches that never had a commit of
+    their own are skipped (just created). Squash and rebase merges are not detected (the check is `merge-base
+    --is-ancestor`)."""
+    protected = (cfg or {}).get("protectedBranch") or "main"
+    targets = [r for r in (f"refs/heads/{protected}", f"refs/remotes/origin/{protected}")
+               if git(root, "rev-parse", "--verify", "-q", r + "^{commit}")]
+    listing = git(root, "worktree", "list", "--porcelain")
+    if listing is None:
+        rep.warn("worktree", "cannot check worktrees: `git worktree list` failed", f"git -C {shlex.quote(str(root))} worktree list")
+        return
+    if not targets:
+        rep.warn("worktree", f"cannot check worktrees: neither {protected} nor origin/{protected} exists here",
+                 f"git fetch origin {protected}")
+        return
+    top = os.path.realpath(str(root))
+    merged = []
+    for block in listing.split("\n\n")[1:]:  # the first one is the main checkout
+        lines = block.splitlines()
+        fields = dict(l.split(" ", 1) for l in lines if " " in l)
+        path, branch = fields.get("worktree"), fields.get("branch", "")
+        if not path or not branch.startswith("refs/heads/") or os.path.realpath(path) == top:
+            continue
+        name = branch[len("refs/heads/"):]
+        if name == protected or not had_own_commits(root, branch):
+            continue
+        into = next((t for t in targets if subprocess.run(["git", "-C", str(root), "merge-base", "--is-ancestor", branch, t],
+                                                          capture_output=True).returncode == 0), None)
+        if into:
+            merged.append((path, name, into.replace("refs/heads/", "").replace("refs/remotes/", ""),
+                           any(l == "locked" or l.startswith("locked ") for l in lines)))
+    for path, name, into, locked in merged:
+        force = "-f -f " if locked else ""  # a locked worktree is removed only with the flag twice
+        rep.warn("worktree", f"worktree {path} has branch '{name}', already merged into {into}" +
+                 (" (it is locked)" if locked else ""),
+                 f"git worktree remove {force}{shlex.quote(path)} && git branch -d {shlex.quote(name)}")
+    if not merged:
+        rep.ok("worktree", f"no worktree with a branch already merged into {protected}")
+
+
+CD_ENTER = re.compile(r"""(?:^|[;&|(])\s*cd\s+("[^"]+"|'[^']+'|[^\s;&|)"']+)\s*&&""")
+LINKABLE = ("node_modules", ".venv")  # what the pre-push worktree lacks: untracked dependency folders
+
+
+def check_worktree_links(rep, root, cfg):
+    """WARN when a `check` command does `cd <folder> && …` into a folder with node_modules or .venv that
+    `worktreeLinks` does not link: the pre-push runs the check in a temporary worktree where that folder is missing."""
+    if cfg is None:
+        rep.warn("worktree links", "cannot check worktreeLinks: .claude/gw.json is not valid",
+                 f"python3 {HERE / 'config.py'} --root {root} validate")
+        return
+    links = [Path(os.path.normpath(l)).as_posix() for l in cfg.get("worktreeLinks") or []]
+    found = False
+    for command in cfg.get("check") or []:
+        for m in CD_ENTER.finditer(command):
+            folder = Path(os.path.normpath(m.group(1).strip("\"'"))).as_posix()
+            if os.path.isabs(folder) or folder.startswith("..") or folder == ".":
+                continue
+            for name in LINKABLE:
+                rel = f"{folder}/{name}"
+                covered = any(rel == l or rel.startswith(l + "/") for l in links)
+                if (root / rel).exists() and not covered:
+                    found = True
+                    rep.warn("worktree links", f"'{command}' enters {folder}, which has {name}, but worktreeLinks "
+                             f"does not link {rel}: the pre-push worktree will not have it",
+                             f'add "{rel}" to worktreeLinks in .claude/gw.json')
+    if not found:
+        rep.ok("worktree links", "every `cd <folder> &&` in check has its dependency folders in worktreeLinks")
+
+
 def check_githooks(rep, root, version):
-    for name in ("pre-push", "pre-commit"):
+    for name in ("pre-push", "pre-commit", "commit-msg"):
         path = root / ".githooks" / name
         check = f"githook {name}"
         if not path.is_file():
@@ -195,6 +317,16 @@ def check_githooks(rep, root, version):
             rep.ok(check, f".githooks/{name} present and executable" + (f" (v{found})" if found else ""))
 
 
+def check_legacy_paths(rep, cfg):
+    """A key absent from gw.json that config.py filled with an old Spanish path (0.x compatibility, A8): warn."""
+    legacy = (cfg or {}).get("_legacy") or {}
+    for key in sorted(legacy):
+        rep.warn("legacy-paths", f"{key} is absent from .claude/gw.json and falls back to the old path {legacy[key]} "
+                 "(the English name is the default now)", "run /gw-update to move it to the English name")
+    if not legacy:
+        rep.ok("legacy-paths", "no key falls back to an old Spanish path")
+
+
 def check_log(rep, root, cfg):
     if cfg is None:
         return
@@ -209,6 +341,36 @@ def check_log(rep, root, cfg):
     rep.ok("log", f"{cfg['log']} has a next step")
 
 
+def syntax_only(command):
+    """For a plain `bash -n ...` / `sh -n ...` command that checks fewer files than it seems to, return
+    (interpreter, args, why), else None. `why` is "several" (more than one file: only the first is read), "glob"
+    (an argument has `*`, `?` or `[`) or "subst" (`$(...)` or a backtick). A `for`, `;`, `&&`, `|`, a redirection or
+    any other shell structure is not a plain command, so it is left alone."""
+    subst = "$(" in command or "`" in command
+    try:
+        if subst:
+            words = shlex.split(command)
+            ops = any(w in (";", "&&", "||", "|", "&") for w in words)
+        else:
+            lex = shlex.shlex(command, posix=True, punctuation_chars=True)
+            lex.whitespace_split = True
+            words = list(lex)
+            ops = any(re.fullmatch(r"[;&|<>()]+|\d+>.*", w) for w in words)
+    except ValueError:
+        return None
+    if ops or len(words) < 3 or os.path.basename(words[0]) not in ("bash", "sh") or words[1] != "-n":
+        return None
+    interp = os.path.basename(words[0])
+    args = [w for w in words[2:] if not w.startswith("-")]
+    if subst:
+        return interp, [command.split(None, 2)[2]], "subst"
+    if any(c in w for w in args for c in "*?["):
+        return interp, args, "glob"
+    if len(args) > 1:
+        return interp, args, "several"
+    return None
+
+
 def check_commands(rep, root, cfg):
     if cfg is None:
         return
@@ -220,6 +382,22 @@ def check_commands(rep, root, cfg):
         else:
             rep.fail("checkWrapper", f"'{wrapper}': '{word}' is not a command on PATH nor a file in the repo",
                      f"fix checkWrapper in .claude/gw.json, then: python3 {HERE / 'doctor.py'}")
+    for command in cfg.get("check") or []:
+        found = syntax_only(command)
+        if found:
+            interp, args, why = found
+            if why == "several":
+                msg = (f"'{command}': {interp} -n reads only the first file ({args[0]}); the other {len(args) - 1} are "
+                       f"passed as arguments and never checked")
+                loop = " ".join(shlex.quote(a) for a in args)
+            else:
+                what = "a command substitution" if why == "subst" else "a glob"
+                msg = (f"'{command}': {interp} -n reads only the first file, and {what} in the arguments may expand "
+                       f"to several files, so the others are never checked")
+                loop = " ".join(args)
+            rep.warn("check syntax-only", msg,
+                     f"use one `{interp} -n <file>` command per file in 'check' in .claude/gw.json, or one command: "
+                     f'for f in {loop}; do {interp} -n "$f"; done')
     for key, bad in (("check", rep.fail), ("install", rep.warn), ("setup", rep.warn)):
         for command in cfg.get(key) or []:
             word = first_word(command)
@@ -232,8 +410,9 @@ def check_commands(rep, root, cfg):
 
 def runs_check(text, cfg):
     """True when a workflow's text runs the project's check: it reads `check` through config.py, is the workflow's
-    own comprobar.yml, or spells out one of the `check` commands."""
-    if "config.py get check" in text or ("galivelop-workflow v" in text and "pre-commit --rango" in text):
+    own check.yml, or spells out one of the `check` commands."""
+    pre_commit = re.search(r"pre-commit\s+--(range|rango)\b", text)  # --rango: the name before A8
+    if "config.py get check" in text or ("galivelop-workflow v" in text and pre_commit):
         return True
     code = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("#"))
     return any(c.strip() and re.search(r"(?<![\w./-])" + re.escape(c.strip()) + r"(?![\w./-])", code)
@@ -246,17 +425,20 @@ def check_ci(rep, root, cfg=None):
     if not found:
         rep.warn("ci", "no CI workflow under .github/workflows, so nothing checks pushes outside this machine",
                  "copy the workflow's CI template: mkdir -p .github/workflows && cp <workflow>/templates/github/"
-                 "comprobar.yml .github/workflows/")
+                 "check.yml .github/workflows/")
         return
     names = ", ".join(p.name for p in found)
+    if any(p.name == "comprobar.yml" for p in found):
+        rep.warn("ci", "comprobar.yml is the old name of check.yml (A8)",
+                 "run /gw-update: it renames the workflow's CI file to check.yml")
     running = [p.name for p in found if runs_check(p.read_text(encoding="utf-8", errors="replace"), cfg)]
     if running:
         rep.ok("ci", f"CI workflow(s): {names}; {', '.join(running)} run(s) the check")
     else:
         rep.warn("ci", f"CI workflow(s) {names}, but none seems to run the project's `check` commands",
                  "add the check to one of them, or copy the workflow's CI template (mkdir -p .github/workflows && cp "
-                 "<workflow>/templates/github/comprobar.yml .github/workflows/); to keep your own CI, add only its "
-                 "step that runs the base branch's .githooks/pre-commit --rango (docs/en/apply.md, Existing CI)")
+                 "<workflow>/templates/github/check.yml .github/workflows/); to keep your own CI, add only its "
+                 "step that runs the base branch's .githooks/pre-commit --range (docs/en/apply.md, Existing CI)")
 
 
 def hook_files(command, root):
@@ -290,10 +472,10 @@ def is_flow_script(command, root):
 
 
 def stale_flow_hooks(hooks, root):
-    """[(event, command)] of SessionStart/PreToolUse hooks that run a workflow script (by name and by its header)
-    from another folder."""
+    """[(event, command)] of SessionStart/PreToolUse/Stop hooks that run a workflow script (by name and by its
+    header) from another folder."""
     out = []
-    for event in ("SessionStart", "PreToolUse"):
+    for event in ("SessionStart", "PreToolUse", "Stop"):
         for entry in hooks.get(event) or []:
             for h in (entry.get("hooks") or []) if isinstance(entry, dict) else []:
                 command = h.get("command", "") if isinstance(h, dict) else ""
@@ -304,14 +486,18 @@ def stale_flow_hooks(hooks, root):
 
 
 def check_proposals(rep, root):
-    """WARN with every pending *.gw-nuevo; returns them."""
+    """WARN with every pending *.gw-new (or the old *.gw-nuevo, A8, 0.x); returns them."""
     listed = git(root, "ls-files", "-co", "--exclude-standard") or ""
-    found = sorted(f for f in listed.splitlines() if f.endswith(PROPOSAL))
+    found = sorted(f for f in listed.splitlines() if f.endswith((PROPOSAL, OLD_PROPOSAL)))
     if found:
-        first = found[0][:-len(PROPOSAL)]
+        first = next((f for f in found if f.endswith(PROPOSAL)), found[0])
+        suffix = PROPOSAL if first.endswith(PROPOSAL) else OLD_PROPOSAL
+        base = first[:-len(suffix)]
+        old = [f for f in found if f.endswith(OLD_PROPOSAL)]
         rep.warn("proposals", f"{len(found)} pending {PROPOSAL} proposal(s), not reviewed: {', '.join(found[:10])}"
-                 + (" …" if len(found) > 10 else ""),
-                 f"merge each by hand and delete it; see one: git diff --no-index {first} {first}{PROPOSAL}")
+                 + (" …" if len(found) > 10 else "")
+                 + (f" ({len(old)} with the old suffix {OLD_PROPOSAL}, still recognized until 1.0)" if old else ""),
+                 f"merge each by hand and delete it; see one: git diff --no-index {base} {base}{suffix}")
     else:
         rep.ok("proposals", f"no pending {PROPOSAL} proposal")
     return found
@@ -340,11 +526,11 @@ def check_settings(rep, root):
             continue
         if "compact" in matcher.split("|"):
             others = [h.get("command", "") for h in entry.get("hooks") or []
-                      if isinstance(h, dict) and not re.search(r"recuperar\.py[\"']?\s+--estado\b", h.get("command", ""))]
+                      if isinstance(h, dict) and not re.search(r"recover\.py[\"']?\s+--(state|estado)\b", h.get("command", ""))]
             if others:
                 problems += 1
                 rep.fail("settings SessionStart", f"entry {i} ({matcher}) runs '{others[0]}' on compact; after a "
-                         f"compaction only recuperar.py --estado should run (the rest re-runs setup mid-task)",
+                         f"compaction only recover.py --state should run (the rest re-runs setup mid-task)",
                          "move that command to a \"startup|resume|clear\" entry in .claude/settings.json")
     for event, entries in hooks.items():
         for entry in entries if isinstance(entries, list) else []:
@@ -381,12 +567,12 @@ def check_subagents(rep, root):
             texts.append(p.read_text(encoding="utf-8", errors="replace"))
     if not texts:
         rep.fail("agents", "neither AGENTS.md nor CLAUDE.md exists, so agents get no workflow rules", "/gw-init")
-    elif any("orchestrate-dealer" in t for t in texts):
-        rep.ok("agents", "AGENTS.md/CLAUDE.md authorise dealing work to subagents (orchestrate-dealer)")
+    elif any("orchestrate-dealer" in t for t in texts):  # also matches gw-orchestrate-dealer: both names in 0.x
+        rep.ok("agents", "AGENTS.md/CLAUDE.md authorise dealing work to subagents (gw-orchestrate-dealer)")
     else:
-        rep.warn("agents", "neither AGENTS.md nor CLAUDE.md mentions orchestrate-dealer, so the session may not deal "
+        rep.warn("agents", "neither AGENTS.md nor CLAUDE.md mentions gw-orchestrate-dealer, so the session may not deal "
                  "work to subagents", "add to AGENTS.md: 'Multi-step work is dealt to subagents (skill "
-                 "orchestrate-dealer); the main session plans, decides and reviews.'")
+                 "gw-orchestrate-dealer); the main session plans, decides and reviews.'")
 
 
 def check_glossary(rep, root):
@@ -453,8 +639,11 @@ def check_skills(rep, root, version, proposals=()):
 
 
 def check_session(rep, root):
-    folder = registro_sesion.opened_outside(root)
-    if folder:
+    folder = session_log.opened_outside(root)
+    if session_log.cloud_start(folder):
+        rep.ok("session", "cloud session: it starts in /home/user, not in the repo; its compaction window is "
+               "checked under compaction")
+    elif folder:
         rep.warn("session", f"the newest session transcript is in {folder}: that session was opened outside the "
                  f"repo and may not have loaded .claude/settings.json", f"restart Claude Code from the repo: cd {root} && claude")
     else:
@@ -479,6 +668,218 @@ def check_compaction(rep, root):
              f"add {key}={value} to the cloud environment's variables (environment menu > Edit); new sessions get it")
 
 
+def invisible_chars(text):
+    """[(line, column, 'U+XXXX')] of invisible characters in text; a BOM as the very first character is fine."""
+    found = []
+    for n, line in enumerate(text.split("\n"), 1):
+        for m in INVISIBLE.finditer(line):
+            if n == 1 and m.start() == 0 and m.group() == "\ufeff":
+                continue
+            found.append((n, m.start() + 1, f"U+{ord(m.group()):04X}"))
+    return found
+
+
+def strip_invisible_command(name):
+    return ("python3 -c 'import re,sys;p=sys.argv[1];t=open(p,encoding=\"utf-8\").read();"
+            f"open(p,\"w\",encoding=\"utf-8\").write(re.sub(\"{INVISIBLE_PATTERN}\",\"\",t))' {name}")
+
+
+def check_instructions(rep, root, cfg=None):
+    """Invisible characters in the files agents obey (a hidden instruction is an injection) and the size of
+    AGENTS.md/CLAUDE.md (P7 of proposal 2026-10-25-repos-x.md)."""
+    warn_lines, fail_lines = config.instruction_lines(cfg or {})  # every session loads AGENTS.md/CLAUDE.md whole
+    files = [root / n for n in ("AGENTS.md", "CLAUDE.md") if (root / n).is_file()]
+    files += sorted((root / ".claude" / "skills").glob("*/SKILL.md"))
+    bad = False
+    for path in files:
+        rel = path.relative_to(root).as_posix()
+        text = path.read_text(encoding="utf-8", errors="replace")
+        found = invisible_chars(text)
+        if found:
+            bad = True
+            where = ", ".join(f"line {n} col {c} {cp}" for n, c, cp in found[:5])
+            rep.fail("invisible", f"{rel} has invisible or bidirectional characters ({where}"
+                     f"{', ...' if len(found) > 5 else ''}); an agent obeys what a person cannot see",
+                     f"remove them: {strip_invisible_command(rel)}")
+        lines = len(text.splitlines())
+        if path.name in ("AGENTS.md", "CLAUDE.md") and lines > warn_lines:
+            bad = True
+            report = rep.fail if lines > fail_lines else rep.warn
+            report("size", f"{rel} has {lines} lines (warn above {warn_lines}, fail above {fail_lines}); every "
+                   "session loads it whole", f"move detail out of {rel} into docs/ and link it from there, or raise "
+                   "instructionLines in .claude/gw.json")
+    if not bad:
+        rep.ok("instructions", "AGENTS.md/CLAUDE.md and skills: no invisible characters, size within limits")
+
+
+def skill_scripts_without_test(skills_dir):
+    """Paths of the skills_dir/*/scripts/*.py that have no test_<name>.py next to them (test_*.py and __init__.py need
+    none; subfolders are not looked at). The repo's own test_skills.py applies it to skills/ too."""
+    return [path for path in sorted(skills_dir.glob("*/scripts/*.py")) if skills_dir.is_dir()
+            and path.name != "__init__.py" and not path.name.startswith("test_")
+            and not (path.parent / f"test_{path.name}").is_file()]
+
+
+def check_skill_tests(rep, root):
+    """WARN with every .claude/skills/*/scripts/*.py that has no test_<name>.py next to it: a skill born in the project
+    is code too (P2 of proposal 2026-10-25-world-maker-fantasy-2.md)."""
+    missing = skill_scripts_without_test(root / ".claude" / "skills")
+    for path in missing:
+        rel = path.relative_to(root).as_posix()
+        folder, name = rel.rsplit("/", 1)
+        rep.warn("skill tests", f"{rel} has no test next to it", f"write {folder}/test_{name} "
+                 f"(python3 -m unittest discover -s {folder} -p 'test_*.py' runs it)")
+    if not missing:
+        rep.ok("skill tests", "every skill script has its test_<name>.py")
+
+
+def media_note_folder(root):
+    """The `Folder:` the gw-media-content note declares, or None when the note or the line is missing."""
+    try:
+        text = (root / MEDIA_NOTE).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    m = re.search(r"^[\s>*-]*Folder\s*:\s*`?([^`\n]+?)`?\s*$", text, re.M)
+    return m.group(1) if m else None
+
+
+def old_media_folder(root):
+    """docs/difusion (A8, 0.x) when the note declares no folder and it exists: what /gw-update moves to docs/media."""
+    old = root / OLD_MEDIA_FOLDER
+    if media_note_folder(root) is None and old.is_dir() and not old.is_symlink():
+        return old
+    return None
+
+
+def media_folder(root):
+    """The `Folder:` line of the gw-media-content note, or its default (docs/media; the old docs/difusion while it is
+    the only one there, 0.x); None when it points outside the project."""
+    folder = media_note_folder(root)
+    if folder is None:
+        folder = OLD_MEDIA_FOLDER if old_media_folder(root) and not (root / MEDIA_FOLDER).exists() else MEDIA_FOLDER
+    path = Path(folder)
+    return None if path.is_absolute() or ".." in path.parts else root / path
+
+
+def uses_media_content(root):
+    """The project uses gw-media-content when its note exists or the folder the note names (default docs/media) does.
+    The skill itself is in every project that applied the workflow, so its presence says nothing."""
+    folder = media_folder(root)
+    return (root / MEDIA_NOTE).is_file() or (folder is not None and folder.is_dir())
+
+
+def playwright_found():
+    """True when `playwright` resolves as render.mjs does: from the current folder or from GW_PLAYWRIGHT_DIR, up the
+    node_modules folders (and NODE_PATH, which Node also searches)."""
+    bases = [Path.cwd()]
+    if os.environ.get("GW_PLAYWRIGHT_DIR"):
+        bases.append(Path(os.environ["GW_PLAYWRIGHT_DIR"]).resolve())
+    for base in bases:
+        for folder in [base, *base.parents]:
+            if folder.name != "node_modules" and (folder / "node_modules" / "playwright" / "package.json").is_file():
+                return True
+        if (base / "playwright" / "package.json").is_file():
+            return True
+    return any((Path(d) / "playwright" / "package.json").is_file()
+               for d in os.environ.get("NODE_PATH", "").split(os.pathsep) if d)
+
+
+def imagemagick_webp():
+    """The command (`magick`, else `convert`) whose `-list format` has WEBP, as render.mjs checks it; else None."""
+    for command in ("magick", "convert"):
+        if not shutil.which(command):
+            continue
+        try:
+            r = subprocess.run([command, "-list", "format"], capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if r.returncode == 0 and re.search(r"\bWEBP\b", r.stdout):
+            return command
+    return None
+
+
+def check_media_folder(rep, root):
+    """A8 (0.x): warns about docs/difusion, the old default folder, while the note does not name another one."""
+    if old_media_folder(root) is None:
+        return
+    if (root / MEDIA_FOLDER).exists():
+        rep.warn("media folder", f"{OLD_MEDIA_FOLDER} (the old default folder of gw-media-content) and {MEDIA_FOLDER} "
+                 "both exist, and the note names no folder",
+                 f"merge {OLD_MEDIA_FOLDER} into {MEDIA_FOLDER} by hand and remove it (git mv / git rm), or name the "
+                 f"one you keep in {MEDIA_NOTE} (`Folder: {OLD_MEDIA_FOLDER}`)")
+    else:
+        rep.warn("media folder", f"{OLD_MEDIA_FOLDER} is the old default folder of gw-media-content; the default is "
+                 f"now {MEDIA_FOLDER}",
+                 "python3 .claude/gw/scripts/apply.py . --update moves it, or write "
+                 f"`Folder: {OLD_MEDIA_FOLDER}` in {MEDIA_NOTE} to keep it")
+
+
+def check_media_tools(rep, root):
+    """Only for a project that uses gw-media-content: node, Playwright and ImageMagick with WebP, which
+    skills/gw-media-content/scripts/render.mjs needs (the machine running doctor is the one that renders)."""
+    if not uses_media_content(root):
+        return
+    found = []
+    if shutil.which("node"):
+        found.append("node")
+    else:
+        rep.warn("media tools", "gw-media-content renders images with node, which is not on PATH",
+                 "install Node.js 18+ (https://nodejs.org, or: apt install nodejs / brew install node)")
+    if playwright_found():
+        found.append("Playwright")
+    else:
+        rep.warn("media tools", "gw-media-content renders images with Playwright, which is not found from the current "
+                 "folder nor from GW_PLAYWRIGHT_DIR",
+                 "in the project: npm i -D playwright && npx playwright install chromium (then run from its folder, "
+                 "or set GW_PLAYWRIGHT_DIR)")
+    command = imagemagick_webp()
+    if command:
+        found.append(f"ImageMagick with WebP ({command})")
+    else:
+        rep.warn("media tools", "gw-media-content converts images with ImageMagick with WebP support, not found "
+                 "(neither `magick` nor `convert` lists WEBP)",
+                 "apt install imagemagick webp (Debian/Ubuntu) or brew install imagemagick webp (macOS)")
+    if len(found) == 3:
+        rep.ok("media tools", f"gw-media-content: {', '.join(found)} found")
+
+
+GITHUB_REMOTE = re.compile(r"^(?:https?://(?:[^/@]+@)?|ssh://(?:[^/@]+@)?|[^/@:]+@)github\.com[:/]", re.I)
+
+
+def github_remote(root):
+    """The `origin` URL when it points at github.com (https, ssh:// or git@github.com: form); else None."""
+    url = git(root, "remote", "get-url", "origin")
+    return url if url and GITHUB_REMOTE.match(url) else None
+
+
+def check_ci_access(rep, root):
+    """AGENTS.md asks to look at the CI of the last push when a block closes: with `origin` on GitHub, that needs `gh`
+    (logged in) or a token in the environment (P5 of record retro-2026-10-25-antes-de-main-0-4-0.md). Never
+    prints a token. No remote, or a remote elsewhere: nothing to check."""
+    if github_remote(root) is None:
+        return
+    if os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN"):
+        rep.ok("ci access", "GITHUB_TOKEN/GH_TOKEN is set, so the CI state of origin can be read")
+        return
+    why = ("origin is on GitHub, but the agent cannot read the CI state of a push (AGENTS.md asks to look at it when "
+           "each block closes)")
+    if not shutil.which("gh"):
+        rep.warn("ci access", f"{why}: neither `gh` is on PATH nor GITHUB_TOKEN/GH_TOKEN is set",
+                 "install GitHub CLI and run `gh auth login`, or export GITHUB_TOKEN")
+        return
+    try:
+        # Only github.com: another configured host (an expired GHE login) must not fail it.
+        logged_in = subprocess.run(["gh", "auth", "status", "--hostname", "github.com"], capture_output=True,
+                                   text=True, timeout=10, cwd=str(root)).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        logged_in = False
+    if logged_in:
+        rep.ok("ci access", "`gh` is logged in, so the CI state of origin can be read")
+    else:
+        rep.warn("ci access", f"{why}: `gh auth status` fails and no GITHUB_TOKEN/GH_TOKEN is set",
+                 "run `gh auth login` (or export GITHUB_TOKEN)")
+
+
 def run(root):
     rep = Report()
     cfg = check_config(rep, root)
@@ -486,12 +887,20 @@ def run(root):
     check_hooks_path(rep, root)
     check_ignored(rep, root)
     check_githooks(rep, root, version)
+    check_legacy_paths(rep, cfg)
+    check_worktrees(rep, root, cfg)
+    check_worktree_links(rep, root, cfg)
     check_log(rep, root, cfg)
     check_commands(rep, root, cfg)
     check_ci(rep, root, cfg)
+    check_ci_access(rep, root)
     check_settings(rep, root)
     check_subagents(rep, root)
     check_glossary(rep, root)
+    check_instructions(rep, root, cfg)
+    check_skill_tests(rep, root)
+    check_media_folder(rep, root)
+    check_media_tools(rep, root)
     proposals = check_proposals(rep, root)
     check_skills(rep, root, version, proposals)
     check_session(rep, root)

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<!-- Release card: a headline, one sentence and three figures. For X, LinkedIn and Discord. Copy one per language
+     (card.es.html, card.en.html), fill every gap written between double braces, keep the figures true and
+     sourced in sheet.md, and render with render.mjs. To drop a figure, delete its div.stat. -->
+<meta name="gw-size" content="1200x675">
+<title>Card</title>
+<style>
+  :root {
+    /* Palette: override these to match the project (brand colors, dark or light). Nothing else needs to change. */
+    --background: #0f172a; --surface: #1e293b; --border: #334155;
+    --text: #f1f5f9; --muted: #94a3b8; --accent: #38bdf8; --accent-text: #0f172a;
+    --good: #4ade80; --bad: #f87171;
+    --font: system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, "DejaVu Sans", "Liberation Sans", sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Liberation Mono", monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { width: 1200px; height: 675px; overflow: hidden; background: var(--background); color: var(--text); font-family: var(--font);
+         padding: 56px 72px; display: flex; flex-direction: column; }
+  .brand { font-size: 20px; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+  h1 { font-size: 54px; line-height: 1.1; margin-top: 28px; max-width: 980px; }
+  p.sub { font-size: 26px; line-height: 1.35; color: var(--muted); margin-top: 20px; max-width: 960px; }
+  .stats { display: flex; gap: 22px; margin-top: auto; }
+  .stat { flex: 1; background: var(--surface); border: 2px solid var(--border); border-radius: 16px; padding: 20px 24px; }
+  .stat b { display: block; font-size: 46px; color: var(--accent); }
+  .stat span { font-size: 20px; color: var(--muted); }
+  .footer { display: flex; justify-content: space-between; margin-top: 26px; font-size: 20px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <div class="brand">{{proyecto}}</div>
+  <h1>{{titular}}</h1>
+  <p class="sub">{{una frase: qué puede hacer ahora quien lo usa}}</p>
+  <div class="stats">
+    <div class="stat"><b>{{cifra}}</b><span>{{qué mide}}</span></div>
+    <div class="stat"><b>{{cifra}}</b><span>{{qué mide}}</span></div>
+    <div class="stat"><b>{{cifra}}</b><span>{{qué mide}}</span></div>
+  </div>
+  <div class="footer"><span>{{fecha}}</span><span>{{enlace corto o nombre del proyecto}}</span></div>
+</body>
+</html>

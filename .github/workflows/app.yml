@@ -1,0 +1,54 @@
+# El CI propio del instalador (FLU-7): lo que el check de .claude/gw.json no cubre. Compila y prueba el asistente en
+# Linux, comprueba que el núcleo y la app compilan para Windows y corre los tests del núcleo en Windows. El check
+# (tsc, fmt, clippy, enlaces y los tests de tools/qa) lo corre .github/workflows/check.yml, que es del flujo
+# Galivelop-workflow y no se toca: lo actualiza /gw-update.
+name: App
+
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Rust de app/rust-toolchain.toml
+        run: rustup toolchain install --no-self-update
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app
+      - name: Dependencias del sistema
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libxdo-dev libssl-dev gcc-mingw-w64-x86-64
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: cargo test -p tarkor-nucleo
+      - name: El núcleo y la app compilan para Windows
+        run: cargo check -p tarkor-nucleo -p tarkor --target x86_64-pc-windows-gnu --all-targets
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust de app/rust-toolchain.toml
+        run: rustup toolchain install --no-self-update
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app
+      - run: cargo test -p tarkor-nucleo

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<!-- Metric card: one big figure and a small bar chart drawn from the data below. Edit only the JSON in
+     script#data: "value" is any number (the longest bar is the largest value) and "text" is what is printed
+     next to the bar. Three to six bars. Use real figures and give their source in sheet.md. Fill every other
+     gap written between double braces. -->
+<meta name="gw-size" content="1200x675">
+<title>Metrics</title>
+<style>
+  :root {
+    /* Palette: override these to match the project (brand colors, dark or light). Nothing else needs to change. */
+    --background: #0f172a; --surface: #1e293b; --border: #334155;
+    --text: #f1f5f9; --muted: #94a3b8; --accent: #38bdf8; --accent-text: #0f172a;
+    --good: #4ade80; --bad: #f87171;
+    --font: system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, "DejaVu Sans", "Liberation Sans", sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Liberation Mono", monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { width: 1200px; height: 675px; overflow: hidden; background: var(--background); color: var(--text); font-family: var(--font);
+         padding: 52px 64px; display: flex; flex-direction: column; }
+  .brand { font-size: 18px; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+  .heading-row { display: flex; align-items: flex-end; gap: 28px; margin-top: 18px; }
+  .big { font-size: 96px; line-height: 1; font-weight: 800; color: var(--accent); }
+  .big-text { font-size: 28px; line-height: 1.25; color: var(--muted); padding-bottom: 10px; max-width: 640px; }
+  #chart { margin-top: auto; display: flex; flex-direction: column; gap: 14px; }
+  .row { display: grid; grid-template-columns: 220px 1fr 120px; align-items: center; gap: 18px; font-size: 22px; }
+  .row .label { color: var(--muted); text-align: right; }
+  .track { height: 28px; background: var(--surface); border: 2px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .track i { display: block; height: 100%; background: var(--accent); }
+  .row b { font-size: 24px; }
+  .footer { margin-top: 24px; font-size: 20px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <div class="brand">{{proyecto}}</div>
+  <div class="heading-row"><div class="big">{{cifra principal}}</div><div class="big-text">{{qué mide, en una frase}}</div></div>
+  <div id="chart"></div>
+  <div class="footer">{{fuente del dato y fecha}}</div>
+  <script type="application/json" id="data">
+  [
+    {"label": "{{etiqueta}}", "value": {{número}}, "text": "{{texto de la barra}}"},
+    {"label": "{{etiqueta}}", "value": {{número}}, "text": "{{texto de la barra}}"},
+    {"label": "{{etiqueta}}", "value": {{número}}, "text": "{{texto de la barra}}"}
+  ]
+  </script>
+  <script>
+    var data = JSON.parse(document.getElementById("data").textContent);
+    var largest = Math.max.apply(null, data.map(function (d) { return d.value; })) || 1;
+    var chart = document.getElementById("chart");
+    data.forEach(function (d) {
+      var row = document.createElement("div");
+      row.className = "row";
+      var label = document.createElement("span");
+      label.className = "label";
+      label.textContent = d.label;
+      var track = document.createElement("div");
+      track.className = "track";
+      var bar = document.createElement("i");
+      bar.style.width = Math.max(1, Math.round((d.value / largest) * 100)) + "%";
+      track.appendChild(bar);
+      var text = document.createElement("b");
+      text.textContent = d.text;
+      row.appendChild(label);
+      row.appendChild(track);
+      row.appendChild(text);
+      chart.appendChild(row);
+    });
+  </script>
+</body>
+</html>

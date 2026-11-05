@@ -52,7 +52,7 @@ const adaptar = {
 }
 
 console.log('1/4 esbuild: un solo fichero minificado…')
-await esbuild.build({
+const { metafile } = await esbuild.build({
   entryPoints: [join(backend, 'src', 'server.ts')],
   bundle: true,
   platform: 'node',
@@ -63,13 +63,29 @@ await esbuild.build({
   legalComments: 'none',
   // Prisma genera código y un binario nativo por plataforma: va aparte, sin compilar.
   external: ['@prisma/client', '.prisma/client'],
+  // INS-34: el juego deja fuera la curación y los proveedores cloud en las ramas que pliega esta
+  // constante. Plegarlas exige `minify` (o al menos `minifySyntax`): sin él el `import()` entra igual.
+  define: { 'process.env.TARKOR_EMPAQUETADO': '"1"' },
   banner: {
     js: `const __tarkorDir = (d) => require('path').join(process.env.TARKOR_BACKEND_RAIZ || __dirname, d);`,
   },
   outfile: join(salida, 'servidor.cjs'),
   plugins: [adaptar],
+  metafile: true,
   logLevel: 'warning',
 })
+
+// INS-34: si algo de curación o de proveedores cloud vuelve a entrar en el bundle, se para aquí.
+// Los scripts que el servidor usa en marcha (catálogo y reparto de facciones) sí van.
+const prohibidos = [/lib\/aiProviders\//, /services\/imagePromptGenerator/, /services\/liveTeacherCapture/, /src\/scripts\/(?!(worldCatalog|repartoFacciones)\.ts$)/]
+// Solo el código del backend: una dependencia con su propio `src/scripts/` no cuenta.
+const colados = Object.keys(metafile.inputs)
+  .map((f) => f.replaceAll('\\', '/'))
+  .filter((f) => !f.includes('node_modules/') && prohibidos.some((p) => p.test(f)))
+if (colados.length) {
+  console.error(`El bundle lleva código que no va en el instalador (INS-34):\n  ${colados.join('\n  ')}`)
+  process.exit(1)
+}
 
 console.log('2/4 bytenode: compilando a bytecode de V8…')
 execFileSync(process.execPath, ['-e', `require(${JSON.stringify(requerir.resolve('bytenode'))}).compileFile({ filename: ${JSON.stringify(join(salida, 'servidor.cjs'))}, output: ${JSON.stringify(join(salida, 'servidor.jsc'))} })`])

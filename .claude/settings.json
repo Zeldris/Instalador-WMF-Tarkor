@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/gw/scripts/recuperar.py --estado"
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/gw/scripts/recover.py --state"
           }
         ]
       }
@@ -29,7 +29,44 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/gw/scripts/revision-antes-de-main.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/gw/scripts/review-before-main.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/gw/scripts/config-guard.py"
+          }
+        ]
+      },
+      {
+        "matcher": "^mcp__.*github.*__(create_pull_request|update_pull_request|merge_pull_request|enable_pr_auto_merge|add_issue_comment|update_issue_comment|issue_write|add_reply_to_pull_request_comment|add_comment_to_pending_review|pull_request_review_write|push_files|create_or_update_file)$|^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/gw/scripts/agent-signatures.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/gw/scripts/subagent-cap.py"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/gw/scripts/before-stop.py"
           }
         ]
       }
