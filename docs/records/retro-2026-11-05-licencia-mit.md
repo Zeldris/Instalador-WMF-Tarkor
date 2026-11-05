@@ -49,3 +49,8 @@ clave de directorios de Node y Rust y la caché de Rust; lo de `main` queda como
 - P4: `gw-update` añade a `staleRefs` lo que renombra su migración.
 - P5: `check.yml` con directorios de Node y Rust configurables y `Swatinem/rust-cache`; decidir si corre en `main`.
 - `review-before-main.sh` no reconoce las líneas de `ci-local.md` del formato anterior (`· en verde`).
+- El paso del CI que corre el `pre-commit` de la rama base sobre el PR marcó como secreto el comentario de
+  `PATHCODE` en `.githooks/pre-commit` (`"/srv/app/token": "E123"`): el gancho anterior a v0.5.0 no descarta ese
+  par. Aquí se le añadió `gw-allow-secret` (2026-11-05, con permiso de la usuaria); el flujo debería traer el
+  comentario ya marcado, o sin un ejemplo que parezca un secreto, para que el primer PR de cada proyecto que se
+  actualice no salga en rojo.

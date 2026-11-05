@@ -85,7 +85,7 @@ UNQUOTED="^\\+[[:space:]]*(export[[:space:]]+)?${NAME}[[:space:]]*[=:][[:space:]
 HARMLESS="^\\+[[:space:]]*(export[[:space:]]+)?${NAME}[[:space:]]*[=:][[:space:]]*([Rr][Ee][Aa][Dd]|[Ww][Rr][Ii][Tt][Ee]|[Nn][Oo][Nn][Ee]|[Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee]|[^[:space:]#]{1,7})[[:space:]]*(#.*)?$"
 added_lines() { grep -E '^\+' | grep -vE '^\+\+\+ ' | grep -v 'gw-allow-secret' || true; }
 examples=(':!*.env.example' ':!*.env.sample' ':!*.env.template')
-# A dict of absolute path -> error code ("/srv/app/token": "E123") is not an assignment: that pair is dropped first.
+# A dict of absolute path -> error code ("/srv/app/token": "E123") is not an assignment: that pair is dropped first. gw-allow-secret
 PATHCODE='"\/[^"]*"[[:space:]]*:[[:space:]]*"[A-Z]{1,4}[-_]?[0-9]{1,6}"'
 literal="$(diff_of -U0 --no-renames --diff-filter=ACMR -- . "${examples[@]}" | added_lines | sed -E "s/$PATHCODE//g" | grep -E "$QUOTED" | head -n 5 || true)"
 config_added="$(diff_of -U0 --no-renames --diff-filter=ACMR -- '*.env' '.env*' '*.properties' '*.yml' '*.yaml' \
