@@ -12,9 +12,9 @@ cada commit.**
 |---|---|
 | **Actualizado** | 2026-11-05 |
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
-| **Último commit en `main`** | Fusión del PR #11 (2026-10-26, `a73f881`): `FLU-6`, con la confirmación de la usuaria. La CI de GitHub no arrancó (sin cuota); `ci-local` en verde sobre `f59202b`, Windows sin cubrir (pendiente de `INS-8`). |
+| **Último commit en `main`** | Fusión del PR #12 (2026-11-05, `ce9f33a`): `INS-12` (licencia MIT del repo), `FLU-7` e `INS-35` a `INS-37`, con la confirmación de la usuaria y la CI de GitHub en verde (Linux y Windows). |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-05: `INS-12`, licencia MIT del repo; a `main` por PR con toda la rama: [retro](retro-2026-11-05-licencia-mit.md) aprobada entera; marca de revisión y PR. `INS-35` e `INS-36` encargadas a una sesión del juego. `INS-37`: contrato fijado en `04` (`window.__TARKOR__.abrirAjustes()`); falta su lado del juego (encargo, si la usuaria lo confirma) y la inyección en `INS-41`. Siguiente: cuando vuelvan, cerrar `INS-35` e `INS-36` y llevar las variables a `04`, `10` y `12`. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-05: PR #12 fusionado (`INS-12`, licencia MIT del repo; falta la del juego). La CI de GitHub vuelve a arrancar: ya no hace falta `ci-local`. `INS-35` e `INS-36` encargadas a una sesión del juego. `INS-37`: contrato fijado en `04` (`window.__TARKOR__.abrirAjustes()`); falta su lado del juego (encargo, si la usuaria lo confirma) y la inyección en `INS-41`. Siguiente: cuando vuelvan, cerrar `INS-35` e `INS-36` y llevar las variables a `04`, `10` y `12`. |
 | **Tests** | 2026-10-26: núcleo `cargo test -p tarkor-nucleo` 116, `cargo fmt --all --check` en verde, clippy 0 avisos, `tsc -b` 0, `cargo check` del núcleo y la app para Windows (mingw) en verde. Asistente `vitest` 27 y E2E con el Ollama falso: último verde el 2026-10-25. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -101,11 +101,6 @@ cada commit.**
 
 ## Decisiones de la usuaria que bloquean algo
 
-- **CI de GitHub agotada** (2026-10-22: «recent account payments have failed or your spending limit needs to be
-  increased»). La usuaria decide que, hasta que vuelva, se sube de forma manual: antes de ir a `main`,
-  `python3 .claude/gw/scripts/ci-local.py --record` corre en local los jobs de Linux de `check.yml` y `app.yml` y
-  lo deja en [`ci-local.md`](ci-local.md) con fecha y commit (`FLU-3`, `FLU-7`). Los tests del núcleo **en Windows** no se pueden correr
-  así: quedan pendientes hasta que vuelva la CI. Cuando vuelva, se re-lanza sobre `main`.
 - Firma de código en Windows (`INS-11`) y licencias (`INS-12`, `INS-15`).
 
 ## Comandos para comprobar el estado
