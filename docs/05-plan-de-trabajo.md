@@ -221,7 +221,7 @@ ganchos, `.claude/gw/scripts`, `tools/qa` y las skills ([runbook](runbooks/skill
   aplicado con el check en verde, la prueba del paso 6 de `aplicar.md` y `doctor.py` sin FAIL; revisión de código
   y [retro](records/retro-2026-10-22-piloto-galivelop.md). Falta: la CI de GitHub en verde (agotada; mientras,
   `FLU-3`) y el [registro del piloto](records/piloto-galivelop-workflow.md) cerrado.
-- [x] **FLU-3** (2026-10-22) `tools/qa/ci-local.py` (retro del piloto): con la CI de GitHub agotada, corre en local
+- [x] **FLU-3** (2026-10-22) `ci-local.py` (retro del piloto; hoy en `.claude/gw/scripts/`): con la CI de GitHub agotada, corre en local
   los pasos de los jobs de Ubuntu del CI (los lee del workflow, no los copia) y, con `--apuntar`, deja
   fecha, commit y resultado en [`ci-local.md`](records/ci-local.md). El job de Windows sale como «sin cubrir».
 - [x] **FLU-4** (2026-10-25) `/gw-update` a Galivelop-workflow v0.3.0: scripts, esquema, skills y ganchos al día;

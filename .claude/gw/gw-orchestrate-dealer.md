@@ -24,7 +24,7 @@ entrada de la tarea, 17,2M fueron de subagentes, con 52k de arranque cada uno.
 
 Retro de `INS-42` (los subagentes, el 71 % de la entrada, de 52k al arrancar a ~100k de media):
 
-- **El check, en una llamada:** `python3 tools/qa/ci-local.py`, que corre los jobs de Ubuntu del CI y solo imprime
+- **El check, en una llamada:** `python3 .claude/gw/scripts/ci-local.py`, que corre los jobs de Ubuntu del CI y solo imprime
   lo que falla. No listar las órdenes una a una. Tras un fallo, se repite solo esa orden. Los E2E, aparte.
 - **Los tramos que tocar:** la sesión principal da en el encargo los `grep -n` de las funciones del trozo; el
   subagente lee por tramos (`sed -n`) y busca el nombre con `grep -n` antes de editar, para ver sus llamadores.

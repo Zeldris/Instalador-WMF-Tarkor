@@ -90,7 +90,14 @@ cada commit.**
     empaquetador del instalador lo cubre con su `metafile`); `esbuild` fijado en el backend puede separarse del que use
     el instalador; en el build empaquetado siguen `GET`/`PUT /world/:slug/image-prompt[/usado]` (solo la tabla local),
     las variables cloud de `env.ts` y el aviso de arranque de `LIVE_TEACHER_CAPTURE_ENABLED` (ya no captura nada).
-15. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
+15. Leves de la revisión de la rama contra `origin/main` (2026-11-05, `INS-12` y `FLU-7`; no vuelven a revisarse en su
+    PR), casi todas de la plantilla de Galivelop-workflow, para avisar allí: `check.yml` y `app.yml` no corren en
+    `main` (`branches-ignore`); el `setup-node` de `check.yml` mira `package.json` en la raíz y no `app/`, así que
+    `tsc` va con el Node del runner, y no hay `rust-cache`; `instalar-entorno.sh` solo avisa si falla (el paso
+    Install del CI sale en verde), usa `npm install` y no `npm ci`, e instala xvfb y webkit2gtk-driver que el check no
+    usa; `review-before-main.sh` no reconoce las líneas de `ci-local.md` del formato viejo (`· en verde`). El commit
+    `9002d38` (`FLU-7`) va a nombre de Claude, de antes de la regla «todo a nombre de Zeldris»; no se reescribe.
+16. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
 
 ## Decisiones de la usuaria que bloquean algo
 
