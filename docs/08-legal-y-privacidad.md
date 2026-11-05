@@ -1,6 +1,6 @@
 # Legal y privacidad
 
-**Estado: privacidad decidida (2026-09-28); licencia propuesta; texto legal definitivo pendiente
+**Estado: privacidad decidida (2026-09-28); licencia del repo decidida (MIT, 2026-11-05), la del juego propuesta; texto legal definitivo pendiente
 de redactar y revisar.**
 Petición de Álvaro (2026-09-16): Tarkor será gratuito para todos, y el instalador debe ser
 escrupulosamente legal y explicarlo todo con claridad, sin letra pequeña ilegible.
@@ -24,9 +24,13 @@ técnica sube el listón y la licencia da el derecho a reclamar.
 - **El juego distribuido** (binario, contenido narrativo, lore, personajes, mundo de Helek Sirik,
   imágenes): licencia propia de uso personal gratuito. Se permite descargar, instalar y jugar. No
   se permite redistribuir modificado, extraer ni reutilizar el código o el contenido, ni venderlo.
-- **Este repositorio público** (documentación y código del envoltorio): **abierto, a decidir.**
-  Opciones: también todos los derechos reservados (código visible pero no reutilizable), o una
-  licencia abierta (MIT) solo para el envoltorio, que no contiene nada del juego.
+- **Este repositorio público** (documentación y código del envoltorio): **MIT**, decidido por
+  Álvaro el 2026-11-05, con el mismo texto que Galivelop-workflow y galivelop-image-generator
+  ([`LICENSE`](../LICENSE)). Cubre solo lo que hay en el repo, que no contiene nada del juego: el
+  juego que el instalador empaqueta en las releases (`INS-41`), y el nombre y el logotipo de Tarkor
+  (`app/src-tauri/icons/`), siguen con su propia licencia. Las skills de
+  [mattpocock/skills](https://github.com/mattpocock/skills) conservan la suya
+  ([`LICENSE-mattpocock-skills`](../.claude/skills/LICENSE-mattpocock-skills)).
 - **Imágenes de la Enciclopedia:** hay que confirmar con qué proveedor se generó cada una y que sus
   términos permiten redistribuirlas en un producto gratuito.
 
@@ -80,7 +84,6 @@ en la bienvenida del asistente. Sin sistema de verificación de edad.
 ## Qué falta
 
 - Confirmar la licencia del juego (propuesta: todos los derechos reservados).
-- Decidir la licencia de este repositorio público.
 - Confirmar en la fuente oficial las licencias de los modelos del catálogo (un test exige Apache
   2.0 para todos, ver `12`) y las de las imágenes.
 - Redactar el texto legal definitivo y revisarlo.

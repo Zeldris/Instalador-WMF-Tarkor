@@ -75,7 +75,9 @@ Objetivo: demostrar que el patrón completo funciona en Windows y en la Steam De
 Se pueden resolver en paralelo a la fase 0. Ver la tabla del [README](../README.md).
 
 - [ ] **INS-11** Firma de código en Windows.
-- [ ] **INS-12** Licencia del juego (propuesta: todos los derechos reservados) y de este repo.
+- [ ] **INS-12** Licencia del juego (propuesta: todos los derechos reservados) y de este repo. Hecha la del
+  repo (2026-11-05): MIT, con `LICENSE` en la raíz y `license` en `package.json` y los `Cargo.toml` (ver `08`).
+  Falta la del juego.
 - [x] **INS-13** Perfiles pequeños: se ofrecen Mínimo y Ligero con modelos Apache 2.0, avisando del
   resultado (calidad a confirmar en `INS-8`).
 - [x] **INS-14** (2026-10-25) Perfiles por encima del máximo seguro: se pueden elegir con aviso y

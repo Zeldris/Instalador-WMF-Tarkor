@@ -34,7 +34,7 @@ gestión de procesos). La build final se hace desde el repo privado (ver
 | Consentimiento y validación | En el asistente de primer arranque | Decidido | [07](docs/07-flujo-de-instalacion.md), [11](docs/11-diseno-del-frontal.md) |
 | Firma en Windows | Azure Trusted Signing / certificado / sin firma en v1 | **Abierto** | [04](docs/04-empaquetado-tauri.md) |
 | Licencia del juego | Todos los derechos reservados, uso personal gratuito | **Propuesta, confirmar** | [08](docs/08-legal-y-privacidad.md) |
-| Licencia de este repo | MIT o todos los derechos reservados | **Abierto** | [08](docs/08-legal-y-privacidad.md) |
+| Licencia de este repo | MIT (el código y la documentación; el juego no) | Decidido (2026-11-05) | [08](docs/08-legal-y-privacidad.md) |
 | Perfiles Mínimo y Ligero | Se ofrecen avisando del resultado; falta probarlos en partida | **Por validar** | [12](docs/12-catalogo-y-rendimiento.md) |
 | Por encima del máximo seguro | Bloqueado con opción "mostrar no recomendados" | **Propuesta, confirmar** | [09](docs/09-deteccion-de-equipo-y-perfiles.md) |
 
@@ -68,3 +68,11 @@ mundo. Su `docs/arquitectura/20-instalador-distribuible.md` (2026-08-20) es el p
 todo esto. No confundir con `docs/arquitectura/15-instalacion.md` del juego, que explica cómo montar
 el **entorno de desarrollo**; este repositorio habla de un **paquete terminado** para quien solo
 quiere jugar.
+
+## Licencia
+
+El código y la documentación de este repositorio son [MIT](LICENSE). El juego que empaqueta el
+instalador, y el nombre y el logotipo de Tarkor, tienen su propia licencia
+([`08`](docs/08-legal-y-privacidad.md)); las skills de
+[mattpocock/skills](https://github.com/mattpocock/skills) conservan la suya
+([`LICENSE-mattpocock-skills`](.claude/skills/LICENSE-mattpocock-skills)).

@@ -10,11 +10,11 @@ cada commit.**
 
 | | |
 |---|---|
-| **Actualizado** | 2026-11-04 |
+| **Actualizado** | 2026-11-05 |
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #11 (2026-10-26, `a73f881`): `FLU-6`, con la confirmación de la usuaria. La CI de GitHub no arrancó (sin cuota); `ci-local` en verde sobre `f59202b`, Windows sin cubrir (pendiente de `INS-8`). |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-04: `INS-35` e `INS-36` encargadas juntas a una sesión del juego (`SYSTEM` incrustado, narrador por petición, `TARKOR_NUM_*`, CORS, `127.0.0.1`, rutas por variable). `INS-37`: contrato fijado en `04` (`window.__TARKOR__.abrirAjustes()`); falta su lado del juego (encargo, si la usuaria lo confirma) y la inyección en `INS-41`. Siguiente: cuando vuelvan, cerrar `INS-35` e `INS-36` y llevar las variables a `04`, `10` y `12`. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-05: `INS-12`, licencia MIT del repo; la usuaria pide llevarla a `main` por PR con lo que hay en la rama. `INS-35` e `INS-36` encargadas a una sesión del juego. `INS-37`: contrato fijado en `04` (`window.__TARKOR__.abrirAjustes()`); falta su lado del juego (encargo, si la usuaria lo confirma) y la inyección en `INS-41`. Siguiente: cuando vuelvan, cerrar `INS-35` e `INS-36` y llevar las variables a `04`, `10` y `12`. |
 | **Tests** | 2026-10-26: núcleo `cargo test -p tarkor-nucleo` 116, `cargo fmt --all --check` en verde, clippy 0 avisos, `tsc -b` 0, `cargo check` del núcleo y la app para Windows (mingw) en verde. Asistente `vitest` 27 y E2E con el Ollama falso: último verde el 2026-10-25. |
 
 ## Dónde está todo (para saber qué sigue)
