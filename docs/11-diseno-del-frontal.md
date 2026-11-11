@@ -11,10 +11,13 @@ Prototipo navegable: [`diseno/prototipo-asistente.html`](../diseno/prototipo-asi
 ## Principios
 
 1. **Parece Tarkor desde el primer segundo.** Mismo sistema visual que el juego: tokens de
-   `frontend/src/index.css` (madera `wood-*`, hierro `iron-*`, acento azul `accent-*` de Helek
-   Sirik, `moss` para éxito, `danger` para fallo, `cost` para avisos), Cinzel para títulos, Inter
-   para texto, `Cascadia Code`/monoespaciada para cifras. Paneles `.plank-panel`, riel `.iron-band`,
-   separadores `.accent-hairline`.
+   `frontend/src/index.css` (madera `wood-*`, hierro `iron-*`, `moss` para éxito, `danger` para fallo, `cost` para
+   avisos), Cinzel para títulos, Inter para texto, `Cascadia Code`/monoespaciada para cifras. Paneles `.plank-panel`,
+   riel `.iron-band`. Marca de Tarkor (`UX-40` del juego, `docs/producto/diseno-interfaz-marca.md`; se aplica en
+   `INS-56`): **la madera sostiene, el oro remata**: fondo de madera, como dentro del juego (decidido el 2026-11-11);
+   oro `gold-*` solo en filos, juntas y el titular «TARKOR», como mucho un 10 % de la pantalla; luz desde arriba a la
+   izquierda, sin sombras arrojadas ni halos; el cristal azul `accent-*` de Helek Sirik deja de ser color de marca y
+   queda para estados (recomendado, progreso); sin morado ni violeta.
 2. **Todo se explica antes de hacerse.** Cada pantalla dice qué va a pasar y cuánto ocupa o tarda
    antes del botón que lo hace.
 3. **El jugador decide.** Nada preseleccionado que implique consentimiento; cada descarga tiene su
