@@ -26,6 +26,9 @@ Retro de `INS-42` (los subagentes, el 71 % de la entrada, de 52k al arrancar a ~
 
 - **El check, en una llamada:** `python3 .claude/gw/scripts/ci-local.py`, que corre los jobs de Ubuntu del CI y solo imprime
   lo que falla. No listar las órdenes una a una. Tras un fallo, se repite solo esa orden. Los E2E, aparte.
+- **Compilar antes del E2E** (opt-tokens de `INS-15`): antes de lanzar un E2E, `cd app && cargo clippy --workspace
+  --all-targets -q -- -D warnings`; el E2E, solo con eso en verde. En `INS-15` el E2E (compila la app entera) se
+  repitió dos veces por un choque de nombres (E0618) y un comando sin registrar en `invoke_handler`.
 - **Los tramos que tocar:** la sesión principal da en el encargo los `grep -n` de las funciones del trozo; el
   subagente lee por tramos (`sed -n`) y busca el nombre con `grep -n` antes de editar, para ver sus llamadores.
 - **El trozo que cierra una tarea** pide también su línea en «Hecho» de la bitácora: sin ella el pre-push rechaza

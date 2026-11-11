@@ -184,10 +184,11 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn deck_16gb_maximo_justo_recomienda_equilibrado() {
+    fn deck_16gb_maximo_no_cabe_recomienda_equilibrado() {
+        // Con el narrador `llama3.1:8b`, Máximo pide 11,5 GB y la Deck deja 11 para la IA.
         let e = ev(16, None, 200);
         assert_eq!(e.memoria_para_ia_gb, Some(11.0));
-        assert_eq!(e.maximo_seguro.as_deref(), Some("maximo"));
+        assert_eq!(e.maximo_seguro.as_deref(), Some("equilibrado"));
         assert_eq!(e.recomendado, "equilibrado");
     }
 
@@ -211,8 +212,8 @@ pub(crate) mod tests {
 
     #[test]
     fn el_disco_tambien_limita() {
-        // Memoria de sobra pero solo 8 GB libres: Máximo necesita 9,4 × 1,1 GB y no cabe;
-        // Equilibrado necesita 6 × 1,1 = 6,6 GB y sí.
+        // Memoria de sobra pero solo 8 GB libres: Máximo necesita 9,6 × 1,1 GB y no cabe;
+        // Equilibrado necesita 6,2 × 1,1 = 6,82 GB y sí.
         let e = ev(32, Some(12), 8);
         assert_eq!(e.maximo_seguro.as_deref(), Some("equilibrado"));
         let max = e.perfiles.iter().find(|p| p.perfil.id == "maximo").unwrap();
@@ -281,7 +282,7 @@ pub(crate) mod tests {
     fn serializa_en_camel_case_para_el_asistente() {
         let json = serde_json::to_value(ev(16, None, 200)).unwrap();
         assert_eq!(json["recomendado"], "equilibrado");
-        assert_eq!(json["maximoSeguro"], "maximo");
+        assert_eq!(json["maximoSeguro"], "equilibrado");
         assert_eq!(json["perfiles"][0]["id"], "minimo");
         assert_eq!(json["perfiles"][0]["cabeEnMemoria"], true);
         assert!(json["perfiles"][0]["resultado"].as_str().unwrap().len() > 10);

@@ -105,7 +105,7 @@ Ejemplos:
 | Equipo 4 GB | 0 GB | Ninguno → se deja probar Mínimo con aviso |
 | Equipo 6 GB | 6 − 3 − 1 = 2 GB | Mínimo |
 | Portátil 8 GB, sin GPU | 8 − 3 − 1 = 4 GB | Ligero (justo). Recomendado: Mínimo |
-| Steam Deck 16 GB (compartida) | 16 − 4 − 1 = 11 GB | Máximo (justo). Recomendado: Equilibrado |
+| Steam Deck 16 GB (compartida) | 16 − 4 − 1 = 11 GB | Equilibrado (Máximo pide 11,5 GB con el narrador `llama3.1:8b`) |
 | PC 16 GB + GPU 8 GB | 16 − 4 − 1 + 7,2 = 18,2 GB | Máximo (Ultra cabe, pero es experimental) |
 
 Estos ejemplos son tests del núcleo (`app/nucleo/src/perfiles.rs`).
@@ -144,7 +144,7 @@ palabras por segundo". Si sale muy lenta (menos de 3 palabras/s), se sugiere baj
   "equipo": { "ramTotalMb": 16000, "gpu": { "nombre": "…", "vramMb": 0, "integrada": true } },
   "perfil": "equilibrado",
   "usoCpu": "moderado",
-  "modelosDescargados": ["qwen2.5:7b", "qwen2.5:1.5b-instruct", "nomic-embed-text"],
+  "modelosDescargados": ["llama3.1:8b", "qwen2.5:1.5b-instruct", "nomic-embed-text"],
   "asistenteCompletado": true
 }
 ```

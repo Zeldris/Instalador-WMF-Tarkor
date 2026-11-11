@@ -64,8 +64,10 @@ Objetivo: demostrar que el patrón completo funciona en Windows y en la Steam De
   (lecturas, crear partida, `FOR UPDATE`). Herramienta en `herramientas/empaquetar-backend.mjs`.
   Pendiente para después de la fase 2: repetirla sobre SQLite y probar Prisma sin motor nativo
   (`queryCompiler` + adaptador SQLite).
-- [ ] **INS-7** Narrador con `system` + `options` por petición sobre `qwen2.5:7b`: comparar con
-  `tarkor-narrador` (ver [`03`](03-ollama-y-modelos-ia.md)).
+- [ ] **INS-7** Narrador con `system` + `options` por petición sobre `llama3.1:8b`: comparar con
+  `tarkor-narrador-llama31` (ver [`03`](03-ollama-y-modelos-ia.md)). Decidido con la usuaria el
+  2026-11-11: el narrador de Equilibrado y Máximo es `llama3.1:8b`, el mismo que el juego, en lugar de
+  `qwen2.5:7b` (catálogo, `03`, `09`, `12`; Máximo ya no cabe en la Deck, ver `09`).
 - [ ] **INS-8** Prueba en la Steam Deck y en un Windows limpio: tiempos de descarga, memoria real
   de cada perfil, tokens por segundo, Vulkan frente a ROCm en la Deck, calidad de narración de
   Mínimo y Ligero. Ajustar el catálogo con lo medido.
@@ -83,7 +85,11 @@ Se pueden resolver en paralelo a la fase 0. Ver la tabla del [README](../README.
 - [x] **INS-14** (2026-10-25) Perfiles por encima del máximo seguro: se pueden elegir con aviso y
   confirmación en la tarjeta, sin interruptor (ver `09` y `11`). Implementado el mismo día en el
   asistente y en Ajustes (`Tarjetas`, `pideConfirmar`/`bloqueado` en `app/src/tipos.ts`).
-- [ ] **INS-15** Confirmar licencias de modelos e imágenes.
+- [ ] **INS-15** Confirmar licencias de modelos e imágenes. Revisada la de `llama3.1:8b` (2026-11-11, ver
+  `08`). Hecha la pantalla del instalador (2026-11-11): «Licencias y avisos» desde el paso 2 y Ajustes, con
+  «Built with Llama», el aviso de Meta, la política de uso (copiar enlace) y los textos completos de Llama 3.1,
+  MIT (Ollama) y Apache 2.0 en `app/src/licencias/` (`pantallaLicencias.tsx`, ver `11`). Falta: la misma
+  pantalla en el juego, las licencias de las imágenes y comprobar las de los modelos al publicar.
 
 ## Fase 2 — Migración a SQLite (repo del juego) — código hecho, PR #1 sin fusionar
 
@@ -132,10 +138,12 @@ Ver [`06`](06-inventario-exclusiones.md).
   descarga de Chromium, pasado desde aquí (382 tests de `tools/qa`).
 - [ ] **INS-35** Backend: `SYSTEM` del narrador incrustado en build; narrador con modelo base +
   `system` por petición detrás de variable de entorno; leer `TARKOR_NUM_THREAD`,
-  `TARKOR_NUM_BATCH`, `TARKOR_NUM_CTX_NARRADOR` y `TARKOR_MODELOS_SIN_PENSAR` (ver `12`). Encargo: sin rastro en
-  el juego (2026-11-11: ni rama, ni commit, ni mención); hay que lanzarlo y apuntar aquí su rama o issue.
+  `TARKOR_NUM_BATCH` y `TARKOR_NUM_CTX_NARRADOR` (ver `12`). Encargo: issue [#93](https://github.com/Zeldris/World-Maker-Fantasy/issues/93) del juego (2026-11-11), con
+  `INS-36`; el modo base va detrás de `TARKOR_NARRADOR_BASE=1`. `TARKOR_MODELOS_SIN_PENSAR` sobra: el juego ya
+  manda `think: false` en todas las peticiones.
 - [ ] **INS-36** Backend: CORS restringido y escucha solo en `127.0.0.1` en modo empaquetado; rutas de
-  imágenes y datos por variable de entorno. Encargo: el mismo que `INS-35`, sin rastro en el juego (2026-11-11).
+  imágenes y datos por variable de entorno (`TARKOR_IMAGENES_DIR`) y versión fijada en el build. Encargo: el issue
+  [#93](https://github.com/Zeldris/World-Maker-Fantasy/issues/93) del juego, con `INS-35` (2026-11-11).
 - [ ] **INS-37** Menú del juego: enlace a Ajustes → Rendimiento de la IA. Contrato fijado (2026-11-04, `04`):
   «Rendimiento de la IA» en el menú solo si `window.__TARKOR__.abrirAjustes` es una función, y la llama al pulsarlo.
   Falta: hacerlo en el juego (encargo a una sesión del juego) e inyectar la función en `INS-41`.

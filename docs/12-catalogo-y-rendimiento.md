@@ -32,8 +32,9 @@ perfil escrito en código.
    el incrustado. Nunca deja el juego sin arrancar. La app informa del motivo (`origen_catalogo`).
 
 Los tests del núcleo comprueban el catálogo incrustado en cada build: que esté ordenado, que todos
-los perfiles incluyan el modelo de embeddings, y que **todos los modelos tengan licencia Apache
-2.0** (un modelo con otra licencia no entra sin revisarlo antes, ver `08`).
+los perfiles incluyan el modelo de embeddings, y que **todos los modelos tengan una licencia ya revisada**: Apache 2.0 o, para el narrador
+`llama3.1:8b`, la Llama 3.1 Community License (un modelo con otra licencia no entra sin revisarlo
+antes, ver `08`).
 
 ## 2. Perfiles: que cualquiera pueda jugar
 
@@ -41,11 +42,17 @@ los perfiles incluyan el modelo de embeddings, y que **todos los modelos tengan 
 |---|---|---|---|---|---|
 | **Mínimo** | `qwen2.5:1.5b-instruct` (el mismo que el cronista) | el mismo | ~2 GB | 1,3 GB | Para probar en casi cualquier equipo. Narraciones cortas, simples, a veces equivocadas con el mundo |
 | **Ligero** | `qwen3.5:2b` | cronista | ~3,8 GB | 4 GB | Juego completo con narraciones más breves y menos matices |
-| **Equilibrado** | `qwen2.5:7b` | cronista | ~7 GB | 6 GB | La experiencia de diseño: el narrador de desarrollo |
-| **Máximo** | `qwen2.5:7b` | `qwen3.5:4b` | ~11 GB | 9,4 GB | Sugerencias más ricas y sin esperas entre modelos |
+| **Equilibrado** | `llama3.1:8b` | cronista | ~7,5 GB | 6,2 GB | La experiencia de diseño: el narrador del juego (`tarkor-narrador-llama31`) |
+| **Máximo** | `llama3.1:8b` | `qwen3.5:4b` | ~11,5 GB | 9,6 GB | Sugerencias más ricas y sin esperas entre modelos |
 | **Ultra** *(experimental)* | `qwen3.5:9b` | `qwen3.5:4b` | ~14 GB | 11,3 GB | Narrador más grande para gráficas potentes; sin afinar para Tarkor |
 
 Todos incluyen el cronista (`qwen2.5:1.5b-instruct`) y `nomic-embed-text`.
+
+La memoria de Equilibrado y Máximo con `llama3.1:8b` es una **estimación** (2026-11-11), no una medida: los
+~7 y ~11 GB de antes más 0,5 GB, que salen de los pesos (4,9 GB en Q4_K_M frente a 4,7 de `qwen2.5:7b`, según
+[ollama.com/library/llama3.1](https://ollama.com/library/llama3.1)) y de una caché de contexto mayor (32 capas y
+8 cabezas KV frente a 28 y 4: unos 0,3 GB más a 8192 de contexto en q8_0). Se mide en la Steam Deck y en Windows
+con `INS-8` y se corrige aquí y en el catálogo.
 
 - **Mínimo** reutiliza un único modelo de lenguaje para todo: una sola descarga pequeña y un solo
   modelo en memoria.
@@ -97,7 +104,11 @@ tiene que leer y pasar en cada petición a Ollama (`INS-35` del plan):
 | `TARKOR_NUM_THREAD` | `num_thread` | Mitad de los hilos (Moderado) o todos menos uno (Alto) |
 | `TARKOR_NUM_BATCH` | `num_batch` | 512, o 256 con margen justo |
 | `TARKOR_NUM_CTX_NARRADOR` | `num_ctx` | 8192 |
-| `TARKOR_MODELOS_SIN_PENSAR` | `think: false` | Modelos Qwen 3.x del perfil: pensar antes de narrar multiplica el tiempo de cada turno |
+| `TARKOR_NARRADOR_BASE` | — | `1`: el narrador es el modelo base de `OLLAMA_MODEL_NARRADOR` con el `SYSTEM` incrustado por petición (`03`) |
+
+Sin la variable, el juego hace lo de hoy (`num_thread` 8, sin `num_batch`, el `num_ctx` del Modelfile). Los Qwen 3.x
+no piensan antes de narrar: el juego ya manda `think: false` en todas las peticiones, así que no hace falta variable.
+Encargo en el juego: issue [#93](https://github.com/Zeldris/World-Maker-Fantasy/issues/93).
 
 ### Otras mejoras de rendimiento previstas
 

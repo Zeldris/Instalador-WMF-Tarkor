@@ -43,8 +43,11 @@ se lo pasa al backend por `PORT`. Consecuencias:
 - **CORS:** el webview carga la página desde un origen propio de Tauri (`http://tauri.localhost`
   en Windows, `tauri://localhost` en Linux), no desde `localhost`. Hoy el backend acepta cualquier
   origen (`cors, { origin: true }` en `server.ts`); en la build empaquetada se restringe a esos
-  orígenes.
+  orígenes. Las peticiones sin `Origin` (el `GET /health` desde Rust) siguen pasando.
 - El backend escucha **solo en 127.0.0.1**, nunca en todas las interfaces.
+- Las imágenes de la Enciclopedia se leen de `TARKOR_IMAGENES_DIR`, que apunta a los recursos de la app; la base de
+  datos, de `DATABASE_URL`. CORS, la escucha y las imágenes son `INS-36`, encargado al juego en el issue
+  [#93](https://github.com/Zeldris/World-Maker-Fantasy/issues/93).
 
 ### Ciclo de vida
 
@@ -106,7 +109,7 @@ Ver [`10-proteccion-del-codigo-y-build.md`](10-proteccion-del-codigo-y-build.md)
 | Base de datos plantilla (catálogo + lore indexado) | a medir |
 | **Instalador** | **~350-450 MB** |
 | Ollama (descarga en primer arranque) | ~1,4 GB (2,1 GB instalado) |
-| Modelos (descarga en primer arranque) | 1,3-9,4 GB según perfil (11,3 GB el experimental), ver `12` |
+| Modelos (descarga en primer arranque) | 1,3-9,6 GB según perfil (11,3 GB el experimental), ver `12` |
 
 Las imágenes son lo que más pesa del instalador: convertirlas a WebP con buena calidad podría
 reducirlo a la mitad (a valorar).

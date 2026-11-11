@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, ErrorIa } from './api'
 import { textoEspera, useEsperaRed } from './esperaRed'
+import { Licencias } from './pantallaLicencias'
 import { CarpetaIa, CopiarInforme, ControlUsoCpu, DetallesTecnicos, Marco, Medidor, Pagina, Reparar, Tarjetas, textoModelo, useMoverCarpeta } from './componentes'
 import * as tx from './textos'
 import type { Config, Equipo, Evaluacion, PerfilId, Rutas, Sobrante, UsoIa } from './tipos'
@@ -33,6 +34,8 @@ export function Bienvenida({ ir }: Nav) {
 
 export function QueSeInstala({ ir, config, rutas, actualizar }: Nav & { config: Config; rutas: Rutas | null; actualizar: (c: Partial<Config>) => void }) {
   const t = tx.queSeInstala
+  const [licencias, setLicencias] = useState(false)
+  if (licencias) return <Licencias volver={() => setLicencias(false)} />
   return (
     <Marco paso={2} titulo={t.titulo} lead={t.lead}
       barra={<><Atras ir={ir} paso={2} /><span className="hueco" />
@@ -49,6 +52,7 @@ export function QueSeInstala({ ir, config, rutas, actualizar }: Nav & { config: 
         </div>
       </div>
       <p className="tenue peq">{t.red}</p>
+      <div className="fila"><button type="button" className="btn" onClick={() => setLicencias(true)}>{tx.licencias.abrir}</button></div>
       <label className="casilla">
         <input id="acepto" type="checkbox" checked={config.consentimientoAceptado}
           onChange={(e) => actualizar({ consentimientoAceptado: e.target.checked })} />
@@ -337,7 +341,7 @@ export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpe
   // Reparar y el cambio de perfil usan el mismo motor (en Rust, `Ocupado`): mientras uno trabaja o espera la red, el otro no se toca.
   const [reparando, setReparando] = useState(false)
   // Con el motor ocupado (cambio de perfil, reparación o mover la carpeta) no se sale ni se cambia el uso del procesador.
-  const ocupado = cambio.cambiando || reparando || carpeta.moviendo
+  const ocupado = cambio.cambiando || cambio.borrando || reparando || carpeta.moviendo
   useEffect(() => { alCambiar?.(cambio.cambiando) }, [alCambiar, cambio.cambiando])
   useEffect(() => () => alCambiar?.(false), [alCambiar])
   // Un perfil guardado que ya no está en la evaluación cuenta como el recomendado.
@@ -345,11 +349,16 @@ export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpe
   // Un id que no está en la evaluación (un perfil que ya no existe) no deja nada preseleccionado.
   const nuevo = evaluacion.perfiles.find((x) => x.id === elegido)
   const extra = nuevo ? Math.max(0, nuevo.descargaGb - actual.descargaGb) : 0
+  // Licencias se ve con Ajustes montado y oculto: desmontarlo perdería el estado de Reparar, el informe y las tarjetas.
+  const [licencias, setLicencias] = useState(false)
   return (
-    <div className="ventana">
+    <>
+    {licencias && <Licencias volver={() => setLicencias(false)} />}
+    <div className="ventana" hidden={licencias} style={licencias ? { display: 'none' } : undefined}>
       <Pagina sola titulo={t.titulo} lead={t.actual(actual.nombre, fmt(actual.memoriaGb), fmt(actual.descargaGb))}
         barra={<><button type="button" className="btn" disabled={ocupado} onClick={volver}>{t.volver}</button>
-          <button type="button" className="btn" disabled={ocupado} onClick={reanalizar}>{t.reanalizar}</button><span className="hueco" />
+          <button type="button" className="btn" disabled={ocupado} onClick={reanalizar}>{t.reanalizar}</button>
+          <button type="button" className="btn" disabled={ocupado} onClick={() => setLicencias(true)}>{tx.licencias.abrirAjustes}</button><span className="hueco" />
           {cambio.cambiando && <button type="button" className="btn" onClick={cambio.pausar}>{t.pausar}</button>}
           {cambio.segundosEspera !== null && <button type="button" className="btn" onClick={cambio.reintentarAhora}>{tx.descarga.reintentarAhora}</button>}
           <button type="button" className="btn pri" disabled={cambio.cambiando || reparando || !nuevo || nuevo.id === actual.id || bloqueado(evaluacion, nuevo, confirmado)} onClick={() => nuevo && void cambio.cambiar(nuevo.id)}>
@@ -376,5 +385,6 @@ export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpe
         {nuevo && nuevo.descargaGb < actual.descargaGb && <p className="peq tenue">{t.liberar(nuevo.nombre, fmt(actual.descargaGb - nuevo.descargaGb))}</p>}
       </Pagina>
     </div>
+    </>
   )
 }

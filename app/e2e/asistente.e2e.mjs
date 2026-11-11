@@ -103,6 +103,18 @@ async function recorrido() {
   const aceptar = await buscar(boton('Aceptar y continuar'))
   comprobar(await wd('GET', s(`/element/${aceptar}/property/disabled`)), 'no se puede continuar sin marcar la casilla')
   await captura('que-se-instala')
+  // Licencias y avisos: se abre desde aquí, muestra «Built with Llama» y el texto completo de la licencia de Llama
+  // (el `?raw` llegó al paquete), y «Volver» deja la pantalla como estaba.
+  await pulsar('Leer las licencias')
+  await buscar(titulo('Licencias y avisos'))
+  await buscar('//h2[normalize-space()="Built with Llama"]')
+  comprobar(true, 'la pantalla de licencias muestra «Built with Llama»')
+  await wd('POST', s(`/element/${await buscar('//summary[contains(normalize-space(), "Llama 3.1 Community License")]')}/click`), {})
+  const textoLlama = await texto('//pre[contains(normalize-space(), "LLAMA 3.1 COMMUNITY LICENSE")]')
+  comprobar(textoLlama.includes('LLAMA 3.1 COMMUNITY LICENSE AGREEMENT'), 'el texto completo de la licencia de Llama está en el paquete')
+  await captura('licencias')
+  await pulsar('Volver')
+  await buscar(titulo('Qué se instala'))
   await wd('POST', s(`/element/${await buscar('//input[@id="acepto"]')}/click`), {})
   await pulsar('Aceptar y continuar')
 

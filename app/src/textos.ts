@@ -239,6 +239,37 @@ export const motorDetenido = {
   sinMemoria: 'Parece que se quedó sin memoria.',
 }
 
+export const licencias = {
+  titulo: 'Licencias y avisos',
+  lead: 'Lo que Tarkor descarga y usa, con su licencia. Los textos completos van dentro de la app: se leen sin conexión.',
+  abrir: 'Leer las licencias',
+  abrirAjustes: 'Licencias',
+  volver: 'Volver',
+  builtWithLlama: 'Built with Llama',
+  /** `perfiles`: nombres visibles de los perfiles del catálogo cargado que usan un modelo con licencia Llama. */
+  builtWithLlamaLead: (perfiles: string[]) =>
+    perfiles.length === 0 ? 'Algunos modelos de Tarkor son Llama 3.1, de Meta.'
+      : perfiles.length === 1 ? `El perfil ${perfiles[0]} usa Llama 3.1, de Meta.`
+        : `Los perfiles ${perfiles.slice(0, -1).join(', ')} y ${perfiles[perfiles.length - 1]} usan Llama 3.1, de Meta.`,
+  motor: 'Motor de IA',
+  motorNombre: 'Ollama',
+  modelos: 'Modelos de lenguaje',
+  /** Nombre visible de cada licencia del catálogo (`licencia` de `catalogo.json`). */
+  nombres: {
+    'Llama-3.1-Community': 'Llama 3.1 Community License',
+    'Apache-2.0': 'Apache License 2.0',
+    MIT: 'Licencia MIT',
+  } as Record<string, string>,
+  avisoLlama: 'Llama 3.1 is licensed under the Llama 3.1 Community License, Copyright © Meta Platforms, Inc. All Rights Reserved.',
+  politica: 'Política de uso aceptable de Llama 3.1:',
+  politicaUrl: 'https://llama.meta.com/llama3_1/use-policy',
+  copiarEnlace: 'Copiar enlace',
+  copiado: 'Copiado',
+  errorCopiar: 'No se pudo copiar. Selecciona el enlace y cópialo a mano.',
+  textoCompleto: (licencia: string) => `Texto completo de la ${licencia}`,
+  fuentes: 'Los modelos y el motor se descargan de sus fuentes oficiales; sus licencias pueden cambiar entre versiones.',
+}
+
 export const errores = {
   guardar: 'No se pudo guardar la configuración en la carpeta de datos. Comprueba que hay espacio libre.',
 }

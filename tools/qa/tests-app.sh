@@ -2,6 +2,8 @@
 # Los tests de lo que cambia en `app/` (QA-88 de Tarkor), para `relatedTests.fast` de `.claude/gw.json` (FLU-2):
 #   - `app/src` (asistente React): `vitest related`, los tests que importan, directa o indirectamente, lo cambiado.
 #   - `app/nucleo`, `app/catalogo/` (lo valida el núcleo) y `app/Cargo.toml|lock`: `cargo test -p tarkor-nucleo`.
+#   - `docs/04`, `07`, `11` y `12`: también, porque el núcleo comprueba que su rango de descarga y su contrato
+#     `TARKOR_*` siguen al catálogo y al código (retro de `INS-15`).
 # El resto de archivos no corre nada. Va por `en-app.sh`, que vale también en el worktree del pre-push.
 # Uso: bash tools/qa/tests-app.sh <archivo>...   (rutas relativas a la raíz, como las pasa el pre-push)
 set -uo pipefail
@@ -11,7 +13,7 @@ nucleo=0
 for f in "$@"; do
   case "$f" in
     app/src/*.ts|app/src/*.tsx) [ -f "$f" ] && app+=("${f#app/}") ;;
-    app/nucleo/*|app/catalogo/*|app/Cargo.toml|app/Cargo.lock) nucleo=1 ;;
+    app/nucleo/*|app/catalogo/*|app/Cargo.toml|app/Cargo.lock|docs/04-*|docs/07-*|docs/11-*|docs/12-*) nucleo=1 ;;
   esac
 done
 if [ ${#app[@]} -gt 0 ]; then

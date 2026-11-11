@@ -85,7 +85,8 @@ pub fn calcular(catalogo: &Catalogo, perfil: &Perfil, equipo: Option<&Equipo>, u
         ("TARKOR_NUM_THREAD", hilos.to_string()),
         ("TARKOR_NUM_BATCH", if margen_justo { "256" } else { "512" }.into()),
         ("TARKOR_NUM_CTX_NARRADOR", catalogo.reglas.contexto_narrador.to_string()),
-        ("TARKOR_MODELOS_SIN_PENSAR", catalogo.modelos_que_piensan(perfil).join(",")),
+        // El instalador solo descarga modelos base (nunca `tarkor-narrador*`): el backend va siempre en modo base.
+        ("TARKOR_NARRADOR_BASE", "1".into()),
     ];
 
     let a_string = |v: Vec<(&str, String)>| v.into_iter().map(|(k, x)| (k.to_string(), x)).collect();
@@ -149,9 +150,29 @@ mod tests {
     }
 
     #[test]
-    fn qwen35_sin_pensar() {
+    fn narrador_en_modo_base() {
         let c = Catalogo::incrustado();
         let a = calcular(&c, c.perfil("maximo").unwrap(), None, UsoCpu::Moderado);
-        assert_eq!(valor(&a.backend, "TARKOR_MODELOS_SIN_PENSAR"), Some("qwen3.5:4b"));
+        assert_eq!(valor(&a.backend, "TARKOR_NARRADOR_BASE"), Some("1"));
+        assert_eq!(valor(&a.backend, "TARKOR_MODELOS_SIN_PENSAR"), None);
+    }
+
+    /// El contrato con el backend del juego está en la tabla de `docs/12`: las `TARKOR_*` que manda el núcleo
+    /// tienen que ser exactamente las de esa tabla (retro de `INS-15`: se mandaba una variable ya retirada).
+    #[test]
+    fn variables_tarkor_iguales_que_el_contrato_de_docs_12() {
+        let doc = include_str!("../../../docs/12-catalogo-y-rendimiento.md");
+        let mut en_docs: Vec<&str> =
+            doc.lines().filter_map(|l| l.strip_prefix("| `TARKOR_")).filter_map(|l| l.split('`').next()).collect();
+        let c = Catalogo::incrustado();
+        let a = calcular(&c, c.perfil("equilibrado").unwrap(), None, UsoCpu::Moderado);
+        let mut en_codigo: Vec<&str> = a.backend.iter().filter_map(|(k, _)| k.strip_prefix("TARKOR_")).collect();
+        en_docs.sort_unstable();
+        en_codigo.sort_unstable();
+        assert!(!en_docs.is_empty(), "no hay filas `TARKOR_*` en la tabla del contrato de docs/12");
+        assert_eq!(
+            en_codigo, en_docs,
+            "las variables TARKOR_* del backend (izquierda) no coinciden con la tabla del contrato de docs/12 (derecha)"
+        );
     }
 }

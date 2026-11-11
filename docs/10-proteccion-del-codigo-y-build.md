@@ -60,7 +60,8 @@ depender de ellas:
 - `server.ts` usa `await` de primer nivel, que no existe en CommonJS: la herramienta envuelve el
   arranque en una función asíncrona. Mejor: que el juego exporte una función `main()`.
 - `import.meta.dirname` (3 sitios) se sustituye por una ruta relativa a
-  `TARKOR_BACKEND_RAIZ`. Mejor: rutas de imágenes y datos por variable de entorno.
+  `TARKOR_BACKEND_RAIZ`. Mejor: rutas de imágenes y datos por variable de entorno (`TARKOR_IMAGENES_DIR`,
+  `INS-36`) y la versión fijada en el build (`lib/version.ts` sube desde `import.meta.url` hasta `package.json`).
 - El backend escucha en `0.0.0.0`: en el instalador tiene que ser `127.0.0.1` (`INS-36`).
 
 ## Backend a bytecode: dos caminos

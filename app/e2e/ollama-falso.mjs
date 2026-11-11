@@ -24,7 +24,7 @@ const esperar = (ms) => new Promise((ok) => setTimeout(ok, ms))
 const pasoMs = Number(process.env.FALSO_PASO_MS ?? 80)
 let cortesPull = Number(process.env.FALSO_CORTES_PULL ?? 0)
 // Tamaños en disco (bytes) parecidos a los reales; el resto, 500 MB.
-const TAMANOS = { 'qwen2.5:7b': 4.7e9, 'qwen2.5:1.5b-instruct': 1.0e9, 'qwen3.5:2b': 2.7e9, 'nomic-embed-text:latest': 2.74e8 }
+const TAMANOS = { 'llama3.1:8b': 4.9e9, 'qwen2.5:7b': 4.7e9, 'qwen2.5:1.5b-instruct': 1.0e9, 'qwen3.5:2b': 2.7e9, 'nomic-embed-text:latest': 2.74e8 }
 const tamano = (m) => TAMANOS[m] ?? 5e8
 
 // Estado: modelos descargados (en el motor propio, en OLLAMA_MODELS/falso.json) y el que está cargado.

@@ -14,7 +14,7 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #13 (2026-11-11, `db4e541`): `FLU-8` (flujo Galivelop-workflow v0.5.1), con la confirmación de la usuaria y el CI de GitHub en verde. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-11: `FLU-8` fusionado en `main` (PR #13). Sin tarea en curso. Siguiente: `INS-35` e `INS-36` no tienen encargo en el juego; hay que lanzarlo (rama o issue de ese repo, apuntado en el plan) antes de llevar las variables a `04`, `10` y `12`. Los 14 hallazgos del flujo (punto 16), a Galivelop-workflow con `gw-harvest`. Presupuesto de compactaciones: 1. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-11: `INS-15`, fases 1, 2 y 3 hechas; PR [#15](https://github.com/Zeldris/Instalador-WMF-Tarkor/pull/15) abierto, CI en verde en `fcf4600`. Siguiente: fusionar el PR #15 cuando la usuaria lo confirme; luego bitácora y plan en `main` y `/clear`. Presupuesto de compactaciones: 1. |
 | **Tests** | 2026-10-26: núcleo `cargo test -p tarkor-nucleo` 116, `cargo fmt --all --check` en verde, clippy 0 avisos, `tsc -b` 0, `cargo check` del núcleo y la app para Windows (mingw) en verde. Asistente `vitest` 27 y E2E con el Ollama falso: último verde el 2026-10-25. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -111,6 +111,10 @@ cada commit.**
     `git add -A`, y no usa `cfg`. `pre-commit`: `md_prose_dropped` lanza `sed` y `grep` por línea, y `PROSE_ASSIGN`
     deja pasar un secreto de una palabra en mayúscula entre comillas en un `.md`.
 17. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
+18. Leves de la fase 1 antes de `main` (`INS-15`, `INS-7`, 2026-11-11; no vuelven a revisarse en su PR): no hay
+    migración de `qwen2.5:7b` a `llama3.1:8b` para quien ya completó el asistente (hoy no hay versión publicada;
+    hará falta antes de cambiar un modelo tras `INS-46`); «Copiado» de la pantalla de licencias no se borra nunca;
+    el motor sale solo como «Ollama · MIT», sin los avisos de llama.cpp/ggml ni de los runtimes de GPU.
 
 ## Decisiones de la usuaria que bloquean algo
 
@@ -145,5 +149,6 @@ Dos líneas cada una como mucho; el detalle está en el commit y la más antigua
 - ~~`INS-32` · Fuentes Cinzel e Inter en local~~ (2026-10-26): ya hecho en `main` del juego por su `BAS-1`
   (`4a150259`, `frontend/src/assets/fonts/` con licencias OFL); sin cambios.
 
-1. 2026-11-11 — 2026-11-11: `FLU-8` (flujo v0.5.1) fusionado en `main` por el PR #13, con la confirmación de la usuaria y el CI en verde; retro con P1 a P3 aplicadas; los 14 hallazgos del flujo, en el punto 16.
-2. 2026-11-11 — 2026-11-05: PR #12 fusionado (INS-12, licencia MIT del repo; falta la del juego). La CI de GitHub vuelve a arrancar: ya no hace falta ci-local. INS-37: contrato fijado en 04 (window.__TARKOR__.abrirAjustes()).
+1. 2026-11-11 — Encargo de `INS-35` e `INS-36` lanzado en el juego (issue #93): `TARKOR_NARRADOR_BASE`, `TARKOR_NUM_THREAD`/`NUM_BATCH`/`NUM_CTX_NARRADOR`, escucha en 127.0.0.1, CORS de Tauri, `TARKOR_IMAGENES_DIR` y versión en build; `TARKOR_MODELOS_SIN_PENSAR` fuera porque el juego ya manda `think: false`.
+2. 2026-11-11 — 2026-11-11: `FLU-8` (flujo v0.5.1) fusionado en `main` por el PR #13, con la confirmación de la usuaria y el CI en verde; retro con P1 a P3 aplicadas; los 14 hallazgos del flujo, en el punto 16.
+3. 2026-11-11 — 2026-11-05: PR #12 fusionado (INS-12, licencia MIT del repo; falta la del juego). La CI de GitHub vuelve a arrancar: ya no hace falta ci-local. INS-37: contrato fijado en 04 (window.__TARKOR__.abrirAjustes()).

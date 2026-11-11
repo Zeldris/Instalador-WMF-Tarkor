@@ -3,7 +3,7 @@
 
 import { Channel, invoke } from '@tauri-apps/api/core'
 import { aErrorIa } from './tipos'
-import type { Comprobacion, Config, Equipo, Evaluacion, InfoMotor, MotorDetenido, ProgresoModelo, ProgresoMotor, Reparacion, Rutas, Sobrante, UsoIa } from './tipos'
+import type { Catalogo, Comprobacion, Config, Equipo, Evaluacion, InfoMotor, MotorDetenido, ProgresoModelo, ProgresoMotor, Reparacion, Rutas, Sobrante, UsoIa } from './tipos'
 import { listen } from '@tauri-apps/api/event'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { open } from '@tauri-apps/plugin-dialog'
@@ -19,6 +19,8 @@ export interface Api {
   guardarConfig(config: Config): Promise<void>
   analizarEquipo(): Promise<Equipo>
   evaluarPerfiles(equipo: Equipo | null): Promise<Evaluacion>
+  /** El catálogo activo del núcleo (el externo válido o el incrustado). */
+  catalogo(): Promise<Catalogo>
   estadoMotor(): Promise<InfoMotor>
   /** Falla con un `ErrorIa`: `red` si se perdió internet (la Descarga espera y reintenta sola). */
   instalarMotor(progreso: (p: ProgresoMotor) => void): Promise<void>
@@ -77,6 +79,7 @@ const tauri: Api = {
   guardarConfig: (config) => invoke('guardar_config', { config }),
   analizarEquipo: () => invoke('analizar_equipo'),
   evaluarPerfiles: (equipo) => invoke('evaluar_perfiles', { equipo }),
+  catalogo: () => invoke('catalogo_activo'),
   estadoMotor: () => invoke('estado_motor'),
   instalarMotor: (progreso) => invoke<void>('instalar_motor', { canal: canal(progreso) }).catch((e) => { throw aErrorIa(e) }),
   iniciarMotor: () => invoke('iniciar_motor'),

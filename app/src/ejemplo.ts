@@ -1,7 +1,7 @@
 // Datos de ejemplo para abrir el asistente en un navegador normal y para los tests. Equipo tipo
 // Steam Deck. Usa el mismo catálogo que la app (catalogo/catalogo.json) y reproduce el cálculo de
 // nucleo/src/perfiles.rs solo para este modo sin Tauri; la fuente de verdad es la de Rust, cubierta
-// por sus tests (p. ej. `deck_16gb_maximo_justo_recomienda_equilibrado`).
+// por sus tests (p. ej. `deck_16gb_maximo_no_cabe_recomienda_equilibrado`).
 
 import type { Api } from './api'
 import { catalogo, descargaGb as descargaDe } from './catalogo'
@@ -161,6 +161,7 @@ export const ejemplo: Api = {
   guardarConfig: async (c) => { guardada = structuredClone(c) },
   analizarEquipo: async () => equipoEjemplo,
   evaluarPerfiles: async (equipo) => evaluarEjemplo(equipo),
+  catalogo: async () => structuredClone(catalogo),
   estadoMotor: async () => ({
     version: catalogo.motor.version,
     instalado: motorInstalado,

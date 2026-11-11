@@ -15,6 +15,9 @@ pub const VERSION_CATALOGO: u32 = 1;
 const INCRUSTADO: &str = include_str!("../../catalogo/catalogo.json");
 const NOMBRE_EXTERNO: &str = "catalogo.json";
 
+/// Licencias ya revisadas (docs/08): un modelo con otra no entra en el catálogo sin revisarla antes.
+pub const LICENCIAS_REVISADAS: &[&str] = &["Apache-2.0", "Llama-3.1-Community"];
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Reglas {
@@ -161,16 +164,6 @@ impl Catalogo {
         perfil.modelos().iter().filter_map(|m| self.modelos.get(*m)).map(|m| m.descarga_gb).sum()
     }
 
-    /// Modelos que necesitan `think: false`.
-    pub fn modelos_que_piensan(&self, perfil: &Perfil) -> Vec<String> {
-        perfil
-            .modelos()
-            .into_iter()
-            .filter(|m| self.modelos.get(*m).is_some_and(|x| x.piensa))
-            .map(String::from)
-            .collect()
-    }
-
     pub fn validar(&self) -> Result<(), String> {
         if self.version != VERSION_CATALOGO {
             return Err(format!("versión {} no soportada (esta app entiende la {VERSION_CATALOGO})", self.version));
@@ -193,6 +186,11 @@ impl Catalogo {
                 if !self.modelos.contains_key(m) {
                     return Err(format!("{}: el modelo {m} no está en la lista de modelos", p.id));
                 }
+            }
+        }
+        for (id, m) in &self.modelos {
+            if !LICENCIAS_REVISADAS.contains(&m.licencia.as_str()) {
+                return Err(format!("modelo {id}: licencia {} sin revisar (ver docs/08)", m.licencia));
             }
         }
         for (so, p) in &self.motor.paquetes {
@@ -226,10 +224,20 @@ mod tests {
     }
 
     #[test]
-    fn todos_los_modelos_con_licencia_apache() {
-        // docs/08: un modelo con licencia restrictiva no entra en el catálogo sin revisarlo antes.
+    fn todos_los_modelos_con_licencia_revisada() {
+        // docs/08: un modelo con otra licencia no entra en el catálogo sin revisarlo antes; las revisadas
+        // son Apache 2.0 y la Llama 3.1 Community License (pide «Built with Llama» y su aviso, ver 08).
         let c = Catalogo::incrustado();
-        assert!(c.modelos.values().all(|m| m.licencia == "Apache-2.0"));
+        assert!(c.modelos.values().all(|m| LICENCIAS_REVISADAS.contains(&m.licencia.as_str())));
+    }
+
+    #[test]
+    fn licencia_no_revisada_se_rechaza() {
+        let mut c = Catalogo::incrustado();
+        let id = c.modelos.keys().next().unwrap().clone();
+        c.modelos.get_mut(&id).unwrap().licencia = "GPL-9000".into();
+        let e = c.validar().unwrap_err();
+        assert!(e.contains("GPL-9000") && e.contains(&id), "{e}");
     }
 
     #[test]
@@ -246,14 +254,7 @@ mod tests {
         assert_eq!(minimo.modelos(), ["qwen2.5:1.5b-instruct", "nomic-embed-text"]);
         assert!((c.descarga_gb(minimo) - 1.3).abs() < 1e-9);
         let maximo = c.perfil("maximo").unwrap();
-        assert!((c.descarga_gb(maximo) - (4.7 + 1.0 + 3.4 + 0.3)).abs() < 1e-9);
-    }
-
-    #[test]
-    fn modelos_que_piensan() {
-        let c = Catalogo::incrustado();
-        assert_eq!(c.modelos_que_piensan(c.perfil("equilibrado").unwrap()), Vec::<String>::new());
-        assert_eq!(c.modelos_que_piensan(c.perfil("ligero").unwrap()), ["qwen3.5:2b"]);
+        assert!((c.descarga_gb(maximo) - (4.9 + 1.0 + 3.4 + 0.3)).abs() < 1e-9);
     }
 
     #[test]
@@ -294,5 +295,33 @@ mod tests {
         let mut c = Catalogo::incrustado();
         c.version = 2;
         assert!(Catalogo::desde_json(&serde_json::to_string(&c).unwrap()).is_err());
+    }
+
+    /// Los docs copian a mano el rango de descarga que sale del catálogo (retro de `INS-15`: se quedó en 9,4 GB).
+    #[test]
+    fn rango_de_descarga_de_los_docs_igual_que_el_catalogo() {
+        let c = Catalogo::incrustado();
+        let tamanos: Vec<f64> = c.perfiles.iter().filter(|p| !p.experimental).map(|p| c.descarga_gb(p)).collect();
+        let gb = |x: f64| format!("{x:.1}").replace('.', ",");
+        let min = tamanos.iter().copied().fold(f64::INFINITY, f64::min);
+        let max = tamanos.iter().copied().fold(0.0, f64::max);
+        let esperado = format!("{}-{} GB", gb(min), gb(max));
+        let docs = [
+            ("docs/04", include_str!("../../../docs/04-empaquetado-tauri.md")),
+            ("docs/07", include_str!("../../../docs/07-flujo-de-instalacion.md")),
+            ("docs/11", include_str!("../../../docs/11-diseno-del-frontal.md")),
+        ];
+        for (nombre, texto) in docs {
+            // Rangos «X,Y-Z,W GB»: cada uno tiene que ser el del catálogo.
+            let citados: Vec<&str> = texto
+                .match_indices(" GB")
+                .filter_map(|(i, _)| texto[..i].rsplit(|ch: char| ch.is_whitespace() || ch == '(').next())
+                .filter(|r| r.contains('-') && r.chars().all(|ch| ch.is_ascii_digit() || ch == ',' || ch == '-'))
+                .collect();
+            assert!(!citados.is_empty(), "{nombre} no cita ningún rango «X,Y-Z,W GB»");
+            for r in citados {
+                assert_eq!(format!("{r} GB"), esperado, "rango de descarga de {nombre} distinto del catálogo");
+            }
+        }
     }
 }

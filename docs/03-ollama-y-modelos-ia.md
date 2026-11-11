@@ -12,7 +12,7 @@ OLLAMA_KV_CACHE_TYPE=q8_0 ollama serve`):
 
 | Uso | Modelo | Cómo se obtiene hoy | Tamaño aprox. |
 |---|---|---|---|
-| Narrador | `tarkor-narrador` (`FROM qwen2.5:7b`) | `ollama pull qwen2.5:7b` + `ollama create tarkor-narrador -f Modelfile` | 4,7 GB |
+| Narrador | `tarkor-narrador-llama31` (`FROM llama3.1:8b`) | `ollama pull llama3.1:8b` + `ollama create tarkor-narrador-llama31 -f Modelfile` | 4,9 GB |
 | Cronista (clasificación de acciones) | `qwen2.5:1.5b-instruct` | `ollama pull` | 1 GB |
 | Sugerencias ("Sugerir") | `qwen3.5:4b` | `ollama pull` | 3,4 GB |
 | Embeddings (RAG de lore y hechos de partida) | `nomic-embed-text` | `ollama pull` | 0,3 GB |
@@ -57,10 +57,10 @@ La app de Tauri arranca y para su **propia instancia de Ollama**, igual que hace
 
 ### Sin `ollama create`: el narrador es el modelo base + prompt por petición
 
-Hoy `tarkor-narrador` es `qwen2.5:7b` + un bloque `SYSTEM` + `temperature 0.7` + `num_ctx 8192`.
+Hoy `tarkor-narrador-llama31` es `llama3.1:8b` + un bloque `SYSTEM` + `temperature 0.7` + `num_ctx 8192`.
 La API de Ollama acepta `system` y `options` en cada petición, así que:
 
-- Se descarga solo `qwen2.5:7b` (o el narrador del perfil).
+- Se descarga solo `llama3.1:8b` (o el narrador del perfil).
 - El backend manda el texto del `SYSTEM` y los parámetros en cada petición del narrador.
 - El texto del `SYSTEM` se incrusta en el backend en tiempo de build (hoy
   `modelfileSystemPrompt.ts` ya lo extrae del `Modelfile`, pero leyendo el fichero en tiempo de
@@ -70,7 +70,7 @@ Ventajas: desaparece el paso de construcción, cambiar el prompt en una actualiz
 cambiar el backend, y el prompt no queda en un `Modelfile` legible en disco.
 
 Cambio necesario en el juego: que el narrador acepte un modo "modelo base + system por petición"
-controlado por variable de entorno, sin romper el modo actual con `tarkor-narrador` en desarrollo.
+controlado por variable de entorno, sin romper el modo actual con `tarkor-narrador-llama31` en desarrollo.
 
 ## Alternativas descartadas
 
@@ -87,8 +87,8 @@ controlado por variable de entorno, sin romper el modo actual con `tarkor-narrad
 ## Qué falta validar (fase 0)
 
 - Arrancar el Ollama portable como sidecar en Windows y en la Steam Deck, sin instalar nada.
-- Medir la velocidad real de `qwen2.5:7b` en la Deck (probablemente en CPU: el soporte de Ollama
+- Medir la velocidad real de `llama3.1:8b` en la Deck (probablemente en CPU: el soporte de Ollama
   para la gráfica de la Deck es limitado).
 - Comprobar que el narrador con `system` + `options` por petición da el mismo resultado que
-  `tarkor-narrador`.
+  `tarkor-narrador-llama31`.
 - Tamaños reales de cada variante de descarga de Ollama y de cada modelo.
