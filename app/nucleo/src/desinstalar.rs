@@ -68,49 +68,67 @@ fn ia_borrable(rutas: &Rutas, ia: &Path) -> bool {
     ia == rutas.ia || ia.file_name().is_some_and(|n| n == NOMBRE_IA_ELEGIDA)
 }
 
-/// Borra todo lo de `dir` salvo `salvar` y sus ancestros; `dir` solo si queda vacía.
+/// Guarda el primer error y sigue.
+fn anotar(primero: &mut Option<io::Error>, r: io::Result<()>) {
+    if let Err(e) = r {
+        primero.get_or_insert(e);
+    }
+}
+
+/// Borra todo lo de `dir` salvo `salvar` y sus ancestros; `dir` solo si queda vacía. Un fallo en una
+/// entrada no impide intentar las demás: se devuelve el primero.
 fn borrar_salvo(dir: &Path, salvar: &Path) -> io::Result<()> {
-    for e in fs::read_dir(dir)? {
-        let p = e?.path();
-        if p == salvar {
-            continue;
-        }
-        if salvar.starts_with(&p) {
-            borrar_salvo(&p, salvar)?;
-        } else if fs::symlink_metadata(&p)?.is_dir() {
-            fs::remove_dir_all(&p)?;
-        } else {
-            fs::remove_file(&p)?;
+    let mut error = None;
+    match fs::read_dir(dir) {
+        Err(e) => return Err(e),
+        Ok(entradas) => {
+            for e in entradas {
+                let p = match e {
+                    Ok(e) => e.path(),
+                    Err(e) => {
+                        anotar(&mut error, Err(e));
+                        continue;
+                    }
+                };
+                if p == salvar {
+                    continue;
+                }
+                let r = if salvar.starts_with(&p) { borrar_salvo(&p, salvar) } else { quitar(&p) };
+                anotar(&mut error, r);
+            }
         }
     }
     let _ = fs::remove_dir(dir); // solo si quedó vacía
-    Ok(())
+    error.map_or(Ok(()), Err)
 }
 
 /// Borra los registros siempre; con `ia`, la carpeta de la IA en uso (solo si es la de por defecto
 /// o se llama `Tarkor IA`); con `partidas`, la carpeta de datos salvo la IA si vive dentro. Quita
-/// después los padres que queden vacíos. Una IA con otro nombre no se toca y se devuelve como
-/// error, pero lo demás se hace igualmente.
+/// después los padres que queden vacíos. Cada paso se intenta siempre, aunque otro haya fallado:
+/// se devuelve el primer error (la IA con otro nombre no se toca y cuenta como error).
 pub fn borrar(rutas: &Rutas, config: &Config, partidas: bool, ia: bool) -> io::Result<()> {
     let ia_en_uso = config.ia_efectiva(rutas);
     let mut error = None;
 
-    quitar(&rutas.registros)?;
+    anotar(&mut error, quitar(&rutas.registros));
     if ia {
         if ia_borrable(rutas, &ia_en_uso) {
-            quitar(&ia_en_uso)?;
+            anotar(&mut error, quitar(&ia_en_uso));
         } else {
-            error = Some(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!(
-                    "no se borra la carpeta de la IA «{}»: no es la de por defecto ni se llama «{NOMBRE_IA_ELEGIDA}»",
-                    ia_en_uso.display()
-                ),
-            ));
+            anotar(
+                &mut error,
+                Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "no se borra la carpeta de la IA «{}»: no es la de por defecto ni se llama «{NOMBRE_IA_ELEGIDA}»",
+                        ia_en_uso.display()
+                    ),
+                )),
+            );
         }
     }
     if partidas && rutas.datos.is_dir() {
-        borrar_salvo(&rutas.datos, &ia_en_uso)?;
+        anotar(&mut error, borrar_salvo(&rutas.datos, &ia_en_uso));
     }
     for padre in [rutas.registros.parent(), rutas.ia.parent()].into_iter().flatten() {
         if !padre.as_os_str().is_empty() {
@@ -294,6 +312,38 @@ mod tests {
         let c = Config { carpeta_ia: Some(rara.clone()), ..Config::default() };
         borrar(&r, &c, true, false).unwrap();
         assert!(rara.join("importante.txt").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn un_fallo_en_los_registros_no_impide_borrar_la_ia_ni_las_partidas() {
+        let d = tempfile::tempdir().unwrap();
+        let mut r = rutas(d.path());
+        montar(&r);
+        // Fallo provocable también como root: `registros` cuelga de un archivo (ENOTDIR).
+        archivo(&d.path().join("bloqueo"), 1);
+        r.registros = d.path().join("bloqueo/registros");
+        let e = borrar(&r, &Config::default(), true, true).unwrap_err();
+        assert_ne!(e.kind(), io::ErrorKind::InvalidInput, "debe ser el error de los registros: {e}");
+        assert!(!r.ia.exists(), "la IA se borra aunque fallen los registros");
+        assert!(!r.datos.exists(), "las partidas se borran aunque fallen los registros");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn se_devuelve_el_primer_error_aunque_falle_tambien_la_ia() {
+        let d = tempfile::tempdir().unwrap();
+        let mut r = rutas(d.path());
+        montar(&r);
+        archivo(&d.path().join("bloqueo"), 1);
+        r.registros = d.path().join("bloqueo/registros");
+        let rara = d.path().join("Documentos");
+        archivo(&rara.join("x.txt"), 1);
+        let c = Config { carpeta_ia: Some(rara.clone()), ..Config::default() };
+        let e = borrar(&r, &c, true, true).unwrap_err();
+        assert_ne!(e.kind(), io::ErrorKind::InvalidInput, "el primero es el de los registros: {e}");
+        assert!(rara.join("x.txt").exists());
+        assert!(!r.datos.exists());
     }
 
     #[test]
