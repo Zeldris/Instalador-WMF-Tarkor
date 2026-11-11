@@ -231,7 +231,7 @@ export const borrarDatos = {
   borrando: 'Borrando…',
   cancelar: 'Cancelar',
   finalTitulo: 'Datos borrados',
-  finalTexto: 'Datos borrados. Ya puedes borrar el archivo .AppImage',
+  finalTexto: 'Datos borrados. Ya puedes borrar el archivo .AppImage o desinstalar el paquete .deb.',
   cerrar: 'Cerrar Tarkor',
 }
 

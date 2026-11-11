@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
+import { BorrarDatos } from './componentes'
 import { Ajustes } from './pantallas'
 import { appSeHaCerrado, borrados, configInicial, equipoEjemplo, evaluarEjemplo, fijarErrorBorrado, fijarPlataforma, reiniciarBorrado } from './ejemplo'
 
@@ -55,13 +56,22 @@ describe('Ajustes → Borrar datos del juego (INS-45)', () => {
     await abrirDialogo()
     fireEvent.click(screen.getByRole('checkbox', { name: 'Borrar también mis partidas guardadas' }))
     fireEvent.click(screen.getByRole('button', { name: 'Borrar' }))
-    expect(await screen.findByText('Datos borrados. Ya puedes borrar el archivo .AppImage')).toBeTruthy()
+    expect(await screen.findByText('Datos borrados. Ya puedes borrar el archivo .AppImage o desinstalar el paquete .deb.')).toBeTruthy()
     expect(borrados).toEqual([{ partidas: true, ia: false }])
     expect(screen.queryByRole('button', { name: 'Reparar' })).toBeNull()
     expect(appSeHaCerrado()).toBe(false)
     fireEvent.click(screen.getByRole('button', { name: 'Cerrar Tarkor' }))
     await new Promise((r) => setTimeout(r, 0))
     expect(appSeHaCerrado()).toBe(true)
+  })
+
+  it('con otra operación en curso, Borrar se desactiva aunque haya una casilla marcada', async () => {
+    const { rerender } = render(<BorrarDatos desactivado={false} alBorrar={() => {}} />)
+    fireEvent.click(await boton('Borrar datos del juego'))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Borrar también mis partidas guardadas' }))
+    expect(screen.getByRole('button', { name: 'Borrar' })).toHaveProperty('disabled', false)
+    rerender(<BorrarDatos desactivado alBorrar={() => {}} />)
+    expect(screen.getByRole('button', { name: 'Borrar' })).toHaveProperty('disabled', true)
   })
 
   it('si borrar falla, enseña el error y no la pantalla final', async () => {

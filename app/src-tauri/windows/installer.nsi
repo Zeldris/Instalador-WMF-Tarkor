@@ -833,6 +833,12 @@ Section Uninstall
     ${If} ${Errors}
     ${OrIf} $R1 <> 0
       DetailPrint "Aviso: no se pudo completar la limpieza de datos de Tarkor (código $R1)."
+      ; TARKOR: el fallo se dice: con ventana, un aviso con dónde queda lo que no se borró; en silencio, código 2
+      ${If} ${Silent}
+        SetErrorLevel 2
+      ${ElseIf} $PassiveMode <> 1
+        MessageBox MB_ICONEXCLAMATION|MB_OK "No se han podido borrar todos los datos de Tarkor. Cierra Tarkor y bórralos a mano si quieres: las partidas están en $APPDATA\Tarkor y el motor de IA y los registros en $LOCALAPPDATA\Tarkor (o en la carpeta que elegiste para la IA)."
+      ${EndIf}
     ${EndIf}
   ${EndIf}
 

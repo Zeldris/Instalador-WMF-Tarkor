@@ -55,7 +55,7 @@ jobs:
       - run: cargo test -p tarkor-nucleo
 
   # INS-44: el instalador de Windows (NSIS, con la plantilla propia app/src-tauri/windows/installer.nsi) se compila,
-  # se instala en silencio y se desinstala con cada combinación de casillas; el .exe queda como artefacto para
+  # se instala en silencio y se desinstala sin casillas, con las dos y con las dos al actualizar (`/UPDATE`); el .exe queda como artefacto para
   # probarlo a mano (INS-8).
   instalador-windows:
     runs-on: windows-latest

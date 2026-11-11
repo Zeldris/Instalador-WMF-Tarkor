@@ -302,7 +302,8 @@ export function DetallesTecnicos({ evaluacion }: { evaluacion: Evaluacion }) {
 
 /**
  * «Borrar datos del juego» (`INS-45`, solo Linux): botón y diálogo con las dos casillas sin marcar.
- * «Borrar» espera a que haya una marcada. `alBorrar` se llama cuando ya está todo borrado.
+ * «Borrar» espera a que haya una marcada y a que no haya otra operación en curso (`desactivado`). `alBorrar` se
+ * llama cuando ya está todo borrado.
  */
 export function BorrarDatos({ desactivado, alBorrar, alOcupar }: { desactivado: boolean; alBorrar: () => void; alOcupar?: (ocupado: boolean) => void }) {
   const t = tx.borrarDatos
@@ -346,7 +347,7 @@ export function BorrarDatos({ desactivado, alBorrar, alOcupar }: { desactivado: 
           <label className="casilla"><input type="checkbox" checked={ia} disabled={borrando} onChange={(e) => setIa(e.target.checked)} /><span>{t.ia(info?.tamano ?? '')}</span></label>
           {error && <div className="error" role="alert">{error}</div>}
           <div className="fila">
-            <button type="button" className="btn pri" disabled={borrando || (!partidas && !ia)} onClick={() => void borrar()}>{borrando ? t.borrando : t.borrar}</button>
+            <button type="button" className="btn pri" disabled={borrando || desactivado || (!partidas && !ia)} onClick={() => void borrar()}>{borrando ? t.borrando : t.borrar}</button>
             <button type="button" className="btn" disabled={borrando} onClick={() => setAbierto(false)}>{t.cancelar}</button>
           </div>
         </div>
