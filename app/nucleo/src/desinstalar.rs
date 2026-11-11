@@ -4,7 +4,12 @@
 //! y `--desinstalar`, ver [`analizar_args`]). Las reglas de seguridad: la carpeta de la IA solo se
 //! borra si es la de por defecto o se llama `Tarkor IA` (la que crea `cambiar_carpeta_ia`), para
 //! que una `config.json` rara nunca lleve a borrar `C:\` ni la carpeta personal.
+//!
+//! Con `partidas` se borra también `config.json`, el único sitio donde vive `carpeta_ia`: si la
+//! carpeta de la IA elegida sobrevive (no se pidió borrarla, o no era borrable), se deja un
+//! `config.json` que solo conserva esa ruta, para que la IA no quede huérfana.
 
+use crate::carpetas::normalizada;
 use crate::config::{Config, Rutas};
 use std::ffi::OsString;
 use std::fs;
@@ -65,7 +70,7 @@ pub fn escribir_ini(info: &Info, archivo: &Path) -> io::Result<()> {
 }
 
 fn ia_borrable(rutas: &Rutas, ia: &Path) -> bool {
-    ia == rutas.ia || ia.file_name().is_some_and(|n| n == NOMBRE_IA_ELEGIDA)
+    normalizada(ia) == normalizada(&rutas.ia) || ia.file_name().is_some_and(|n| n == NOMBRE_IA_ELEGIDA)
 }
 
 /// Guarda el primer error y sigue.
@@ -108,6 +113,8 @@ fn borrar_salvo(dir: &Path, salvar: &Path) -> io::Result<()> {
 /// se devuelve el primer error (la IA con otro nombre no se toca y cuenta como error).
 pub fn borrar(rutas: &Rutas, config: &Config, partidas: bool, ia: bool) -> io::Result<()> {
     let ia_en_uso = config.ia_efectiva(rutas);
+    // Antes de borrar: escrita con `..` o a través de un enlace, la ruta puede pasar por algo que se va a ir.
+    let ia_normalizada = normalizada(&ia_en_uso);
     let mut error = None;
 
     anotar(&mut error, quitar(&rutas.registros));
@@ -128,7 +135,11 @@ pub fn borrar(rutas: &Rutas, config: &Config, partidas: bool, ia: bool) -> io::R
         }
     }
     if partidas && rutas.datos.is_dir() {
-        anotar(&mut error, borrar_salvo(&rutas.datos, &ia_en_uso));
+        anotar(&mut error, borrar_salvo(&normalizada(&rutas.datos), &ia_normalizada));
+    }
+    if partidas && config.carpeta_ia.is_some() && ia_normalizada.exists() {
+        let conservar = Config { carpeta_ia: Some(ia_normalizada), ..Config::default() };
+        anotar(&mut error, conservar.guardar(&rutas.datos));
     }
     for padre in [rutas.registros.parent(), rutas.ia.parent()].into_iter().flatten() {
         if !padre.as_os_str().is_empty() {
@@ -136,6 +147,15 @@ pub fn borrar(rutas: &Rutas, config: &Config, partidas: bool, ia: bool) -> io::R
         }
     }
     error.map_or(Ok(()), Err)
+}
+
+/// El mensaje que ve la usuaria cuando el borrado falla (sin rutas internas, salvo la de la IA que ella eligió).
+pub fn mensaje_error(e: &io::Error) -> String {
+    if e.kind() == io::ErrorKind::InvalidInput {
+        format!("{e}. Si quieres liberar ese espacio, bórrala a mano desde el explorador de archivos.")
+    } else {
+        "No se pudo borrar todo. Cierra los programas que usen las carpetas de Tarkor y vuelve a intentarlo.".into()
+    }
 }
 
 fn quitar(ruta: &Path) -> io::Result<()> {
@@ -300,7 +320,8 @@ mod tests {
         assert!(e.to_string().contains("no es la de por defecto"), "{e}");
         assert!(rara.join("importante.txt").exists());
         assert!(!r.registros.exists());
-        assert!(!r.datos.exists(), "las partidas sí se borran");
+        assert!(!r.datos.join("partida.json").exists(), "las partidas sí se borran");
+        assert_eq!(Config::cargar(&r.datos).carpeta_ia, Some(rara), "la IA que sobrevive no queda huérfana");
     }
 
     #[test]
@@ -312,6 +333,88 @@ mod tests {
         let c = Config { carpeta_ia: Some(rara.clone()), ..Config::default() };
         borrar(&r, &c, true, false).unwrap();
         assert!(rara.join("importante.txt").exists());
+    }
+
+    #[test]
+    fn partidas_conserva_solo_la_carpeta_ia_elegida_que_sobrevive() {
+        let d = tempfile::tempdir().unwrap();
+        let r = rutas(d.path());
+        montar(&r);
+        let elegida = d.path().join("disco/Tarkor IA");
+        archivo(&elegida.join("modelo.bin"), 10);
+        let c = Config { carpeta_ia: Some(elegida.clone()), perfil: Some("x".into()), ..Config::default() };
+        c.guardar(&r.datos).unwrap();
+        borrar(&r, &c, true, false).unwrap();
+        assert!(!r.datos.join("partida.json").exists());
+        assert_eq!(Config::cargar(&r.datos), Config { carpeta_ia: Some(elegida.clone()), ..Config::default() });
+        assert!(elegida.join("modelo.bin").exists());
+    }
+
+    #[test]
+    fn partidas_con_ia_por_defecto_no_deja_config() {
+        let d = tempfile::tempdir().unwrap();
+        let r = rutas(d.path());
+        montar(&r);
+        Config::default().guardar(&r.datos).unwrap();
+        borrar(&r, &Config::default(), true, false).unwrap();
+        assert!(!r.datos.join("config.json").exists());
+        assert!(!r.datos.exists());
+    }
+
+    #[test]
+    fn partidas_con_ia_borrada_no_deja_config() {
+        let d = tempfile::tempdir().unwrap();
+        let r = rutas(d.path());
+        montar(&r);
+        let elegida = d.path().join("disco/Tarkor IA");
+        archivo(&elegida.join("modelo.bin"), 10);
+        let c = Config { carpeta_ia: Some(elegida), ..Config::default() };
+        borrar(&r, &c, true, true).unwrap();
+        assert!(!r.datos.exists());
+    }
+
+    #[test]
+    fn ia_dentro_de_datos_escrita_con_punto_punto_sobrevive_a_partidas() {
+        let d = tempfile::tempdir().unwrap();
+        let mut r = rutas(d.path());
+        r.ia = r.datos.join("ia");
+        montar(&r);
+        archivo(&r.datos.join("sub/otra.json"), 2);
+        let rara = r.datos.join("sub/../ia");
+        let c = Config { carpeta_ia: Some(rara), ..Config::default() };
+        borrar(&r, &c, true, false).unwrap();
+        assert!(r.ia.join("modelo.bin").exists(), "la IA sobrevive");
+        assert!(!r.datos.join("sub").exists());
+        // La ruta guardada ya no pasa por `sub`, que se ha borrado: la IA no queda huérfana.
+        let guardada = Config::cargar(&r.datos).carpeta_ia.expect("se conserva la carpeta de la IA");
+        assert!(guardada.join("modelo.bin").exists(), "la ruta guardada lleva a la IA: {guardada:?}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ia_dentro_de_datos_por_enlace_simbolico_sobrevive_a_partidas() {
+        let d = tempfile::tempdir().unwrap();
+        let r = rutas(d.path());
+        archivo(&r.datos.join("ia/modelo.bin"), 100);
+        archivo(&r.datos.join("partida.json"), 5);
+        let enlace = d.path().join("enlace");
+        std::os::unix::fs::symlink(&r.datos, &enlace).unwrap();
+        let c = Config { carpeta_ia: Some(enlace.join("ia")), ..Config::default() };
+        borrar(&r, &c, true, false).unwrap();
+        assert!(r.datos.join("ia/modelo.bin").exists(), "la IA sobrevive");
+        assert!(!r.datos.join("partida.json").exists());
+    }
+
+    #[test]
+    fn mensajes_de_error_para_la_usuaria() {
+        let rara = io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "no se borra la carpeta de la IA «/x/Docs»: no es la de por defecto",
+        );
+        let m = mensaje_error(&rara);
+        assert!(m.contains("«/x/Docs»") && m.contains("bórrala a mano"), "{m}");
+        let otro = mensaje_error(&io::Error::new(io::ErrorKind::PermissionDenied, "/secreto/ruta: denegado"));
+        assert!(otro.contains("Cierra los programas") && !otro.contains("secreto"), "{otro}");
     }
 
     #[cfg(unix)]
@@ -343,7 +446,7 @@ mod tests {
         let e = borrar(&r, &c, true, true).unwrap_err();
         assert_ne!(e.kind(), io::ErrorKind::InvalidInput, "el primero es el de los registros: {e}");
         assert!(rara.join("x.txt").exists());
-        assert!(!r.datos.exists());
+        assert!(!r.datos.join("partida.json").exists());
     }
 
     #[test]
