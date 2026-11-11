@@ -103,6 +103,9 @@ carpetas existentes, LM Studio importa modelos).
   borra (los registros siempre, igual que en Windows) y enseña "Datos borrados. Ya puedes borrar el archivo
   .AppImage o desinstalar el paquete .deb." con un botón "Cerrar Tarkor". Con las partidas borradas (también se va `config.json`), al volver a
   abrirlo empieza el asistente; con solo la IA, la configuración se queda, como al desinstalar en Windows sin las partidas.
+  Una excepción, igual en el desinstalador de Windows: si la usuaria eligió otra carpeta para la IA y esa carpeta
+  sigue ahí (no se marcó "IA", o no se pudo borrar), queda un `config.json` que solo guarda esa carpeta, para que
+  al reinstalar o al repetir el asistente se encuentre la IA ya descargada en vez de dejarla huérfana.
 
 ## Checklist de buenas prácticas
 

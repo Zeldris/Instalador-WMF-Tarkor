@@ -14,7 +14,7 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #15 (2026-11-11, `5631e77`): `INS-15` (pantalla «Licencias y avisos», narrador `llama3.1:8b`) con `INS-7`, `INS-35` e `INS-36`, con la confirmación de la usuaria y el CI de GitHub en verde. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-11: `INS-57` hecha y sus dudas resueltas. `INS-44` e `INS-45` hechas (pendiente de `INS-8`). Fase 1 antes de `main`: revisión hecha (19 hallazgos; leves en el paso 19); arreglados el aviso del desinstalador, el texto final, el botón «Borrar» y el README; faltan los de Rust (rama `agent/INS-45-borrado-arreglos`, commit `312502b`: revisión corta, fusión, frase de `docs/07` sobre `config.json`, E2E). Siguiente: fusionar esa rama, luego gw-opt-tokens + retro a la usuaria y reviewed.sh; PR solo si la usuaria lo confirma. Presupuesto de compactaciones: 8 (van 7). |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-11: `INS-57` hecha y sus dudas resueltas. `INS-44` e `INS-45` hechas (pendiente de `INS-8`). Fase 1 antes de `main` cerrada: revisión (19 hallazgos), arreglos de grave/medio subidos y fusionada la rama de Rust (`292d97d`); leves en el paso 19; una decisión de la usuaria apuntada abajo (`INS-45`, no bloquea). Siguiente: fase 2 (gw-opt-tokens + retro presentada a la usuaria) y fase 3 (reviewed.sh); PR solo si la usuaria lo confirma. Presupuesto de compactaciones: 8 (van 7). |
 | **Tests** | 2026-10-26: núcleo `cargo test -p tarkor-nucleo` 116, `cargo fmt --all --check` en verde, clippy 0 avisos, `tsc -b` 0, `cargo check` del núcleo y la app para Windows (mingw) en verde. Asistente `vitest` 27 y E2E con el Ollama falso: último verde el 2026-10-25. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -122,7 +122,8 @@ cada commit.**
     en Linux no se borran las carpetas de WebKit de `io.github.zeldris.tarkor`; una instalación previa en
     `%LOCALAPPDATA%\Tarkor` se queda ahí al actualizar; `ia_borrable` se fía del nombre `Tarkor IA`; los textos de
     las casillas de `installer.nsi` repiten a mano los de `textos.ts`, sin test que los ate; `texto_gb` usa 1024³ y
-    `modelos_sobrantes` 1e9; brazo `Orden::Normal` inalcanzable y `use` interno repetido en `lib.rs`. Pendiente de
+    `modelos_sobrantes` 1e9; brazo `Orden::Normal` inalcanzable y `use` interno repetido en `lib.rs`. `desinstalar::mensaje_error`
+    toma cualquier `InvalidInput` por «IA no borrable» y, en el resto, la causa real no llega a los registros. Pendiente de
     `INS-8` (Windows real): el aviso del desinstalador cuando el borrado falla (nuevo, solo compilado en el CI), el
     borrado con archivos bloqueados (no hay reintento) y el caso de la junction.
 
