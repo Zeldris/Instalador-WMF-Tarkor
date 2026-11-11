@@ -36,6 +36,7 @@
       "webviewInstallMode": { "type": "downloadBootstrapper" },
       "nsis": {
         "installMode": "currentUser",
+        "template": "windows/installer.nsi",
         "languages": ["Spanish"],
         "displayLanguageSelector": false
       }
