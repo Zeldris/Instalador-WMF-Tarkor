@@ -1,6 +1,7 @@
 # Hoja de estilos del instalador y peticiones de imágenes
 
-**Estado: pedido escrito (2026-11-11, `INS-57`); ninguna imagen entregada todavía.** El frontal del juego ya
+**Estado: pedido escrito (2026-11-11, `INS-57`) y sus cuatro dudas resueltas por la usuaria (§6); ninguna imagen
+entregada todavía.** El frontal del juego ya
 aplica la marca de Tarkor (`UX-40`); el asistente la adopta en `INS-56` (pendiente: hoy su CSS no tiene aún los
 tokens `gold-*`). Este documento dice **qué imágenes necesita el instalador**, cuáles están ya pedidas en el generador y solo se colocan aquí, y cuáles son peticiones nuevas, con
 su medida, su prompt y cómo se dan por buenas. Sigue el formato de las peticiones de Tarkor para `gimg` y no repite
@@ -88,8 +89,9 @@ Reglas de la hoja de Tarkor (§4, §6, §9 y §12, con la revisión del 2026-11-
 
 **Cómo llega cada imagen aquí.** `gimg` no escribe en otros repos y este repo no escribe en GVIG. El pedido es este
 documento: GVIG lo lee (como leyó `11` para su fila `#17`), genera, y deja la entrega en su carpeta
-`examples/tarkor/entrega/`, que no se versiona. La copia a este repo la hace la usuaria o una sesión de este repo con
-los archivos delante, en la tarea `INS-58`.
+`examples/tarkor/entrega/`, que no se versiona. **La copia a este repo la hace la usuaria** (§6, decisión 4): deja
+los archivos tal como salen en `entrega/`, en la raíz de este repo, y los sube; `INS-58` los convierte, los mide,
+los coloca en las carpetas de abajo y vacía `entrega/`.
 
 **Dónde se guardan aquí:**
 
@@ -112,7 +114,7 @@ No se vuelven a pedir. La columna «Estado» es el de GVIG a `db9c364`.
 
 | Pieza | Qué es | Dónde va en el instalador | Estado |
 |---|---|---|---|
-| **`E14`** Icono de aplicación | El emblema sobre un disco `night-950` que llena el marco; de 64 px para abajo, `tarkor-emblema-simple.svg` rasterizado | `app/src-tauri/icons/`: `fuente.png` (1024), `icon.png` (512), el de 256 (`128x128` con el sufijo `@2x`), `128x128.png`, `64x64.png`, `32x32.png`, `icon.ico` (16, 24, 32, 48, 64 y 256). Sustituye al rombo azul. También es el icono del instalador y del desinstalador de Windows (`I5`) | Prioridad alta; sin pedido escrito. El fondo está en duda (§6, duda 1) |
+| **`E14`** Icono de aplicación | El emblema sobre un disco `night-950` que llena el marco; de 64 px para abajo, `tarkor-emblema-simple.svg` rasterizado | `app/src-tauri/icons/`: `fuente.png` (1024), `icon.png` (512), el de 256 (`128x128` con el sufijo `@2x`), `128x128.png`, `64x64.png`, `32x32.png`, `icon.ico` (16, 24, 32, 48, 64 y 256). Sustituye al rombo azul. También es el icono del instalador y del desinstalador de Windows (`I5`) | Prioridad alta; sin pedido escrito. Fondo de noche (§6, decisión 1) |
 | **`#17`** Estados de las comprobaciones (4) | Una estrella de oro con una gema: hecho (azul), aviso (ámbar), error (rojo); en curso, una rosa de los vientos. PNG de 64² y 32² | Pantalla 6 «Comprobación» y filas de «Descarga» y «Reparar», a 20 px; pantalla «El motor se ha detenido», a 64 px. `app/src/imagenes/estado-*.png` | Sin pedido escrito. Legible a 20 px en gris |
 | **`E7`** Barra de progreso | Pista y relleno de 1024 × 32; la cabeza es la estrella de `#9` | `.pista` y `.relleno` de la descarga (`estilos.css` l.90-91). El medidor de memoria de la pantalla 4 sigue en CSS: es un dato, con sus marcas | Pista y relleno válidos en la primera ronda (q357 y q359); sin entregar |
 | **`#9`** Separador con estrella | Filete de oro que se desvanece, con una estrella en el centro, 1024 × 64 | `.filete` (l.60), bajo el título de cada paso | Pedido en el bloque B de GVIG |
@@ -191,25 +193,29 @@ abrirlos en esta sesión: lo que dependa de una versión concreta se comprueba a
 | Juego de imágenes para la biblioteca de la Deck (`I6`, `E4`, `E5`) | **Steam**, **Heroic** | Steam define las cinco imágenes; Heroic, al añadir un juego a Steam, las copia él mismo en vez de pedírselas al jugador |
 | Imagen social del repo (`E3`) | **itch.io** | La carátula que acompaña al enlace cuando se comparte |
 
-## 6. Dudas para la usuaria
+## 6. Decisiones de la usuaria (2026-11-11)
 
-1. **Fondo del icono (`E14`).** Las peticiones de GVIG dicen «disco `night-950`»; su hoja (§9), «emblema simple
-   sobre madera 950». Recomendado: **noche**, porque el icono vive fuera del juego (escritorio, barra de tareas,
-   biblioteca) y esa es la regla de la marca. Hay que corregirlo en GVIG, no aquí.
-2. **La portada (`I3`) mete una noche dentro del asistente**, que se decidió de madera. La hoja de Tarkor solo deja
-   dos noches dentro del juego (`E6` y el cielo `#6`), y la propuesta de marca del 2026-11-10 nombra «la portada del
-   instalador» entre las piezas de noche. Recomendado: sí, enmarcada, y solo en «Bienvenida» y «Listo».
-3. **Cómo llega el pedido a GVIG.** Desde aquí no se toca ese repo. Lo natural es una sesión allí que lea este
-   documento y añada un bloque «Instalador» (`I1`, `I3`, `I4`, `I6`) y el perfil `lateral`.
-4. **Quién copia la entrega.** La carpeta `entrega/` de GVIG no se sube: los archivos solo están en el equipo que
-   generó. O los copia la usuaria a este repo, o la sesión de `INS-58` se abre en ese equipo.
+Eran las cuatro dudas del pedido; la usuaria las resolvió el 2026-11-11.
+
+1. **Fondo del icono (`E14`): noche.** Las peticiones de GVIG dicen «disco `night-950`»; su hoja (§9), «emblema
+   simple sobre madera 950». Vale la noche: el icono vive fuera del juego (escritorio, barra de tareas, biblioteca)
+   y esa es la regla de la marca. La hoja de GVIG se corrige allí, en la sesión de la decisión 3.
+2. **La portada (`I3`) se pide: una noche enmarcada, solo en «Bienvenida» y «Listo».** El resto del asistente sigue
+   de madera. La hoja de Tarkor solo deja dos noches dentro del juego (`E6` y el cielo `#6`), pero la propuesta de
+   marca del 2026-11-10 ya nombra «la portada del instalador» entre las piezas de noche.
+3. **El pedido llega a GVIG con una sesión abierta allí**, que lee este documento, añade un bloque «Instalador»
+   (`I1`, `I3`, `I4`, `I6`) y el perfil `lateral`, y corrige el fondo de `E14` en su hoja (§9). Desde aquí no se toca
+   ese repo. Pendiente: la abre la usuaria; `INS-58` apunta su rama cuando exista.
+4. **La entrega la copia la usuaria.** La carpeta `entrega/` de GVIG no se sube: los archivos solo están en el equipo
+   que generó. La usuaria los copia a `entrega/` en la raíz de este repo y los sube; así `INS-58` la puede hacer
+   cualquier sesión, también en la nube.
 
 ## 7. Orden de trabajo y cómo se da por buena cada pieza
 
 1. **`E14`** (icono): quita el rombo azul de todo. Con él salen `I5` e `I2`, que no se generan.
 2. **`I1`** (lateral): con `I2` e `I5`, el instalador de Windows queda completo.
 3. **`#17`** y **`E7`**: las dos piezas que el asistente enseña en cada instalación.
-4. **`I3`** (portada), si la duda 2 se resuelve que sí.
+4. **`I3`** (portada): se pide (§6, decisión 2).
 5. **`I6`**, `E4` y `E5`, antes de `INS-51`.
 6. **`I4`**, `#2`, `#3`, `#5`, `#9`, `E13`: texturas y adornos; el CSS de hoy vale mientras tanto.
 

@@ -221,8 +221,12 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
   instalador solo coloca (`E14`, `#17`, `E7`, `#9`, `#2`, `#3`, `#5`, `E13`, `E4`, `E5`, `E3`) y las nuevas (`I1`
   lateral e `I2` cabecera del instalador de Windows, `I3` portada del asistente, `I4` hierro del riel, `I6` cápsula
   vertical para la Deck), con medida, prompt, peso, criterio de aceptación y la referencia de diseño de cada una.
-  Cuatro dudas para la usuaria en su §6.
-- [ ] **INS-58** Colocar las imágenes de [`13`](13-hoja-de-estilos-e-imagenes.md) cuando el generador las entregue:
+  Sus cuatro dudas, resueltas por la usuaria el 2026-11-11 (§6): icono sobre noche; la portada `I3` se pide,
+  enmarcada y solo en «Bienvenida» y «Listo»; el pedido llega a GVIG con una sesión allí; la entrega la copia ella.
+- [ ] **INS-58** Colocar las imágenes de [`13`](13-hoja-de-estilos-e-imagenes.md) cuando el generador las entregue.
+  Antes, dos pasos de la usuaria (`13` §6): abrir en GVIG la sesión que lee `13` y añade el bloque «Instalador» y el
+  perfil `lateral` (encargo en GVIG: sin rama todavía, **pendiente**), y copiar la entrega a `entrega/` en la raíz
+  de este repo. Luego:
   iconos (`E14`) en `app/src-tauri/icons/`; `sidebarImage`, `headerImage` e iconos del instalador en
   `bundle.windows.nsis` de `tauri.conf.json` (BMP de 24 bits en `app/src-tauri/windows/`); portada, hierro del riel,
   estados y barra de progreso en `app/src/imagenes/`, 1 MB entre todas como mucho. Va con `INS-56` o después.

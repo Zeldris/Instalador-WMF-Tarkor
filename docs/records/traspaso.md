@@ -14,7 +14,7 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #15 (2026-11-11, `5631e77`): `INS-15` (pantalla «Licencias y avisos», narrador `llama3.1:8b`) con `INS-7`, `INS-35` e `INS-36`, con la confirmación de la usuaria y el CI de GitHub en verde. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-11: `INS-57` hecha: [`13`](../13-hoja-de-estilos-e-imagenes.md), la hoja de estilos del instalador con sus peticiones de imágenes; cuatro dudas para la usuaria en su §6 e `INS-58` para colocarlas. `INS-44` e `INS-45` hechas (CI de Windows y de Linux en verde; pendiente de `INS-8`). Siguiente: que la usuaria resuelva las dudas de `13`; luego las tres fases antes de `main` (code-review, gw-opt-tokens + retro a la usuaria, reviewed.sh); PR solo si la usuaria lo confirma. Presupuesto de compactaciones: 3 (van 2; el de 2 se agotó leyendo la hoja de Tarkor). |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-11: `INS-57` hecha ([`13`](../13-hoja-de-estilos-e-imagenes.md)) y sus cuatro dudas resueltas por la usuaria (§6: icono sobre noche; portada `I3` sí, enmarcada; el pedido llega a GVIG con una sesión allí; la entrega la copia ella a `entrega/`). `INS-44` e `INS-45` hechas (CI de Windows y de Linux en verde; pendiente de `INS-8`). Siguiente: las tres fases antes de `main` (code-review, gw-opt-tokens + retro a la usuaria, reviewed.sh); PR solo si la usuaria lo confirma. Presupuesto de compactaciones: 8 (van 6 en la tarea; quedan las tres fases, repartidas a subagentes). |
 | **Tests** | 2026-10-26: núcleo `cargo test -p tarkor-nucleo` 116, `cargo fmt --all --check` en verde, clippy 0 avisos, `tsc -b` 0, `cargo check` del núcleo y la app para Windows (mingw) en verde. Asistente `vitest` 27 y E2E con el Ollama falso: último verde el 2026-10-25. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -139,7 +139,7 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 Dos líneas cada una como mucho; el detalle está en el commit y la más antigua sale cuando hay más de 5.
 
 - ~~`INS-57` · Hoja de estilos del instalador y peticiones de imágenes~~ (2026-11-11, sin PR aún):
-  [`13`](../13-hoja-de-estilos-e-imagenes.md); cuatro dudas para la usuaria; colocarlas es `INS-58`.
+  [`13`](../13-hoja-de-estilos-e-imagenes.md); sus cuatro dudas, resueltas por la usuaria (§6); colocarlas es `INS-58`.
 - ~~`INS-45` · AppImage, `.deb` y «Borrar datos del juego»~~ (2026-11-11, sin PR aún): CI de Linux construye y arranca
   los paquetes; diálogo en Ajustes (solo Linux) que para el motor, borra y cierra; pendiente de `INS-8` en la Deck.
 - ~~`INS-44` · Instalador NSIS con las dos casillas~~ (2026-11-11, sin PR aún): plantilla propia, `tarkor.exe --desinstalar`
