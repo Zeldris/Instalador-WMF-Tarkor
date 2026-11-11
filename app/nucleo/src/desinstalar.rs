@@ -113,6 +113,8 @@ fn borrar_salvo(dir: &Path, salvar: &Path) -> io::Result<()> {
 /// se devuelve el primer error (la IA con otro nombre no se toca y cuenta como error).
 pub fn borrar(rutas: &Rutas, config: &Config, partidas: bool, ia: bool) -> io::Result<()> {
     let ia_en_uso = config.ia_efectiva(rutas);
+    // Antes de borrar: escrita con `..` o a través de un enlace, la ruta puede pasar por algo que se va a ir.
+    let ia_normalizada = normalizada(&ia_en_uso);
     let mut error = None;
 
     anotar(&mut error, quitar(&rutas.registros));
@@ -133,13 +135,11 @@ pub fn borrar(rutas: &Rutas, config: &Config, partidas: bool, ia: bool) -> io::R
         }
     }
     if partidas && rutas.datos.is_dir() {
-        anotar(&mut error, borrar_salvo(&normalizada(&rutas.datos), &normalizada(&ia_en_uso)));
+        anotar(&mut error, borrar_salvo(&normalizada(&rutas.datos), &ia_normalizada));
     }
-    if partidas {
-        if let Some(carpeta) = config.carpeta_ia.as_ref().filter(|c| c.exists()) {
-            let conservar = Config { carpeta_ia: Some(carpeta.clone()), ..Config::default() };
-            anotar(&mut error, conservar.guardar(&rutas.datos));
-        }
+    if partidas && config.carpeta_ia.is_some() && ia_normalizada.exists() {
+        let conservar = Config { carpeta_ia: Some(ia_normalizada), ..Config::default() };
+        anotar(&mut error, conservar.guardar(&rutas.datos));
     }
     for padre in [rutas.registros.parent(), rutas.ia.parent()].into_iter().flatten() {
         if !padre.as_os_str().is_empty() {
@@ -385,6 +385,9 @@ mod tests {
         borrar(&r, &c, true, false).unwrap();
         assert!(r.ia.join("modelo.bin").exists(), "la IA sobrevive");
         assert!(!r.datos.join("sub").exists());
+        // La ruta guardada ya no pasa por `sub`, que se ha borrado: la IA no queda huérfana.
+        let guardada = Config::cargar(&r.datos).carpeta_ia.expect("se conserva la carpeta de la IA");
+        assert!(guardada.join("modelo.bin").exists(), "la ruta guardada lleva a la IA: {guardada:?}");
     }
 
     #[cfg(unix)]
