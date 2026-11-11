@@ -220,6 +220,21 @@ export const ajustes = {
   },
 }
 
+/** «Borrar datos del juego» (Linux, `INS-45`; docs/07, «Desinstalación»). */
+export const borrarDatos = {
+  boton: 'Borrar datos del juego',
+  titulo: 'Borrar datos del juego',
+  lead: 'Tarkor se cerrará al terminar. Marca lo que quieres borrar; los registros se borran siempre.',
+  partidas: 'Borrar también mis partidas guardadas',
+  ia: (tamano: string) => (tamano ? `Borrar también el motor de IA y los modelos (${tamano})` : 'Borrar también el motor de IA y los modelos'),
+  borrar: 'Borrar',
+  borrando: 'Borrando…',
+  cancelar: 'Cancelar',
+  finalTitulo: 'Datos borrados',
+  finalTexto: 'Datos borrados. Ya puedes borrar el archivo .AppImage',
+  cerrar: 'Cerrar Tarkor',
+}
+
 export const informe = {
   copiar: 'Copiar informe',
   copiado: 'Copiado',

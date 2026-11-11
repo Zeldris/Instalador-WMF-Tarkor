@@ -3,7 +3,7 @@
 
 import { Channel, invoke } from '@tauri-apps/api/core'
 import { aErrorIa } from './tipos'
-import type { Catalogo, Comprobacion, Config, Equipo, Evaluacion, InfoMotor, MotorDetenido, ProgresoModelo, ProgresoMotor, Reparacion, Rutas, Sobrante, UsoIa } from './tipos'
+import type { Catalogo, Comprobacion, Config, Equipo, Evaluacion, InfoMotor, MotorDetenido, ProgresoModelo, ProgresoMotor, Reparacion, Rutas, InfoBorrado, Sobrante, UsoIa } from './tipos'
 import { listen } from '@tauri-apps/api/event'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { open } from '@tauri-apps/plugin-dialog'
@@ -55,6 +55,14 @@ export interface Api {
   /** Modelos del motor propio que no son del perfil actual; vacío con un Ollama externo. */
   modelosSobrantes(): Promise<Sobrante[]>
   borrarModelos(modelos: string[]): Promise<void>
+  /** `linux`, `windows`… («Borrar datos del juego» solo se ofrece en `linux`, donde no hay desinstalador). */
+  plataforma(): Promise<string>
+  /** La carpeta de la IA y su tamaño, para el diálogo de borrar. */
+  infoBorrado(): Promise<InfoBorrado>
+  /** Para el motor y borra como el desinstalador de Windows: registros siempre; partidas e IA si se piden. */
+  borrarDatos(partidas: boolean, ia: boolean): Promise<void>
+  /** Cierra la app (pantalla final de borrar). */
+  cerrarApp(): Promise<void>
   /** El texto de «Copiar informe» (sin datos personales). */
   informe(): Promise<string>
   /** Aviso de motor detenido que aún no se ha resuelto, o null. */
@@ -98,6 +106,10 @@ const tauri: Api = {
   cambiarPerfil: (perfil, progreso) => invoke<Config>('cambiar_perfil', { perfil, canal: canal(progreso) }).catch((e) => { throw aErrorIa(e) }),
   modelosSobrantes: () => invoke('modelos_sobrantes'),
   borrarModelos: (modelos) => invoke('borrar_modelos', { modelos }),
+  plataforma: () => invoke('plataforma'),
+  infoBorrado: () => invoke('info_borrado'),
+  borrarDatos: (partidas, ia) => invoke('borrar_datos', { partidas, ia }),
+  cerrarApp: () => invoke('cerrar_app'),
   informe: () => invoke('informe'),
   motorDetenido: () => invoke('motor_detenido'),
   reintentarMotor: () => invoke('reintentar_motor'),
