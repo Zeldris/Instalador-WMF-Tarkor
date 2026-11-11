@@ -42,7 +42,7 @@ fn tamano(ruta: &Path) -> u64 {
 }
 
 /// "9,6 GB", como el asistente (`formato.ts`: un decimal, coma). Vacío si no hay nada.
-fn texto_gb(bytes: u64) -> String {
+pub fn texto_gb(bytes: u64) -> String {
     if bytes == 0 {
         return String::new();
     }

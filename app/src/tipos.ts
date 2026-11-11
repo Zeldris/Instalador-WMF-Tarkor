@@ -122,6 +122,12 @@ export interface UsoIa {
   memoriaMb: number
 }
 
+/** Lo que enseña el diálogo «Borrar datos del juego» (`info_borrado`): `tamano` ya viene formateado ("9,6 GB"; vacío si no hay IA). */
+export interface InfoBorrado {
+  rutaIa: string
+  tamano: string
+}
+
 /** Un modelo del Ollama propio que no es del perfil actual (`modelos_sobrantes`). */
 export interface Sobrante {
   modelo: string

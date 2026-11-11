@@ -15,6 +15,8 @@
 //   5. Matar el motor dos veces agota el reinicio automático: sale «El motor de IA se ha detenido».
 //   6. Reintentar con el motor sin poder arrancar se queda con el error; con el motor disponible
 //      otra vez, vuelve a Ajustes.
+//   7. «Borrar datos del juego» (INS-45): «Borrar» desactivado sin casillas; con «partidas» marcada, para el
+//      motor, borra las partidas y la configuración, deja la IA y enseña la pantalla final.
 //
 // Uso (ver app/README.md): TARKOR_DATOS y HOME de la app deben ser los del entorno con que se lanzó
 // tauri-driver, y TARKOR_OLLAMA_URL no debe estar puesta.
@@ -257,6 +259,24 @@ async function recorrido() {
   await veTexto(/Repartida: 60 %/, 30000)
   comprobar(pidsMotor().length === 1, '6. Reintentar con el motor disponible vuelve a Ajustes, con el motor en marcha y dónde corre la IA')
   await captura('reintentado')
+
+  // 7. Borrar datos del juego (INS-45): solo las partidas; la IA se queda.
+  mkdirSync(join(datos, 'partidas'), { recursive: true })
+  writeFileSync(join(datos, 'partidas', 'uno.sav'), 'x')
+  await pulsar(boton('Borrar datos del juego'))
+  await buscar('//*[@role="dialog"]')
+  const botonBorrar = '//button[normalize-space()="Borrar"]'
+  const aBorrar = await buscar(botonBorrar)
+  comprobar(await wd('GET', s(`/element/${aBorrar}/property/disabled`)) === true, '7. «Borrar» está desactivado mientras no se marque nada')
+  await captura('borrar-dialogo')
+  await pulsar('//label[contains(., "Borrar también mis partidas guardadas")]')
+  await pulsar(botonBorrar)
+  await veTexto(/Datos borrados\. Ya puedes borrar el archivo \.AppImage/)
+  await buscar(boton('Cerrar Tarkor'))
+  await captura('borrar-final')
+  comprobar(pidsMotor().length === 0, '7. al borrar se para el motor')
+  comprobar(!existsSync(join(datos, 'partidas')) && !existsSync(join(datos, 'config.json')), '7. se borraron las partidas y la configuración (el siguiente arranque empieza el asistente)')
+  comprobar(existsSync(join(ia, 'modelos')), '7. la IA se queda, porque su casilla no estaba marcada')
   await cerrar()
 }
 

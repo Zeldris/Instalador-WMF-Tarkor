@@ -73,6 +73,18 @@ export function evaluarEjemplo(equipo: Equipo | null): Evaluacion {
   return { memoriaParaIaGb: paraIa, discoLibreGb: disco, perfiles, maximoSeguro: ultimo?.id ?? null, recomendado, equipoInsuficiente: !ultimo }
 }
 
+let plataformaSimulada = 'linux'
+/** Para los tests: el sistema que dirá `plataforma`. */
+export const fijarPlataforma = (p: string) => { plataformaSimulada = p }
+let tamanoIaSimulado = '9,6 GB'
+let errorBorrado: string | null = null
+export const fijarErrorBorrado = (mensaje: string | null) => { errorBorrado = mensaje }
+/** Las llamadas a `borrarDatos` y si se cerró la app, para los tests. */
+export const borrados: { partidas: boolean; ia: boolean }[] = []
+let appCerrada = false
+export const appSeHaCerrado = () => appCerrada
+export const reiniciarBorrado = () => { plataformaSimulada = 'linux'; errorBorrado = null; borrados.length = 0; appCerrada = false }
+
 let guardada = configInicial()
 let sobrantes: Sobrante[] = []
 let usoSimulado: UsoIa | Error = { porcentajeGpu: 100, memoriaMb: 5400 }
@@ -247,6 +259,13 @@ export const ejemplo: Api = {
   },
   modelosSobrantes: async () => sobrantes.map((s) => ({ ...s })),
   borrarModelos: async (modelos) => { sobrantes = sobrantes.filter((s) => !modelos.includes(s.modelo)) },
+  plataforma: async () => plataformaSimulada,
+  infoBorrado: async () => ({ rutaIa: rutasEjemplo.ia, tamano: tamanoIaSimulado }),
+  borrarDatos: async (partidas, ia) => {
+    if (errorBorrado) throw errorBorrado
+    borrados.push({ partidas, ia })
+  },
+  cerrarApp: async () => { appCerrada = true },
   informe: async () => TEXTO_INFORME,
   motorDetenido: async () => (avisoMotor ? { ...avisoMotor } : null),
   reintentarMotor: async () => {
