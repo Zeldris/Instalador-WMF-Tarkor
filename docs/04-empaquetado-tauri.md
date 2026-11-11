@@ -76,6 +76,15 @@ Ver [`10-proteccion-del-codigo-y-build.md`](10-proteccion-del-codigo-y-build.md)
 - **Idioma del instalador:** castellano.
 - **Desinstalación:** registrada en "Aplicaciones instaladas". Página propia preguntando si
   conservar partidas y modelos de IA (ver `07`).
+  Cómo (2026-11-11, `INS-44`): plantilla NSIS propia, copia de la de Tauri de la versión de
+  `@tauri-apps/cli` en uso con un solo cambio: en la página de confirmación, la casilla de Tauri
+  («Eliminar los datos de aplicación») se cambia por las dos de `07`, sin marcar, y la del motor
+  lleva el tamaño. Los ganchos de Tauri (`installerHooks`) no bastan: no pueden añadir casillas a
+  esa página y la de Tauri seguiría saliendo. El borrado lo hace el propio `tarkor.exe`
+  (`--desinstalar`, antes de quitar los archivos), que sabe dónde está la carpeta de la IA aunque se
+  haya movido (`INS-48`); los registros se borran siempre, salvo al actualizar (`/UPDATE`). En
+  silencio (`/S`), `/BORRARPARTIDAS` y `/BORRARIA` hacen de casillas. Al subir de versión
+  `@tauri-apps/cli`, un test pide rehacer la copia de la plantilla.
 - **Firma de código: ABIERTO.** Sin firmar, Windows muestra "Windows protegió su PC" y hay que
   pulsar "Más información → Ejecutar de todas formas". Además, un ejecutable con Node y bytecode
   dentro es propenso a falsos positivos del antivirus. Opciones:
