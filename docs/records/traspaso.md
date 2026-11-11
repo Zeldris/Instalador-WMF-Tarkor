@@ -12,7 +12,7 @@ cada commit.**
 |---|---|
 | **Actualizado** | 2026-11-11 |
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
-| **Último commit en `main`** | Fusión del PR #12 (2026-11-05, `ce9f33a`): `INS-12` (licencia MIT del repo), `FLU-7` e `INS-35` a `INS-37`, con la confirmación de la usuaria y la CI de GitHub en verde (Linux y Windows). |
+| **Último commit en `main`** | Fusión del PR #13 (2026-11-11, `db4e541`): `FLU-8` (flujo Galivelop-workflow v0.5.1), con la confirmación de la usuaria y el CI de GitHub en verde. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
 | **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-11: `FLU-8` fusionado en `main` (PR #13). Sin tarea en curso. Siguiente: `INS-35` e `INS-36` no tienen encargo en el juego; hay que lanzarlo (rama o issue de ese repo, apuntado en el plan) antes de llevar las variables a `04`, `10` y `12`. Los 14 hallazgos del flujo (punto 16), a Galivelop-workflow con `gw-harvest`. Presupuesto de compactaciones: 1. |
 | **Tests** | 2026-10-26: núcleo `cargo test -p tarkor-nucleo` 116, `cargo fmt --all --check` en verde, clippy 0 avisos, `tsc -b` 0, `cargo check` del núcleo y la app para Windows (mingw) en verde. Asistente `vitest` 27 y E2E con el Ollama falso: último verde el 2026-10-25. |
