@@ -12,7 +12,7 @@ export function descargaGb(p: Perfil): number {
     .reduce((a, m) => a + (catalogo.modelos[m]?.descargaGb ?? 0), 0)
 }
 
-/** "1,3 y 9,4": de la descarga más pequeña a la mayor de los perfiles no experimentales. */
+/** "1,3 y 9,6": de la descarga más pequeña a la mayor de los perfiles no experimentales. */
 export function rangoDescarga(): string {
   const tamanos = catalogo.perfiles.filter((p) => !p.experimental).map(descargaGb)
   return `${fmt(Math.min(...tamanos))} y ${fmt(Math.max(...tamanos))}`

@@ -246,7 +246,11 @@ export const licencias = {
   abrirAjustes: 'Licencias',
   volver: 'Volver',
   builtWithLlama: 'Built with Llama',
-  builtWithLlamaLead: 'El narrador de los perfiles Equilibrado y Máximo es Llama 3.1, de Meta.',
+  /** `perfiles`: nombres visibles de los perfiles del catálogo cargado que usan un modelo con licencia Llama. */
+  builtWithLlamaLead: (perfiles: string[]) =>
+    perfiles.length === 0 ? 'Algunos modelos de Tarkor son Llama 3.1, de Meta.'
+      : perfiles.length === 1 ? `El perfil ${perfiles[0]} usa Llama 3.1, de Meta.`
+        : `Los perfiles ${perfiles.slice(0, -1).join(', ')} y ${perfiles[perfiles.length - 1]} usan Llama 3.1, de Meta.`,
   motor: 'Motor de IA',
   motorNombre: 'Ollama',
   modelos: 'Modelos de lenguaje',

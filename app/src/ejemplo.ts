@@ -161,6 +161,7 @@ export const ejemplo: Api = {
   guardarConfig: async (c) => { guardada = structuredClone(c) },
   analizarEquipo: async () => equipoEjemplo,
   evaluarPerfiles: async (equipo) => evaluarEjemplo(equipo),
+  catalogo: async () => structuredClone(catalogo),
   estadoMotor: async () => ({
     version: catalogo.motor.version,
     instalado: motorInstalado,

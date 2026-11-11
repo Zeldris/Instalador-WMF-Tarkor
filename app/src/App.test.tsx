@@ -251,6 +251,19 @@ describe('asistente de primer arranque', () => {
     expect(await boton('Reparar')).toBeTruthy()
   }, 30000)
 
+  it('Licencias no desmonta Ajustes: el resultado de Reparar y «Copiado» siguen al Volver', async () => {
+    await hastaAjustes()
+    fireEvent.click(await boton('Reparar'))
+    expect(await screen.findByText(/^Todo estaba en orden/, {}, { timeout: 3000 })).toBeTruthy()
+    fireEvent.click(await boton('Copiar informe'))
+    expect(await screen.findByText('Copiado')).toBeTruthy()
+    fireEvent.click(await boton('Licencias'))
+    expect(await screen.findByRole('heading', { name: 'Licencias y avisos' })).toBeTruthy()
+    fireEvent.click(await boton('Volver'))
+    expect(screen.getByText(/^Todo estaba en orden/)).toBeTruthy()
+    expect(screen.getByText('Copiado')).toBeTruthy()
+  }, 30000)
+
   it('en Ajustes dice dónde corre la IA, y si no responde la pantalla sigue', async () => {
     await hastaAjustes()
     expect(await screen.findByText(/La IA usa la gráfica al 100 %/)).toBeTruthy()

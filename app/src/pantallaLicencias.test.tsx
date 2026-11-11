@@ -1,8 +1,8 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { catalogo } from './catalogo'
-import { fijarErrorCopiar, textoCopiado } from './ejemplo'
-import { Licencias, modelosPorLicencia, textosLicencia } from './pantallaLicencias'
+import { ejemplo, fijarErrorCopiar, textoCopiado } from './ejemplo'
+import { LICENCIA_LLAMA, Licencias, modelosPorLicencia, textosLicencia } from './pantallaLicencias'
 import { licencias as t } from './textos'
 
 afterEach(() => {
@@ -17,21 +17,22 @@ describe('Licencias y avisos', () => {
       expect(t.nombres[m.licencia], m.licencia).toBeTruthy()
       expect(textosLicencia[m.licencia]?.length, m.licencia).toBeGreaterThan(500)
     }
-    expect(textosLicencia['Llama-3.1-Community']).toContain('LLAMA 3.1 COMMUNITY LICENSE AGREEMENT')
+    expect(textosLicencia[LICENCIA_LLAMA]).toContain('LLAMA 3.1 COMMUNITY LICENSE AGREEMENT')
     expect(textosLicencia['Apache-2.0']).toContain('Apache License')
     expect(textosLicencia.MIT).toContain('Copyright (c) Ollama')
   })
 
   it('agrupa todos los modelos del catálogo por licencia, sin repetir ninguno', () => {
-    const listados = modelosPorLicencia().flatMap(([, ms]) => ms)
+    const listados = modelosPorLicencia(catalogo).flatMap(([, ms]) => ms)
     expect(listados.sort()).toEqual(Object.keys(catalogo.modelos).sort())
-    expect(modelosPorLicencia().find(([l]) => l === 'Llama-3.1-Community')?.[1]).toEqual(['llama3.1:8b'])
+    expect(modelosPorLicencia(catalogo).find(([l]) => l === LICENCIA_LLAMA)?.[1]).toEqual(['llama3.1:8b'])
   })
 
   it('muestra «Built with Llama», el aviso de Meta y la política de uso, y copia su enlace', async () => {
     const volver = vi.fn()
     render(<Licencias volver={volver} />)
-    expect(screen.getByRole('heading', { name: 'Built with Llama' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Built with Llama' })).toBeTruthy()
+    expect(screen.getByText('Los perfiles Equilibrado y Máximo usan Llama 3.1, de Meta.')).toBeTruthy()
     expect(screen.getByText(t.avisoLlama)).toBeTruthy()
     expect(t.avisoLlama).toBe('Llama 3.1 is licensed under the Llama 3.1 Community License, Copyright © Meta Platforms, Inc. All Rights Reserved.')
     expect(screen.getByText('https://llama.meta.com/llama3_1/use-policy')).toBeTruthy()
@@ -45,13 +46,24 @@ describe('Licencias y avisos', () => {
   it('si no se puede copiar el enlace, dice que se copie a mano', async () => {
     fijarErrorCopiar('portapapeles no disponible')
     render(<Licencias volver={() => {}} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Copiar enlace' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Copiar enlace' }))
     expect((await screen.findByRole('alert')).textContent).toBe(t.errorCopiar)
     expect(screen.queryByText('Copiado')).toBeNull()
   })
 
-  it('cada licencia tiene su texto completo desplegable', () => {
+  it('usa el catálogo que cargó el núcleo, no el incrustado', async () => {
+    const ajeno = structuredClone(catalogo)
+    ajeno.modelos['llama3.1:8b'].licencia = 'Apache-2.0'
+    const espia = vi.spyOn(ejemplo, 'catalogo').mockResolvedValue(ajeno)
     render(<Licencias volver={() => {}} />)
+    await screen.findByText('Texto completo de la Apache License 2.0')
+    expect(screen.queryByRole('heading', { name: 'Built with Llama' })).toBeNull()
+    espia.mockRestore()
+  })
+
+  it('cada licencia tiene su texto completo desplegable', async () => {
+    render(<Licencias volver={() => {}} />)
+    await screen.findByText('Texto completo de la Llama 3.1 Community License')
     for (const nombre of ['Licencia MIT', 'Llama 3.1 Community License', 'Apache License 2.0']) {
       expect(screen.getByText(`Texto completo de la ${nombre}`)).toBeTruthy()
     }

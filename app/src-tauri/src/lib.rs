@@ -206,6 +206,12 @@ fn rutas(estado: State<'_, Estado>) -> Rutas {
     Rutas { ia: estado.ia(), ..estado.rutas.clone() }
 }
 
+/// El catálogo activo (el externo válido o el incrustado), para pantallas que muestran lo que de verdad se descarga.
+#[tauri::command]
+fn catalogo_activo(estado: State<'_, Estado>) -> Catalogo {
+    estado.catalogo.clone()
+}
+
 /// De dónde salió el catálogo (incrustado, externo, o externo inválido y por qué).
 #[tauri::command]
 fn origen_catalogo(estado: State<'_, Estado>) -> Origen {
@@ -917,6 +923,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             rutas,
+            catalogo_activo,
             origen_catalogo,
             cargar_config,
             guardar_config,

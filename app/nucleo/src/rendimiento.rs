@@ -85,7 +85,8 @@ pub fn calcular(catalogo: &Catalogo, perfil: &Perfil, equipo: Option<&Equipo>, u
         ("TARKOR_NUM_THREAD", hilos.to_string()),
         ("TARKOR_NUM_BATCH", if margen_justo { "256" } else { "512" }.into()),
         ("TARKOR_NUM_CTX_NARRADOR", catalogo.reglas.contexto_narrador.to_string()),
-        ("TARKOR_MODELOS_SIN_PENSAR", catalogo.modelos_que_piensan(perfil).join(",")),
+        // El instalador solo descarga modelos base (nunca `tarkor-narrador*`): el backend va siempre en modo base.
+        ("TARKOR_NARRADOR_BASE", "1".into()),
     ];
 
     let a_string = |v: Vec<(&str, String)>| v.into_iter().map(|(k, x)| (k.to_string(), x)).collect();
@@ -149,9 +150,10 @@ mod tests {
     }
 
     #[test]
-    fn qwen35_sin_pensar() {
+    fn narrador_en_modo_base() {
         let c = Catalogo::incrustado();
         let a = calcular(&c, c.perfil("maximo").unwrap(), None, UsoCpu::Moderado);
-        assert_eq!(valor(&a.backend, "TARKOR_MODELOS_SIN_PENSAR"), Some("qwen3.5:4b"));
+        assert_eq!(valor(&a.backend, "TARKOR_NARRADOR_BASE"), Some("1"));
+        assert_eq!(valor(&a.backend, "TARKOR_MODELOS_SIN_PENSAR"), None);
     }
 }

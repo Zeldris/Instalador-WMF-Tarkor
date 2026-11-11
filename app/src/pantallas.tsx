@@ -341,7 +341,7 @@ export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpe
   // Reparar y el cambio de perfil usan el mismo motor (en Rust, `Ocupado`): mientras uno trabaja o espera la red, el otro no se toca.
   const [reparando, setReparando] = useState(false)
   // Con el motor ocupado (cambio de perfil, reparación o mover la carpeta) no se sale ni se cambia el uso del procesador.
-  const ocupado = cambio.cambiando || reparando || carpeta.moviendo
+  const ocupado = cambio.cambiando || cambio.borrando || reparando || carpeta.moviendo
   useEffect(() => { alCambiar?.(cambio.cambiando) }, [alCambiar, cambio.cambiando])
   useEffect(() => () => alCambiar?.(false), [alCambiar])
   // Un perfil guardado que ya no está en la evaluación cuenta como el recomendado.
@@ -349,11 +349,12 @@ export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpe
   // Un id que no está en la evaluación (un perfil que ya no existe) no deja nada preseleccionado.
   const nuevo = evaluacion.perfiles.find((x) => x.id === elegido)
   const extra = nuevo ? Math.max(0, nuevo.descargaGb - actual.descargaGb) : 0
-  // Con el motor ocupado no se abre: Licencias desmonta Reparar y las tarjetas, que perderían su estado.
+  // Licencias se ve con Ajustes montado y oculto: desmontarlo perdería el estado de Reparar, el informe y las tarjetas.
   const [licencias, setLicencias] = useState(false)
-  if (licencias) return <Licencias volver={() => setLicencias(false)} />
   return (
-    <div className="ventana">
+    <>
+    {licencias && <Licencias volver={() => setLicencias(false)} />}
+    <div className="ventana" hidden={licencias} style={licencias ? { display: 'none' } : undefined}>
       <Pagina sola titulo={t.titulo} lead={t.actual(actual.nombre, fmt(actual.memoriaGb), fmt(actual.descargaGb))}
         barra={<><button type="button" className="btn" disabled={ocupado} onClick={volver}>{t.volver}</button>
           <button type="button" className="btn" disabled={ocupado} onClick={reanalizar}>{t.reanalizar}</button>
@@ -384,5 +385,6 @@ export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpe
         {nuevo && nuevo.descargaGb < actual.descargaGb && <p className="peq tenue">{t.liberar(nuevo.nombre, fmt(actual.descargaGb - nuevo.descargaGb))}</p>}
       </Pagina>
     </div>
+    </>
   )
 }
