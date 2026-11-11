@@ -32,7 +32,8 @@ class PlantillaNsis(unittest.TestCase):
 
     def test_la_plantilla_trae_lo_de_tarkor(self):
         t = leer(os.path.join(SRC_TAURI, 'windows', 'installer.nsi'))
-        for pieza in ('--desinstalar', '--info-desinstalar', '/BORRARPARTIDAS', '/BORRARIA', '; TARKOR:'):
+        for pieza in ('--desinstalar', '--info-desinstalar', '/BORRARPARTIDAS', '/BORRARIA', '; TARKOR:',
+                      r'$LOCALAPPDATA\Programs\${PRODUCTNAME}'):
             self.assertIn(pieza, t, f'la plantilla NSIS no trae `{pieza}`')
         for resto in ('$(deleteAppData)', 'DeleteAppDataCheckbox'):
             self.assertNotIn(resto, t, f'la plantilla aún trae la casilla de Tauri (`{resto}`)')

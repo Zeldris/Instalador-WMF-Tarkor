@@ -193,7 +193,10 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
   de quitar los archivos (lee `carpetaIa` de `config.json`); el tamaño de la casilla, de
   `tarkor.exe --info-desinstalar <ini>`. Pasos: (a) núcleo y opciones del ejecutable; (b) plantilla y test
   que para si cambia la versión de `@tauri-apps/cli`; (c) CI de Windows que construye el `.exe`, instala en
-  silencio, siembra datos y desinstala con `/BORRARPARTIDAS` y `/BORRARIA`. Pendiente de `INS-8`: verlo en pantalla.
+  silencio, siembra datos y desinstala con `/BORRARPARTIDAS` y `/BORRARIA`.
+  La plantilla instala en `%LOCALAPPDATA%\Programs\Tarkor` (`07`; la de Tauri usaría `%LOCALAPPDATA%\Tarkor`,
+  que es de la IA y los registros). Hechos (a) y (b) el 2026-11-11; (c) en el job `instalador-windows` de
+  `app.yml`, con `tools/qa/desinstalar-windows.ps1`. Pendiente de `INS-8`: verlo en pantalla (casillas, tamaño).
 - [ ] **INS-45** AppImage (+ `.deb` opcional) compilado en Ubuntu 22.04. Incluye «Borrar datos del juego» en
   Ajustes (Linux, `07`), con el mismo borrado del núcleo que el desinstalador de `INS-44`; el CI de Linux
   construye el `.AppImage` y el `.deb`.
