@@ -42,6 +42,9 @@ que se repite, se añade aquí con su `FLU-n` o `INS-n`.
   no solo el código de salida. Vale para los scripts propios del proyecto. (criterio)
 - Los scripts de `.claude/gw/scripts/` se prueban en el repo del flujo y no se editan aquí: un cambio va al flujo
   como propuesta, con `gw-harvest` (check: `config-guard.py` pregunta antes de editarlos). (criterio)
+- En el diff de un `/gw-update`, la fase 1 revisa los archivos propios del proyecto y los copiados del flujo que
+  difieren de su versión publicada (adaptaciones y conflictos resueltos a mano); lo idéntico al flujo se revisa en
+  su repo (retro de `FLU-8`). (criterio)
 - Un gancho que pregunta o bloquea se revisa **probando cómo saltárselo**: envoltorios con opciones que llevan valor
   (`sudo -u X`, `sudo -uX`, `env -u X`, `nice -n 5`, `timeout 5`, `xargs -I{}`), el destino de los copiadores (`cp`,
   `install`, `rsync`, `dd of=`, `-t DIR`), una carpeta antecesora de la protegida y una ruta relativa o con `..`; y

@@ -132,9 +132,10 @@ Ver [`06`](06-inventario-exclusiones.md).
   descarga de Chromium, pasado desde aquí (382 tests de `tools/qa`).
 - [ ] **INS-35** Backend: `SYSTEM` del narrador incrustado en build; narrador con modelo base +
   `system` por petición detrás de variable de entorno; leer `TARKOR_NUM_THREAD`,
-  `TARKOR_NUM_BATCH`, `TARKOR_NUM_CTX_NARRADOR` y `TARKOR_MODELOS_SIN_PENSAR` (ver `12`).
+  `TARKOR_NUM_BATCH`, `TARKOR_NUM_CTX_NARRADOR` y `TARKOR_MODELOS_SIN_PENSAR` (ver `12`). Encargo: sin rastro en
+  el juego (2026-11-11: ni rama, ni commit, ni mención); hay que lanzarlo y apuntar aquí su rama o issue.
 - [ ] **INS-36** Backend: CORS restringido y escucha solo en `127.0.0.1` en modo empaquetado; rutas de
-  imágenes y datos por variable de entorno.
+  imágenes y datos por variable de entorno. Encargo: el mismo que `INS-35`, sin rastro en el juego (2026-11-11).
 - [ ] **INS-37** Menú del juego: enlace a Ajustes → Rendimiento de la IA. Contrato fijado (2026-11-04, `04`):
   «Rendimiento de la IA» en el menú solo si `window.__TARKOR__.abrirAjustes` es una función, y la llama al pulsarlo.
   Falta: hacerlo en el juego (encargo a una sesión del juego) e inyectar la función en `INS-41`.

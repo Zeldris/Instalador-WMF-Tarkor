@@ -30,7 +30,8 @@ Cada sesión puede correr en un contenedor temporal: **lo que no está subido no
 
 - Commit + push en cada punto estable (check en verde). **Nunca más de 30-45 minutos de trabajo sin subir.** Las
   tareas grandes se parten en pasos pequeños con su propio commit.
-- **La bitácora se actualiza en el mismo commit** que el trabajo que describe, no al final de la sesión.
+- **La bitácora se actualiza en el mismo commit** que el trabajo que describe, no al final de la sesión; su fila,
+  con `python3 .claude/gw/scripts/handoff.py set-row`.
 - **El estado vive en los archivos, no en la conversación**: el plan dice qué está implementado y la bitácora qué se
   está haciendo. Una tarea a medias dice qué está hecho y qué falta.
 - Si hay que parar con algo a medias o en rojo: commit igualmente con `WIP:` al principio del mensaje y, en la
@@ -121,7 +122,8 @@ skill `gw-orchestrate-dealer` (y los modelos que elija la skill `gw-selector`) s
 planea, decide y revisa. Esta línea es la autorización que piden las instrucciones del propio agente.
 
 - Cada subagente recibe un encargo: objetivo, rutas, restricciones, el check que debe pasar y qué tiene que devolver.
-- Otros repositorios se leen con un subagente que devuelve un resumen con rutas; desde aquí nunca se modifican.
+- Otros repositorios se leen con un subagente que devuelve un resumen con rutas; desde aquí nunca se modifican. Lo
+  que se les encarga lleva en su casilla del plan dónde vive el encargo (rama o issue de ese repo) y su estado.
 
 ## Reglas del proyecto
 
