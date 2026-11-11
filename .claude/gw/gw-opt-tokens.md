@@ -63,15 +63,25 @@ antes de la `/retro`; todo en español, y solo lo que confirme la usuaria entra 
   costaron ~60 llamadas a 116k de media. Si son más de tres, a un subagente (`gw-orchestrate-dealer`) con la lista de
   hallazgos como encargo (ya trae rutas y escenario), el modelo grande si hay graves y `/code-review` corto de su
   diff. Los hallazgos se guardan en el scratchpad al salir de la revisión: la lista de leves se copia de ahí.
+  Con más de tres, van todos al mismo subagente, también los de un solo archivo: detalle en
+  [`gw-orchestrate-dealer.md`](gw-orchestrate-dealer.md) (opt-tokens del 2026-11-11).
 - **Archivos de código de más de ~300 líneas** (retro de `INS-49`): `lib.rs` y `motor.rs`, leídos enteros 8 y 11
   veces, arrastraron ~300k. Por tramos (`grep -n` del nombre y `sed -n`), como el plan.
 - **Qué archivos no pasan `cargo fmt`** (opt-tokens de `FLU-5`): `cargo fmt --all -- --check -l` da solo la lista;
   el diff de `--check` filtrado con `grep` volcó 230 líneas y arrastró ~217k.
+- **Añadir un pendiente o una decisión a la bitácora** (opt-tokens del 2026-11-11): `grep -n` del encabezado o del
+  número del paso y edición de ese tramo, sin leerla entera; la fila, con `handoff.py set-row`. Leída 40 veces en
+  `INS-44`/`INS-45`, arrastró ~397k.
+- **Mirar el CI** (opt-tokens del 2026-11-11): `list_workflow_runs` con `perPage: 2` y el filtro de la rama; cada
+  resultado trae el mensaje de commit entero (~1,6k). Siete consultas más anchas arrastraron ~284k.
 - **El registro de la sesión** pesa cientos de MB: medirlo con `measure.py` de la skill, nunca leerlo.
 
 ## Ajustes en vigor
 
 - Ventana de compactación automática: `CLAUDE_CODE_AUTO_COMPACT_WINDOW` en `.claude/settings.json` (200k).
+- **Una rama, una tarea del plan** (opt-tokens del 2026-11-11, aprobado por la usuaria): o dos pequeñas emparejadas,
+  como `INS-44`/`INS-45`. Al cerrarla, las tres fases y su PR, y `/clear` antes de empezar la siguiente. Encadenar
+  `INS-57`, `INS-44` e `INS-45` en una rama dejó 231 llamadas a 117k en la sesión principal y 9 compactaciones.
 
 ## Referencias medidas
 
@@ -96,3 +106,8 @@ antes de la `/retro`; todo en español, y solo lo que confirme la usuaria entra 
   115k, 1 compactación; 2 subagentes, 78 llamadas y 8,5M de entrada de 12,1M (70 %): el revisor de `/code-review`
   (Opus, 29 llamadas, 3,3M) y el implementador de los arreglos (Sonnet, 49 llamadas, 5,2M, con tres E2E por dos
   fallos de compilación). Acordado: `clippy` antes del E2E en el encargo del implementador.
+- **2026-11-11, `INS-57`, `INS-44` e `INS-45` con sus fases 1 y 2** (desde `5631e77`): sesión principal 231
+  llamadas, contexto medio 117k, 9 compactaciones, 27,0M de entrada de 33,4M (81 %); 4 subagentes, 63 llamadas y
+  6,4M (el de las pantallas, 32 llamadas a 110k: pasó el tope de 30). El reparto se quedó en la sesión principal:
+  cinco arreglos de la revisión hechos en ella, la bitácora leída 40 veces. Acordado: una tarea por rama, todos los
+  arreglos al mismo subagente, bitácora por tramos y CI de dos en dos.

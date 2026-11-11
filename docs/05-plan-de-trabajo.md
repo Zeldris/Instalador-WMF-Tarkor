@@ -231,6 +231,11 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
   `bundle.windows.nsis` de `tauri.conf.json` (BMP de 24 bits en `app/src-tauri/windows/`); portada, hierro del riel,
   estados y barra de progreso en `app/src/imagenes/`, 1 MB entre todas como mucho. Va con `INS-56` o después.
   Pendiente de `INS-8`, `INS-51` e `INS-52`: verlas en Windows al 100 % y al 150 %, y en la biblioteca de la Deck.
+- [ ] **INS-59** Tras borrar solo la IA (casilla del desinstalador de Windows o «Borrar datos del juego» en Linux),
+  al volver a abrir Tarkor empieza el asistente en vez de la vista de juego con «El motor de IA no está instalado».
+  Decidido por la usuaria el 2026-11-11 (ver `07`, «Desinstalación»). El borrado del núcleo (`desinstalar.rs`) deja
+  `config.json` sin `asistenteCompletado` (y sin los modelos que ya no están) cuando se va la IA y las partidas se
+  quedan; `07` se pone al día al implementarlo. Pendiente de `INS-8`: verlo en Windows tras reinstalar.
 - [x] **INS-48** (2026-10-25) Carpeta del motor y los modelos elegible antes de descargar y movible desde Ajustes
   (`OLLAMA_MODELS`); espacio necesario frente a libre en cada tarjeta, con la descarga bloqueada si no
   cabe (ver `07` y `11`). Hecho: `carpetaIa` en `config.json`, `nucleo/src/carpetas.rs`

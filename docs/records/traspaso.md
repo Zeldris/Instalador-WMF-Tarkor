@@ -14,7 +14,7 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #15 (2026-11-11, `5631e77`): `INS-15` (pantalla «Licencias y avisos», narrador `llama3.1:8b`) con `INS-7`, `INS-35` e `INS-36`, con la confirmación de la usuaria y el CI de GitHub en verde. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-11: `INS-57` hecha y sus dudas resueltas. `INS-44` e `INS-45` hechas (pendiente de `INS-8`). Fase 1 antes de `main` cerrada y subida (`caedb74`); leves en el paso 19. Fase 2: retro escrita (`retro-2026-11-11-ins45.md`, pendiente) y propuestas de gw-opt-tokens presentadas; falta la decisión de la usuaria, y la de `INS-45` de abajo (no bloquea). Siguiente: con su decisión, aplicar lo aprobado, `reviewed.sh` y subir; PR solo si la usuaria lo confirma. Presupuesto de compactaciones: 8 (van 8). |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-11: `INS-57`, `INS-44` e `INS-45` hechas (pendiente de `INS-8`). Fase 1 cerrada (`caedb74`); leves en el paso 19. Fase 2 decidida por la usuaria y aplicada: regla de borrado en `REVIEW.md`, test `textosNsis.test.ts`, cuatro notas de ahorro; `INS-59` (volver al asistente tras borrar la IA) al plan, fuera de este PR. PR a `main` confirmado por la usuaria; fusionarlo, solo con su confirmación y el CI en verde. Siguiente: revisión corta del test, `reviewed.sh`, subir, CI en verde y crear el PR. Presupuesto de compactaciones: 8 (van 10). |
 | **Tests** | 2026-10-26: núcleo `cargo test -p tarkor-nucleo` 116, `cargo fmt --all --check` en verde, clippy 0 avisos, `tsc -b` 0, `cargo check` del núcleo y la app para Windows (mingw) en verde. Asistente `vitest` 27 y E2E con el Ollama falso: último verde el 2026-10-25. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -32,7 +32,7 @@ cada commit.**
 1. Fusionar el PR #1 del repo del juego (fase 2): dos tests intermitentes de
    `routes/turn.integration.test.ts` y endurecer `lib/prisma.test.ts` (detalle en el
    [plan](../05-plan-de-trabajo.md#dónde-lo-dejamos-2026-09-28)).
-2. Fase 3 (modo empaquetado del juego, `INS-31`…`INS-37`) y fase 4 (`INS-41`…`INS-47`, e `INS-56`: la marca de Tarkor en el asistente cuando el juego fusione `UX-40`; `INS-58`: colocar las imágenes de [`13`](../13-hoja-de-estilos-e-imagenes.md) cuando el generador las entregue).
+2. Fase 3 (modo empaquetado del juego, `INS-31`…`INS-37`) y fase 4 (`INS-41`…`INS-47`, e `INS-56`: la marca de Tarkor en el asistente cuando el juego fusione `UX-40`; `INS-58`: colocar las imágenes de [`13`](../13-hoja-de-estilos-e-imagenes.md) cuando el generador las entregue; `INS-59`: tras borrar solo la IA, al reabrir empieza el asistente, decidido por la usuaria el 2026-11-11).
 3. Pendientes leves de la revisión de `INS-48` (no vuelven a revisarse en su PR): `bloqueado` no descuenta lo
    ya descargado en Ajustes; no se impide mover la carpeta con una descarga en marcha (el asistente hoy no lo
    permite); `Estado::ia()` lee `config.json` en cada llamada; el aviso de restos del origen solo va a stderr;
@@ -120,8 +120,7 @@ cada commit.**
     `--info-desinstalar` usa `Config::cargar`, que aparta un `config.json` corrupto; el «desinstalar antes de
     instalar» de una reinstalación corre el desinstalador sin `/UPDATE` (enseña las casillas y borra los registros);
     en Linux no se borran las carpetas de WebKit de `io.github.zeldris.tarkor`; una instalación previa en
-    `%LOCALAPPDATA%\Tarkor` se queda ahí al actualizar; `ia_borrable` se fía del nombre `Tarkor IA`; los textos de
-    las casillas de `installer.nsi` repiten a mano los de `textos.ts`, sin test que los ate; `texto_gb` usa 1024³ y
+    `%LOCALAPPDATA%\Tarkor` se queda ahí al actualizar; `ia_borrable` se fía del nombre `Tarkor IA`; `texto_gb` usa 1024³ y
     `modelos_sobrantes` 1e9; brazo `Orden::Normal` inalcanzable y `use` interno repetido en `lib.rs`. `desinstalar::mensaje_error`
     toma cualquier `InvalidInput` por «IA no borrable» y, en el resto, la causa real no llega a los registros. Pendiente de
     `INS-8` (Windows real): el aviso del desinstalador cuando el borrado falla (nuevo, solo compilado en el CI), el
@@ -130,9 +129,6 @@ cada commit.**
 ## Decisiones de la usuaria que bloquean algo
 
 - Firma de código en Windows (`INS-11`) y licencias (`INS-12`, `INS-15`).
-- `INS-45` (no bloquea el PR): tras borrar solo la IA, `config.json` conserva `asistenteCompletado`; al reabrir sale
-  la vista de juego con «El motor de IA no está instalado» y se sale por Ajustes → Reparar. Falta decidir si al
-  reabrir se vuelve al asistente (hoy `docs/07` dice que la configuración se queda).
 
 ## Comandos para comprobar el estado
 

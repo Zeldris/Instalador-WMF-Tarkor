@@ -12,6 +12,13 @@ entrada de la tarea, 17,2M fueron de subagentes, con 52k de arranque cada uno.
 - El diff del arreglo pasa la revisión corta igual que el trozo (el implementador puede defender su diseño: esa
   revisión es el contrapeso).
 
+## Arreglos de la revisión de la rama (fase 1)
+
+- Con más de tres arreglos, van **todos al mismo subagente** (`sonnet`), también los de un solo archivo cuyo sitio
+  dio el revisor: la excepción de la skill («un arreglo de un archivo lo hace la sesión principal») vale con tres
+  o menos. El encargo apunta al archivo de hallazgos; la sesión principal lee su diff y pasa la revisión corta.
+  En `INS-44`/`INS-45`, cinco arreglos hechos en la sesión principal costaron ~3-4M (opt-tokens del 2026-11-11).
+
 ## Encargo del revisor
 
 - Lleva el **rango del diff** (`git diff <a> <b>`), los archivos del contrato que mirar (el documento de `docs/`,
