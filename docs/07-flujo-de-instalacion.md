@@ -97,6 +97,11 @@ carpetas existentes, LM Studio importa modelos).
   - "Borrar también el motor de IA y los modelos (X GB)"
 - **Linux (AppImage):** no hay desinstalador. En Ajustes hay un botón "Borrar datos del juego"
   que ofrece lo mismo, y la página de descarga explica qué carpetas borrar a mano.
+  Decidido el 2026-11-11 (`INS-45`): el botón, al pie de Ajustes y solo en Linux, abre un diálogo con las
+  mismas dos casillas sin marcar y el tamaño de la IA (como el diálogo de desinstalar de Heroic, con sus
+  casillas); "Borrar" está desactivado hasta marcar una. Al confirmar, como un desinstalador: para el motor,
+  borra (los registros siempre, igual que en Windows) y enseña "Datos borrados. Ya puedes borrar el archivo
+  .AppImage" con un botón "Cerrar Tarkor". Al volver a abrirlo empieza el asistente.
 
 ## Checklist de buenas prácticas
 

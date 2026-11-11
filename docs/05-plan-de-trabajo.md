@@ -186,7 +186,7 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
   sobrantes, `CopiarInforme` y la pantalla del motor detenido (Reintentar, "Cambiar a un perfil más ligero");
   tests de vitest y E2E `app/e2e/rendimiento.e2e.mjs`. Pendiente de `INS-8`: en Windows, la vigilancia y el
   reinicio del motor, el informe con rutas de Windows (`anonimizar`) y la línea de uso con una gráfica real.
-- [ ] **INS-44** NSIS: castellano, instalación por usuario, desinstalador con las dos casillas. Decidido el
+- [x] **INS-44** NSIS: castellano, instalación por usuario, desinstalador con las dos casillas. Decidido el
   2026-11-11 (ver `04`): plantilla NSIS propia (`app/src-tauri/windows/installer.nsi`), copia de la de Tauri
   2.12.0 con la casilla de Tauri cambiada por las dos de `07`; los ganchos (`installerHooks`) no pueden añadir
   una casilla a la página de confirmación. Lo borra `tarkor.exe --desinstalar [--partidas] [--ia]`, llamado antes
@@ -195,11 +195,12 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
   que para si cambia la versión de `@tauri-apps/cli`; (c) CI de Windows que construye el `.exe`, instala en
   silencio, siembra datos y desinstala con `/BORRARPARTIDAS` y `/BORRARIA`.
   La plantilla instala en `%LOCALAPPDATA%\Programs\Tarkor` (`07`; la de Tauri usaría `%LOCALAPPDATA%\Tarkor`,
-  que es de la IA y los registros). Hechos (a) y (b) el 2026-11-11; (c) en el job `instalador-windows` de
-  `app.yml`, con `tools/qa/desinstalar-windows.ps1`. Pendiente de `INS-8`: verlo en pantalla (casillas, tamaño).
+  que es de la IA y los registros). Hecho el 2026-11-11: (a), (b) y (c), el job `instalador-windows` de
+  `app.yml` con `tools/qa/desinstalar-windows.ps1`, en verde a la primera (el `.exe` queda como artefacto). Pendiente de `INS-8`: verlo en pantalla (casillas, tamaño).
 - [ ] **INS-45** AppImage (+ `.deb` opcional) compilado en Ubuntu 22.04. Incluye «Borrar datos del juego» en
   Ajustes (Linux, `07`), con el mismo borrado del núcleo que el desinstalador de `INS-44`; el CI de Linux
-  construye el `.AppImage` y el `.deb`.
+  construye el `.AppImage` y el `.deb`. Diseño del diálogo decidido el 2026-11-11 (ver `07`): dos casillas, «Borrar»
+  desactivado sin ninguna, para el motor, borra y cierra.
 - [ ] **INS-46** Workflow de GitHub Actions en el repo privado que publica releases con `SHA256SUMS`
   en este repo.
 - [ ] **INS-47** Pantalla "Licencias de terceros" generada en el build.
