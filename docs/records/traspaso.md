@@ -14,7 +14,7 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #13 (2026-11-11, `db4e541`): `FLU-8` (flujo Galivelop-workflow v0.5.1), con la confirmación de la usuaria y el CI de GitHub en verde. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-11: `INS-15`, pantalla «Licencias y avisos» del instalador (paso 2 y Ajustes): «Built with Llama», aviso de Meta, política de uso con «Copiar enlace» y textos completos (Llama 3.1, MIT, Apache 2.0) en `app/src/licencias/`; vitest y E2E en verde (la primera pasada del E2E cayó al arrancar WebKitWebDriver, antes de ninguna prueba; la segunda, en verde). Los 14 hallazgos del flujo (punto 16) siguen esperando `gw-harvest` (no está en esta sesión). Siguiente: fase 1 de revisión (`/code-review --max-findings all` contra `origin/main`) antes de `main`. Presupuesto de compactaciones: 1. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-11: `INS-15`, fase 1 de revisión antes de `main` (13 hallazgos, SHIP WITH FIXES). Hechos los de docs (rango 9,6 GB, README, memoria estimada con fuente, `NOTICE` pendiente en `08`); leves en el punto 18. En curso, con un subagente: variables del contrato (`TARKOR_NARRADOR_BASE`), licencias validadas y leídas del núcleo, Ajustes sin perder estado y E2E de la pantalla. Siguiente: revisar ese diff, commit, y fase 2 (`gw-opt-tokens` y `retro`). Presupuesto de compactaciones: 1. |
 | **Tests** | 2026-10-26: núcleo `cargo test -p tarkor-nucleo` 116, `cargo fmt --all --check` en verde, clippy 0 avisos, `tsc -b` 0, `cargo check` del núcleo y la app para Windows (mingw) en verde. Asistente `vitest` 27 y E2E con el Ollama falso: último verde el 2026-10-25. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -111,6 +111,10 @@ cada commit.**
     `git add -A`, y no usa `cfg`. `pre-commit`: `md_prose_dropped` lanza `sed` y `grep` por línea, y `PROSE_ASSIGN`
     deja pasar un secreto de una palabra en mayúscula entre comillas en un `.md`.
 17. `INS-7`, `INS-8` y la fase 5, cuando la usuaria pueda probar en la Steam Deck o en Windows.
+18. Leves de la fase 1 antes de `main` (`INS-15`, `INS-7`, 2026-11-11; no vuelven a revisarse en su PR): no hay
+    migración de `qwen2.5:7b` a `llama3.1:8b` para quien ya completó el asistente (hoy no hay versión publicada;
+    hará falta antes de cambiar un modelo tras `INS-46`); «Copiado» de la pantalla de licencias no se borra nunca;
+    el motor sale solo como «Ollama · MIT», sin los avisos de llama.cpp/ggml ni de los runtimes de GPU.
 
 ## Decisiones de la usuaria que bloquean algo
 

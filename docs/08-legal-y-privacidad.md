@@ -54,8 +54,12 @@ Qué exige a Tarkor:
 
 - Mostrar **«Built with Llama»** de forma visible en la interfaz, la página de «Acerca de» o la
   documentación del producto (§1.b.i), e incluir una copia de la licencia.
-- Incluir un archivo de aviso con el texto: «Llama 3.1 is licensed under the Llama 3.1 Community
-  License, Copyright © Meta Platforms, Inc. All Rights Reserved.» (§1.b.iii).
+- Incluir un archivo de aviso («Notice») con el texto: «Llama 3.1 is licensed under the Llama 3.1 Community
+  License, Copyright © Meta Platforms, Inc. All Rights Reserved.» (§1.b.iii). La cláusula obliga a quien
+  distribuye copias de los materiales de Llama; el instalador no las lleva (el motor descarga el modelo del
+  registro de Ollama), pero el texto se muestra igual en la pantalla de licencias. **Falta:** un archivo
+  `NOTICE` con ese texto en el paquete de cada versión publicada, junto a las licencias de terceros del build
+  (`INS-46`), y en el del juego.
 - Cumplir la [política de uso aceptable](https://llama.meta.com/llama3_1/use-policy) (§1.b.iv):
   se enlaza desde la pantalla de licencias.
 - Un modelo **entrenado o ajustado** con Llama o con sus salidas y distribuido tiene que llevar
@@ -65,8 +69,8 @@ Qué exige a Tarkor:
 - Las salidas se dan «tal cual» y son responsabilidad de quien usa el modelo (§3).
 
 Va en la pantalla «Licencias de terceros» del juego y en la del instalador (`INS-15`). La del instalador ya
-está: «Licencias y avisos» (ver `11`), con «Built with Llama», el aviso, el enlace a la política y la licencia
-completa dentro de la app. Falta la del juego.
+está: «Licencias y avisos» (ver `11`), con «Built with Llama», el texto del aviso, el enlace a la política y la
+licencia completa dentro de la app. Faltan la del juego y el archivo `NOTICE` del paquete (arriba).
 
 Las licencias de los modelos hay que **comprobarlas en la fuente oficial** en el momento de
 publicar: cambian entre versiones.

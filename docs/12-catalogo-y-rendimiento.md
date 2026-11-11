@@ -48,6 +48,12 @@ antes, ver `08`).
 
 Todos incluyen el cronista (`qwen2.5:1.5b-instruct`) y `nomic-embed-text`.
 
+La memoria de Equilibrado y Máximo con `llama3.1:8b` es una **estimación** (2026-11-11), no una medida: los
+~7 y ~11 GB de antes más 0,5 GB, que salen de los pesos (4,9 GB en Q4_K_M frente a 4,7 de `qwen2.5:7b`, según
+[ollama.com/library/llama3.1](https://ollama.com/library/llama3.1)) y de una caché de contexto mayor (32 capas y
+8 cabezas KV frente a 28 y 4: unos 0,3 GB más a 8192 de contexto en q8_0). Se mide en la Steam Deck y en Windows
+con `INS-8` y se corrige aquí y en el catálogo.
+
 - **Mínimo** reutiliza un único modelo de lenguaje para todo: una sola descarga pequeña y un solo
   modelo en memoria.
 - **Ligero** cambia `qwen2.5:3b` (licencia Qwen Research, restrictiva) por `qwen3.5:2b` (Apache
