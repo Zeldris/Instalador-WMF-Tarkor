@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.5.0
+# galivelop-workflow v0.5.1
 # Lists the files that are code among those changed between two commits: everything that matches none of the
 # config's `content` regexes (Python syntax, on repo-relative paths). The review mark file and the local CI log
 # (`ciLocalLog`, written by ci-local.py --record) are never code; the workflow's own policy and guards always are, whatever `content` says (.claude/gw.json, .claude/settings.json,

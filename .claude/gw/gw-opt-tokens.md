@@ -1,4 +1,4 @@
-<!-- galivelop-workflow v0.5.0 -->
+<!-- galivelop-workflow v0.5.1 -->
 # gw-opt-tokens — notas del proyecto
 
 Las lee la skill `gw-opt-tokens` antes de proponer nada, y se actualizan cuando la usuaria aprueba un cambio. El flujo
@@ -34,7 +34,9 @@ antes de la `/retro`; todo en español, y solo lo que confirme la usuaria entra 
 - **Check en una llamada y encargos por tramos** (opt-tokens de `INS-42`): en
   [`gw-orchestrate-dealer.md`](gw-orchestrate-dealer.md), «Encargo del implementador».
 - **La fila de la bitácora, sola** (opt-tokens de `INS-42`): `python3 .claude/gw/scripts/recover.py --state` la da (o
-  `grep -n '<rama>' docs/records/traspaso.md`), y se escribe con un reemplazo de texto. La bitácora entera se leyó 16 veces en `INS-42`.
+  `grep -n '<rama>' docs/records/traspaso.md`), y se escribe con `handoff.py set-row` (retro de `FLU-8`). La bitácora entera se leyó 16 veces en `INS-42`.
+- **Revisión de un `/gw-update`** (retro de `FLU-8`): la fase 1 revisa solo lo propio y las adaptaciones del flujo
+  (`REVIEW.md`); los 68 archivos copiados de v0.5.1 costaron 1,5 M sin nada arreglable aquí.
 
 ## Costes conocidos
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.5.0
+# galivelop-workflow v0.5.1
 # Git commit-msg hook (copied into projects as .githooks/commit-msg; enable with: git config core.hooksPath .githooks).
 #   - When the commit stages the config's `log` file, runs the workflow's `handoff.py check --date <today>` on the
 #     staged version of it, so a log error (the "Updated" date, a malformed or oversized row) stops the commit

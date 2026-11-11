@@ -3,7 +3,7 @@ name: retro
 description: "Conduct a retrospective on a coding session. Use before each push or PR to the protected branch (after /code-review and /gw-opt-tokens), when a phase or milestone closes, or when the user asks for a retro."
 license: MIT (see LICENSE-mattpocock-skills)
 metadata:
-  version: "0.5.0"
+  version: "0.5.1"
   source: "mattpocock/skills@5beb35b"
 ---
 

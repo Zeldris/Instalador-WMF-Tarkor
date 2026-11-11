@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.5.0
+# galivelop-workflow v0.5.1
 """A unittest TestCase defined after the `unittest.main()` call never runs, and the check stays green (a check for CI).
 
 `unittest.main()` runs the tests that exist when it is called and then exits. A `class X(unittest.TestCase)` written

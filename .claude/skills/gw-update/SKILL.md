@@ -5,7 +5,7 @@ disable-model-invocation: true
 license: MIT
 compatibility: Claude Code or any Agent Skills agent; git and python3 3.8+; the Galivelop-workflow repo cloned or added to the session
 metadata:
-  version: "0.5.0"
+  version: "0.5.1"
   source: "Galivelop workshop"
 ---
 
@@ -82,7 +82,11 @@ hand.
 4. Personal notes: the missing ones are created by the run above. For each `personal note … differs` line, show the
    user `diff <source> <target>` (the project's copy is never overwritten and gets no `.gw-new`) and merge by hand
    only what they accept. Nothing personal ever goes into the workflow repo; `--no-personal-notes` skips them.
-5. Set `version` in `.claude/gw.json` to Y once the proposals are reviewed.
+5. Every `WARNING: <file>:<line> uses the old name X; replace it with Y` line is a path or name of the workflow that
+   a file of the project still cites under its pre-0.5 name. Show the list to the user and rename each use (or tell
+   them which ones you left and why) before closing; `--check` exit 0 does not cover them. `legacyNames: false`
+   turns the list off.
+6. Set `version` in `.claude/gw.json` to Y once the proposals are reviewed.
 
 ## 5. Check and commit
 

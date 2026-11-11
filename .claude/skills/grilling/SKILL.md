@@ -3,7 +3,7 @@ name: grilling
 description: Grill the user relentlessly about a plan, decision, or idea. Use when the user wants to stress-test their thinking, or uses any 'grill' trigger phrases.
 license: MIT (see LICENSE-mattpocock-skills)
 metadata:
-  version: "0.5.0"
+  version: "0.5.1"
   source: "mattpocock/skills@5beb35b"
 ---
 

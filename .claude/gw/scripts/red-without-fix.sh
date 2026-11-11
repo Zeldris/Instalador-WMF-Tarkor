@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.5.0
+# galivelop-workflow v0.5.1
 # Checks that a new test FAILS without the fix it covers (a test that passes either way proves nothing).
 # With the fix still uncommitted: it stashes the fix files, runs the test command (it must fail), restores them and
 # runs it again (it must pass).
@@ -105,7 +105,19 @@ enclosing() {  # <file>; line numbers on stdin -> the lines above each one that 
 }
 kindchg="uncommitted"; verb="stashing"
 [ -z "$fixat" ] || { kindchg="committed"; verb="reverting"; }
+# Text and data files (nonTestExtensions of .claude/gw.json) hold no test code: prose such as "improve it (URL)" would
+# match `it(`. The extension is what follows the last dot of the file name, compared in lower case; a name without a
+# dot (Makefile) or with only a leading one (.env) has none and is always searched.
+skipexts="$(python3 "$here/config.py" --root "$root" get nonTestExtensions)" || {
+  echo "red-without-fix: cannot read nonTestExtensions; fix .claude/gw.json: python3 $here/config.py --root $root validate" >&2; exit 2; }
 for f in "$@"; do
+  base="${f##*/}"; ext=""
+  case "${base#.}" in *.*) ext="$(printf '%s' "${base##*.}" | tr '[:upper:]' '[:lower:]')" ;; esac
+  case "$ext" in *[!a-z0-9]*) ext="" ;; esac  # the schema allows only [a-z0-9]: anything else (a newline would split the grep patterns) is never skipped
+  if [ -n "$ext" ] && printf '%s\n' "$skipexts" | grep -Fxq -- "$ext"; then
+    echo "red-without-fix: $f is a .$ext text/data file (nonTestExtensions), so it is not searched for test code"
+    continue
+  fi
   if [ -n "$fixat" ]; then
     diff="$(git diff "$fixc^" "$fixc" -U0 -- "$f" 2>/dev/null)"
     hit="$( { printf '%s\n' "$diff" | grep -Ev '^(\+\+\+|---|diff --git|index )'

@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.5.0
+# galivelop-workflow v0.5.1
 """Nothing private reaches the public repo (plan §10, E2): key formats, e-mail addresses and private names.
 
   python3 private-check.py --range A..B   # what the commits of A..B add, one commit at a time
   python3 private-check.py --commits -    # the same for the commit shas on stdin, one per line (the pre-push hook
                                           # passes the commits each ref pushes)
   python3 private-check.py --all          # every tracked file as it is in the working tree (paths and content)
-  options: --no-names (skip the private names), --root PATH, --rev REV (read .claude/gw.json as commit REV has it)
+  options: --no-names (skip the private names), --root PATH, --rev REV (read .claude/gw.json as commit REV has it),
+           --base SHA / --remote NAME / --ref BRANCH (the pre-push passes them: the remote tip already pushed, the
+           remote and the branch pushed, so a failure names the exact command that fixes only the unpushed commits)
 
 What a commit adds: its added lines (against its parent; a merge, only the lines that are in none of its parents),
 the paths of the files it adds (renames included: --no-renames) and its message. So a value added in one commit and
@@ -37,7 +39,14 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.dont_write_bytecode = True
-import config  # noqa: E402
+try:
+    import config  # noqa: E402
+except Exception:  # noqa: BLE001 - a broken or missing config.py must exit 2 (see run()), never Python's own 1 = "found something"
+    import traceback
+    IMPORT_ERROR = traceback.format_exc()
+    config = None
+else:
+    IMPORT_ERROR = ""
 
 PROG = "private-check"
 ALLOW_MARK = "gw-allow-private"
@@ -105,6 +114,8 @@ class Scanner:
         self.keys, self.emails, self.allowed, self.names = keys, emails, {a.lower() for a in allowed}, names
         self.hits = []
         self.total = 0
+        self.current = None  # the commit being scanned
+        self.bad = []  # shas of the commits with a finding, in scan order
 
     def line(self, where, text):
         if ALLOW_MARK in text:
@@ -118,6 +129,8 @@ class Scanner:
             found += [("e-mail", m.group(0)) for m in EMAIL.finditer(text) if not email_allowed(m.group(0), self.allowed)]
         if self.names is not None:
             found += [("private name", m.group(0)) for m in self.names.finditer(text)]
+        if found and self.current and self.current not in self.bad:
+            self.bad.append(self.current)
         for kind, value in found:
             self.total += 1
             if len(self.hits) < MAX_HITS:
@@ -154,6 +167,7 @@ def parse_hunks(diff, scan, suffix):
 def scan_commit(root, sha, scanner):
     short = sha[:7]
     suffix = f" (commit {short})"
+    scanner.current = sha
     parents = git(root, "rev-list", "--parents", "-n", "1", sha).split()[1:]
     if len(parents) > 1:
         status = git(root, "diff-tree", "-r", "-c", "--no-renames", "--no-commit-id", "--name-status", "-z", sha)
@@ -190,6 +204,45 @@ def scan_tree(root, scanner):
             scanner.line(f"{path}:{n}", text)
 
 
+def amend_advice(root, cfg, args, shas, bad):
+    """The lines that say the offending commits are NOT pushed yet and how to fix only them (D47). Only for the
+    pre-push (--commits with --remote); a manual --range cannot tell what is published. `git commit --amend` when only
+    the checked-out last commit is at fault; else `git rebase -i <parent of the first offending commit>` (a commit the
+    remote has, or the first one of the push), with --rebase-merges when the push has merges, so a merge of main
+    after the fault is kept and main's commits are not copied."""
+    if args.range or args.remote is None:
+        return []
+    tip = shas[-1]
+    head = git(root, "rev-parse", "HEAD").strip()
+    where = f" ({args.ref})" if args.ref else ""
+    listed = ", ".join(s[:7] for s in bad)
+    out = [f"{PROG}: the commit(s) with the finding ({listed}) are NOT pushed yet, so they can be fixed safely; "
+           f"never rewrite what is already on the remote"]
+    if bad == [tip] and tip == head:
+        out.append(f"{PROG}: it is only the last commit; fix the files and run: git add -A && git commit --amend")
+        return out
+    merges = any(len(git(root, "rev-list", "--parents", "-n", "1", sha).split()) > 2 for sha in shas)
+    opts = " --rebase-merges" if merges else ""
+    branch = f" {args.ref}" if args.ref and tip != head else ""
+
+    def parent(sha):
+        parents = git(root, "rev-list", "--parents", "-n", "1", sha).split()[1:]
+        return git(root, "rev-parse", parents[0]).strip() if parents else None
+
+    first_parent = parent(shas[0])
+    remote_has = bool(args.base) or (first_parent is not None and git(root, "branch", "-r", "--contains", first_parent).strip())
+    if remote_has:
+        base = parent(bad[0])
+        cmd = f"git rebase -i{opts} {base[:12]}{branch}" if base else f"git rebase -i{opts} --root{branch}"
+        out.append(f"{PROG}: rewrite only the unpushed commits, from the one before the first with the finding: "
+                   f"{cmd}  (mark {listed} as `edit`, fix each, amend it, git rebase --continue)")
+    else:
+        cmd = f"git rebase -i{opts} {first_parent[:12]}{branch}" if first_parent else f"git rebase -i{opts} --root{branch}"
+        out.append(f"{PROG}: no remote base found for{where or ' this push'} (nothing of it is on the remote); fix "
+                   f"the commits of the push with: {cmd}  (mark {listed} as `edit`)")
+    return out
+
+
 def commits_of(root, args):
     if args.range:
         if ".." not in args.range or "..." in args.range:
@@ -220,6 +273,9 @@ def main(argv=None):
     parser.add_argument("--no-names", action="store_true", help="skip the private names of .claude/gw.local.json")
     parser.add_argument("--root", help="project path (default: as config.py finds it)")
     parser.add_argument("--rev", help="read .claude/gw.json as this commit has it (the pushed one)")
+    parser.add_argument("--base", help="sha of the remote tip already pushed (names the fix command on failure)")
+    parser.add_argument("--remote", help="remote name; its protected branch is the fallback base of the fix command")
+    parser.add_argument("--ref", help="branch being pushed (named in the fix command)")
     args = parser.parse_args(argv)
     try:
         cfg = config.load(args.root, args.rev)
@@ -237,11 +293,13 @@ def main(argv=None):
             else:
                 names = name_regex(local["privateNames"])
         local_allow = (config.load_local(root) or {}).get("allowEmails", [])
+        shas = []
         scanner = Scanner(key_formats(root), settings["emails"], settings["allowEmails"] + local_allow, names)
         if args.all:
             scan_tree(root, scanner)
         else:
-            for sha in commits_of(root, args):
+            shas = commits_of(root, args)
+            for sha in shas:
                 scan_commit(root, sha, scanner)
     except (config.ConfigError, CheckError, OSError) as exc:
         print(f"{PROG}: {exc}", file=sys.stderr)
@@ -258,10 +316,32 @@ def main(argv=None):
     if args.all:
         print(f"{PROG}: remove it from the files ({allow}), then commit: git commit -a", file=sys.stderr)
     else:
-        print(f"{PROG}: remove it from the commits that add it, not in a new one ({allow}); rewrite the unpushed "
-              f"commits: git rebase -i <the remote branch>", file=sys.stderr)
+        print(f"{PROG}: remove it from the commits that add it, not in a new one ({allow})", file=sys.stderr)
+        try:
+            lines = amend_advice(root, cfg, args, shas, scanner.bad) if shas and scanner.bad else []
+        except CheckError:
+            lines = []
+        if not lines:
+            lines = [f"{PROG}: rewrite only the unpushed commits: git rebase -i <the remote branch>"]
+        for line in lines:
+            print(line, file=sys.stderr)
     return 1
 
 
+def run(argv=None):
+    """main(), but a crash exits 2 with its trace: Python's own exit 1 for an exception means "found something"."""
+    if config is None:
+        print(IMPORT_ERROR, file=sys.stderr)
+        print(f"{PROG}: cannot load config.py (above), not a finding; reinstall the scripts: python3 scripts/apply.py .", file=sys.stderr)
+        return 2
+    try:
+        return main(argv)
+    except Exception:  # noqa: BLE001 - any bug must not read as a finding
+        import traceback
+        traceback.print_exc()
+        print(f"{PROG}: internal error (above), not a finding; reproduce with: python3 scripts/private-check.py --all", file=sys.stderr)
+        return 2
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run())

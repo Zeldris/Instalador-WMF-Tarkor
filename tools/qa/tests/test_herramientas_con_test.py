@@ -1,6 +1,6 @@
 """QA-113 (retro del 2026-10-19): toda herramienta del proyecto (tools/ y los scripts de las skills) llega con su test.
 
-`mapa-agente.py`, `enlaces-md.py`, `matriz-pruebas.py` y `medir.py` entraron sin test y el `/code-review` les
+`agent-map.py`, `md-links.py`, `matriz-pruebas.py` y `medir.py` entraron sin test y el `/code-review` les
 encontró seis fallos (cifras dobles en medir.py, bloques de código con sangría, `--generar` que borraba filas).
 Cada una tiene su `tests/test_<nombre>.py` (guiones como `_`), salvo las de EXCEPCIONES, que necesitan el juego,
 Postgres o una sesión de Claude (en el instalador: vitest, cargo, apt o la rama real) y se prueban al usarlas.

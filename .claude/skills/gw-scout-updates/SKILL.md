@@ -5,7 +5,7 @@ disable-model-invocation: true
 license: MIT
 compatibility: Claude Code or any Agent Skills agent; git; python3 for scripts/ (standard library only); web search for step 3
 metadata:
-  version: "0.5.0"
+  version: "0.5.1"
   source: "Galivelop workshop; generalised from the Tarkor and installer gw-scout-updates"
 ---
 

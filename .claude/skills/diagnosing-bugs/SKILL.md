@@ -3,7 +3,7 @@ name: diagnosing-bugs
 description: Diagnosis loop for hard bugs and performance regressions. Use when the user says "diagnose"/"debug this", or reports something broken/throwing/failing/slow.
 license: MIT (see LICENSE-mattpocock-skills)
 metadata:
-  version: "0.5.0"
+  version: "0.5.1"
   source: "mattpocock/skills@5beb35b"
 ---
 

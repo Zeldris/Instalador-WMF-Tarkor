@@ -132,9 +132,10 @@ Ver [`06`](06-inventario-exclusiones.md).
   descarga de Chromium, pasado desde aquí (382 tests de `tools/qa`).
 - [ ] **INS-35** Backend: `SYSTEM` del narrador incrustado en build; narrador con modelo base +
   `system` por petición detrás de variable de entorno; leer `TARKOR_NUM_THREAD`,
-  `TARKOR_NUM_BATCH`, `TARKOR_NUM_CTX_NARRADOR` y `TARKOR_MODELOS_SIN_PENSAR` (ver `12`).
+  `TARKOR_NUM_BATCH`, `TARKOR_NUM_CTX_NARRADOR` y `TARKOR_MODELOS_SIN_PENSAR` (ver `12`). Encargo: sin rastro en
+  el juego (2026-11-11: ni rama, ni commit, ni mención); hay que lanzarlo y apuntar aquí su rama o issue.
 - [ ] **INS-36** Backend: CORS restringido y escucha solo en `127.0.0.1` en modo empaquetado; rutas de
-  imágenes y datos por variable de entorno.
+  imágenes y datos por variable de entorno. Encargo: el mismo que `INS-35`, sin rastro en el juego (2026-11-11).
 - [ ] **INS-37** Menú del juego: enlace a Ajustes → Rendimiento de la IA. Contrato fijado (2026-11-04, `04`):
   «Rendimiento de la IA» en el menú solo si `window.__TARKOR__.abrirAjustes` es una función, y la llama al pulsarlo.
   Falta: hacerlo en el juego (encargo a una sesión del juego) e inyectar la función en `INS-41`.
@@ -244,3 +245,7 @@ ganchos, `.claude/gw/scripts`, `tools/qa` y las skills ([runbook](runbooks/skill
   salen del CI del proyecto (los prueba el repo del flujo). `tools/qa` deja `ci-local.py` y sus tests, que ya trae el
   flujo; `instalar-entorno.sh` instala con `sudo -n` si no es root. `REVIEW.md` etiqueta cada regla con
   `(check: …)` o `(criterio)`. **Pendiente:** el CI de GitHub sigue sin cuota; `app.yml` no ha corrido allí.
+- [x] **FLU-8** (2026-11-11) `/gw-update` a Galivelop-workflow v0.5.1 (parche): scripts, skills, ganchos y
+  `check.yml` al día; `worktree.baseRef: "head"` en `settings.json`. `REVIEW.md` gana la regla de `## Tests` (un doble
+  pide también una prueba de humo contra el real) y el docstring de `test_herramientas_con_test.py` usa los nombres
+  nuevos de los scripts.

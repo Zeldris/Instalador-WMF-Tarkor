@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.5.0
+# galivelop-workflow v0.5.1
 # Git pre-push hook (copied into projects as .githooks/pre-push; enable with: git config core.hooksPath .githooks).
 #   - While it runs, keeps a marker `gw-push-in-progress.<pid>` in this worktree's own git dir (one per linked worktree, one per push) with its pid
 #     and, per pushed ref, the LOCAL sha and local branch, so the Stop hook (before-stop.py) does not tell an agent to
@@ -10,7 +10,9 @@
 #     gains from the remote tip, commits other branches already have included).
 #   - Runs scripts/private-check.py (when the project has it) on the commits each ref pushes: key formats, e-mail
 #     addresses not allowed and the private names of the local .claude/gw.local.json, in their added lines, added
-#     paths and messages; privateCheck: false in the pushed commit's config turns it off. Fails closed.
+#     paths and messages; privateCheck: false in the pushed commit's config turns it off. Fails closed. A refusal says
+#     those commits are not pushed yet and gives the command that fixes only them (git commit --amend, or
+#     git rebase -i <base>).
 #   - Reads .claude/gw.json as each pushed commit has it (never the working tree's); a pushed commit without a valid
 #     one is refused.
 #   - Runs every `check` command of that config on the commit being pushed (a temporary worktree when it is not
@@ -24,6 +26,10 @@
 #     (a push that is not to the protected branch only; scripts/check-green.sh keeps the record in the git common dir,
 #     scripts/check.sh writes it, and a green push records it). Protected pushes never read nor write it; if the helper
 #     is missing or fails the check just runs. GW_CHECK_CACHE=0 git push runs it anyway.
+#   - Also skips it (same conditions, `checkReuseMark` on) for a commit whose single parent's tree is recorded green and
+#     whose diff from that parent is only the `reviewMark` file added or edited (no other path, no mode change, no
+#     delete or rename): the mark commit of scripts/reviewed.sh. And one `git push` of the same tree to the protected
+#     branch and to another branch runs the check once, with the protected branch's (stricter) run.
 #   - To the protected branch, in both pushToProtected modes (with `pr` the PR hook also guards PRs): code needs the
 #     review mark (scripts/reviewed.sh) to name an ancestor with no code after it. The branch is protected when the
 #     pushed commit, the remote tip or the working tree names it so; what is content and where the mark lives come
@@ -42,10 +48,14 @@ remote="${1:-origin}"
 # Git's ref lines come on stdin: save them before anything else can read it.
 work="$(mktemp -d "${TMPDIR:-/tmp}/gw-pre-push.XXXXXX")" || { echo "pre-push: cannot create a temp dir; free space in ${TMPDIR:-/tmp} and retry: git push" >&2; exit 1; }
 worktree=""
+log=""  # the temp log of the check commands (the lock names it); removed on any exit
+checklock=""  # 1 while this hook holds the check lock (<git common dir>/gw/check.lock, shared with scripts/check.sh)
 pushmark=""  # <this worktree's git dir>/gw-push-in-progress.<pid of this hook>: line 1 the pid of this hook, then one "<local sha> <branch>" line per ref pushed
 cleanup() {
   # The marker name holds this hook's pid, so no other push ever rewrites it.
   if [ -n "$pushmark" ]; then rm -f "$pushmark" 2>/dev/null; fi
+  if [ -n "$checklock" ]; then bash "$scripts/check-green.sh" lock-release "$$" < /dev/null 2>/dev/null; fi
+  if [ -n "$log" ]; then rm -f "$log" 2>/dev/null; fi
   if [ -n "$worktree" ]; then git -C "$root" worktree remove --force "$worktree" >/dev/null 2>&1; rm -rf "$worktree" "${worktree%.d}"; fi
   rm -rf "$work"
 }
@@ -145,6 +155,38 @@ link_shared() {  # link_shared <sha> <worktree>: worktreeLinks from the main che
   done <<<"$links"
 }
 checkdir=""
+mark_only_parent() {  # mark_only_parent <sha>: prints the parent's sha when <sha> only adds/edits the reviewMark file on it
+  local sha="$1" mark_file parents parent raw expect
+  parents="$(git rev-list --parents -n 1 "$sha" 2>/dev/null)" || return 1
+  # shellcheck disable=SC2086  # two shas or one or three: split on purpose
+  set -- $parents
+  [ "$#" -eq 2 ] || return 1  # a root commit or a merge: not a mark commit
+  parent="$2"
+  # The rule is the parent's, never the pushed commit's own (a commit cannot relax what judges it).
+  [ "$(cfg_at "$parent" checkReuseMark 2>/dev/null)" = "true" ] || return 1
+  mark_file="$(cfg_at "$parent" reviewMark 2>/dev/null)" || return 1
+  [ -n "$mark_file" ] || return 1
+  [ "$(git rev-parse "$parent:.claude/gw.json" 2>/dev/null)" = "$(git rev-parse "$sha:.claude/gw.json" 2>/dev/null)" ] || return 1
+  raw="$(git -c core.quotePath=false diff-tree -r --no-renames --raw "$parent" "$sha" 2>/dev/null)" || return 1
+  [ "$(printf '%s\n' "$raw" | grep -c .)" -eq 1 ] || return 1  # exactly one path changed
+  # ":<old mode> <new mode> <old sha> <new sha> <status>\t<path>": the mark file, modified without a mode change, or
+  # added as a regular file; anything else (delete, type change, other path) is not exempt.
+  printf '%s\n' "$raw" | awk -F'\t' -v want="$mark_file" '
+    { split($1, f, " "); old = substr(f[1], 2); new = f[2]; st = f[5]
+      if ($2 != want) exit 1
+      if (st == "M" && old == new && new ~ /^100(644|755)$/) exit 0
+      if (st == "A" && new ~ /^100(644|755)$/) exit 0
+      exit 1 }' || return 1
+  case "$mark_file" in
+    .claude/* | .githooks/* | scripts/* | templates/* | *.sh | *.py | *.json)
+      echo "pre-push: reviewMark '$mark_file' is a config, hook or script path, so a commit that edits it is not treated as a review mark; running the check (move the mark to a data file: set reviewMark in .claude/gw.json)" >&2
+      return 1 ;;
+  esac
+  # reviewed.sh writes exactly "<the sha it marks>\n", and that is the parent: any other content is not a review mark.
+  expect="$(printf '%s\n' "$parent" | git hash-object --stdin 2>/dev/null)" || return 1
+  [ "$(git rev-parse "$sha:$mark_file" 2>/dev/null)" = "$expect" ] || return 1
+  printf '%s\n' "$parent"
+}
 run_checks() {  # run_checks <sha>: every check command on that commit, in $checkdir (kept for related-tests.sh)
   local sha="$1" dir wrapper marker
   if [ -n "$worktree" ]; then
@@ -175,30 +217,59 @@ run_checks() {  # run_checks <sha>: every check command on that commit, in $chec
     dir="$worktree"
   fi
   checkdir="$dir"
-  local cmd n=0 log key="" tree age
+  local cmd n=0 lrc kept key="" tree age parent ptree pkey pepoch inputs="" input_paths=""
   if [ "$is_protected" != "true" ] && [ "${GW_CHECK_CACHE:-}" != "0" ] && [ -f "$scripts/check-green.sh" ]; then
     # Any failure of the helper just means the check runs, as it always did.
     tree="$(git rev-parse "$sha^{tree}" 2>/dev/null)" || tree=""
-    if [ -n "$tree" ]; then
-      key="$(printf '%s\n' "$checks" | bash "$scripts/check-green.sh" key "$tree" "$wrapper" 2>/dev/null)" || key=""
+    # E23: the ignored files the check reads (checkCacheInputs, from the config of the pushed commit) are part of both keys.
+    # A list that cannot be read means no key (the check runs), never a key without the inputs.
+    if input_paths="$(cfg_at "$sha" checkCacheInputs 2>/dev/null)" && inputs="$(printf '%s\n' "$input_paths" | bash "$scripts/check-green.sh" inputs "$dir" 2>/dev/null)" && [ -n "$tree" ]; then
+      key="$(printf '%s\n' "$checks" | bash "$scripts/check-green.sh" key "$tree" "$wrapper" "$inputs" 2>/dev/null)" || key=""
     fi
     if [ -n "$key" ] && age="$(bash "$scripts/check-green.sh" has "$key" 2>/dev/null < /dev/null)"; then
       echo "pre-push: check already green on this tree (${tree:0:7}) with the same commands $age min ago; skipping it (to run it anyway: GW_CHECK_CACHE=0 git push)"
       return 0
     fi
+    # The review-mark commit adds nothing a check sees: the tree it sits on being recorded green is enough.
+    if [ -n "$key" ] \
+      && parent="$(mark_only_parent "$sha")" && ptree="$(git rev-parse "$parent^{tree}" 2>/dev/null)" \
+      && pkey="$(printf '%s\n' "$checks" | bash "$scripts/check-green.sh" key "$ptree" "$wrapper" "$inputs" 2>/dev/null)" \
+      && pepoch="$(bash "$scripts/check-green.sh" epoch "$pkey" 2>/dev/null < /dev/null)" \
+      && age="$(bash "$scripts/check-green.sh" has "$pkey" 2>/dev/null < /dev/null)"; then
+      echo "pre-push: ${sha:0:7} only adds the review mark on ${parent:0:7}, whose tree (${ptree:0:7}) passed this check with the same commands $age min ago; skipping it (to run it anyway: GW_CHECK_CACHE=0 git push)"
+      bash "$scripts/check-green.sh" add "$key" "$pepoch" < /dev/null  # green by derivation, as old as its parent's
+      return 0
+    fi
+  fi
+  if [ -f "$scripts/check-green.sh" ]; then  # one check at a time per repository: check.sh and merge-branch.sh take the same lock
+    lock_wait="$(cfg_at "$sha" checkLockWait 2>/dev/null)" || lock_wait=0
+    case "$lock_wait" in ''|*[!0-9]*) lock_wait=0 ;; esac
+    log="$(mktemp "${TMPDIR:-/tmp}/gw-pre-push-check.XXXXXX")" || fail "cannot create a log file in ${TMPDIR:-/tmp}; free space and retry: git push"
+    lrc=0
+    bash "$scripts/check-green.sh" lock-acquire "$$" "$sha" "$lock_wait" "$log" < /dev/null || lrc=$?
+    if [ "$lrc" -eq 3 ]; then
+      rm -f "$log"
+      fail "another check holds the lock (above); wait for it and push again: git push, or wait inside the hook: set checkLockWait in .claude/gw.json"
+    elif [ "$lrc" -ne 0 ]; then
+      rm -f "$log"
+      fail "cannot take the check lock (above, exit $lrc); fix that and push again: git push"
+    fi
+    checklock=1
   fi
   while IFS= read -r cmd; do
     [ -n "$cmd" ] || continue
     n=$((n + 1))
     [ -z "$wrapper" ] || cmd="$wrapper bash -c '$(printf '%s' "$cmd" | sed "s/'/'\\\\''/g")'"
-    log="$(mktemp "${TMPDIR:-/tmp}/gw-pre-push-check.XXXXXX")" || fail "cannot create a log file in ${TMPDIR:-/tmp}; free space and retry: git push"
+    [ -n "$log" ] || log="$(mktemp "${TMPDIR:-/tmp}/gw-pre-push-check.XXXXXX")" || fail "cannot create a log file in ${TMPDIR:-/tmp}; free space and retry: git push"
     echo "pre-push: check '$cmd' on ${sha:0:7}…"
     if ! (cd "$dir" && GW_PUSH_PROTECTED="$is_protected" bash -c "$cmd") > "$log" 2>&1 < /dev/null; then
       tail -n 30 "$log" >&2
-      fail "check failed on ${sha:0:7}: '$cmd' (full log: $log)" "fix it, commit and push again; reproduce with: $cmd"
+      kept="$log"; log=""  # a failed run keeps its log for the user
+      fail "check failed on ${sha:0:7}: '$cmd' (full log: $kept)" "fix it, commit and push again; reproduce with: $cmd"
     fi
-    rm -f "$log"
+    : > "$log"  # the lock names this log: it stays until the last command has passed
   done <<<"$checks"
+  [ -z "$log" ] || { rm -f "$log"; log=""; }
   # Run in the project itself (HEAD clean), the check must leave it clean: if it wrote a tracked or untracked file,
   # what it saw is not the pushed tree, so it is not recorded.
   if [ -n "$key" ] && [ "$dir" = "$root" ] && [ -n "$(git status --porcelain)" ]; then
@@ -226,12 +297,26 @@ scan_leftovers() {  # scan_leftovers <sha> <files> <what>: conflict markers and 
 }
 
 checked=""
+# Trees this push sends to the protected branch (by the pushed commit's own config): a branch pushed with the same tree
+# needs no run of its own, the protected one is stricter (GW_PUSH_PROTECTED=true) and runs in this same hook.
+protected_trees=""
+protected_name=""
+while read -r _pre_ref pre_sha pre_remote_ref _pre_rest; do
+  { [ -n "${pre_sha:-}" ] && [ "$pre_sha" != "$zero" ]; } || continue
+  case "$pre_remote_ref" in refs/tags/*) continue ;; esac
+  pre_sha="$(git rev-parse -q --verify "$pre_sha^{commit}" 2>/dev/null)" || continue  # a tag pushed to a branch: its commit
+  pre_prot="$(python3 "$config" --root "$root" --rev "$pre_sha" get protectedBranch 2>/dev/null)" || continue
+  if [ "$pre_remote_ref" = "refs/heads/$pre_prot" ]; then
+    pre_tree="$(git rev-parse "$pre_sha^{tree}" 2>/dev/null)" || continue
+    protected_trees="$protected_trees $pre_tree"
+    protected_name="$pre_prot"
+  fi
+done < "$work/input"
 while read -r local_ref local_sha remote_ref remote_sha; do
   [ -n "${local_sha:-}" ] || continue
   [ "$local_sha" = "$zero" ] && continue                  # deleting a ref
-  case "$local_ref" in refs/tags/*) continue ;; esac
-  case "$remote_ref" in refs/tags/*) continue ;; esac
-  git cat-file -e "$local_sha^{commit}" 2>/dev/null || fail "commit ${local_sha:0:7} is not in this clone; fetch it and retry: git fetch $remote"
+  case "$remote_ref" in refs/tags/*) continue ;; esac  # a tag sent to a branch is checked like any commit
+  local_sha="$(git rev-parse -q --verify "$local_sha^{commit}" 2>/dev/null)" || fail "commit ${local_sha:0:7} is not in this clone; fetch it and retry: git fetch $remote"
   checks="$(cfg_at "$local_sha" check)" || exit 1
   protected="$(cfg_at "$local_sha" protectedBranch)" || exit 1
 
@@ -274,8 +359,13 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 
     scan_leftovers "$local_sha" "$files" "the push"
     if [ -f "$scripts/private-check.py" ]; then  # an older project without it: skipped, like the optional scripts
-      printf '%s\n' "$new" | python3 "$scripts/private-check.py" --root "$root" --rev "$local_sha" --commits - \
-        || fail "the push carries private data or a key (above); remove it from those commits and push again: git rebase -i $remote/${remote_ref#refs/heads/}"
+      pc_rc=0
+      printf '%s\n' "$new" | python3 "$scripts/private-check.py" --root "$root" --rev "$local_sha" --base "$known" --remote "$remote" --ref "${local_ref#refs/heads/}" --commits - || pc_rc=$?
+      if [ "$pc_rc" = 1 ]; then
+        fail "the push carries private data or a key (above); those commits are not pushed yet: fix only them with the command above, then push again"
+      elif [ "$pc_rc" != 0 ]; then
+        fail "private-check could not run, exit $pc_rc (above); fix that and push again, reproduce with: python3 $scripts/private-check.py --root $root --commits - --rev ${local_sha:0:7}"
+      fi
     fi
   fi
 
@@ -298,7 +388,11 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   fi
   wt_protected="$(python3 "$config" --root "$root" get protectedBranch 2>/dev/null)" || wt_protected=""
   [ -n "$wt_protected" ] && [ "$remote_ref" = "refs/heads/$wt_protected" ] && is_protected=true
-  if [ "$checked" != "$local_sha:$is_protected" ]; then
+  this_tree="$(git rev-parse "$local_sha^{tree}" 2>/dev/null)" || this_tree=""
+  if [ "$is_protected" != "true" ] && [ -n "$this_tree" ] && case " $protected_trees " in *" $this_tree "*) true ;; *) false ;; esac; then
+    # The run for the protected branch (same tree, same commands) is stricter and comes in this same push.
+    echo "pre-push: ${local_sha:0:7} has the tree (${this_tree:0:7}) this push also sends to $protected_name; its check runs once, there"
+  elif [ "$checked" != "$local_sha:$is_protected" ]; then
     run_checks "$local_sha"
     checked="$local_sha:$is_protected"
   fi

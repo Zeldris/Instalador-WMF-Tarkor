@@ -3,7 +3,7 @@ name: pr
 description: "Use when writing a PR body."
 license: MIT (see LICENSE-mattpocock-skills)
 metadata:
-  version: "0.5.0"
+  version: "0.5.1"
   source: "mattpocock/skills@5beb35b"
   credits:
     skill: show-me

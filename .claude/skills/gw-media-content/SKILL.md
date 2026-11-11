@@ -4,7 +4,7 @@ description: "Propose up to 10 varied, unpublished posts about a project (app, u
 license: MIT
 compatibility: "Needs Python 3 and git for the figures; the pieces themselves are made by gw-media-content-now (Node with Playwright, ImageMagick with WebP)."
 metadata:
-  version: "0.5.0"
+  version: "0.5.1"
   source: "Galivelop workshop; generalised from a project's social-media skill"
 ---
 

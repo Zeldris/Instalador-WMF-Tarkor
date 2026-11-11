@@ -4,7 +4,7 @@ description: Scan a codebase for deepening opportunities, present them as a visu
 disable-model-invocation: true
 license: MIT (see LICENSE-mattpocock-skills)
 metadata:
-  version: "0.5.0"
+  version: "0.5.1"
   source: "mattpocock/skills@5beb35b"
 ---
 

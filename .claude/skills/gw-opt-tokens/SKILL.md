@@ -4,7 +4,7 @@ description: Token-spend retrospective: measures where a session's tokens went a
 license: MIT
 compatibility: Claude Code or any Agent Skills agent; git; python3 for scripts/measure.py (standard library only)
 metadata:
-  version: "0.5.0"
+  version: "0.5.1"
   source: "Galivelop workshop; generalised from the Tarkor, installer, portal and private-project-1 gw-opt-tokens"
 ---
 

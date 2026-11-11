@@ -4,7 +4,7 @@ description: "Produce one unpublished post piece (texts per channel plus images)
 license: MIT
 compatibility: "Needs Python 3, git, Node with Playwright and ImageMagick (convert with WebP) for the media step."
 metadata:
-  version: "0.5.0"
+  version: "0.5.1"
   source: "Galivelop workshop; generalised from a project's social-media skill"
 ---
 
