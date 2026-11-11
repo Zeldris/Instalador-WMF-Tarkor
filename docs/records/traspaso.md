@@ -14,7 +14,7 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #15 (2026-11-11, `5631e77`): `INS-15` (pantalla «Licencias y avisos», narrador `llama3.1:8b`) con `INS-7`, `INS-35` e `INS-36`, con la confirmación de la usuaria y el CI de GitHub en verde. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-11: `INS-44` hecha (CI de Windows en verde; pendiente de `INS-8` verlo en pantalla). En curso: `INS-45`; (a) job `paquetes-linux` en `app.yml` (construye y arranca `.AppImage` y `.deb`) subido, falta verlo en verde; diseño del diálogo decidido por la usuaria (`07`). Siguiente: (b) orden de Tauri y diálogo «Borrar datos del juego» en Ajustes (solo Linux) con vitest y E2E. Presupuesto de compactaciones: 2. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-11: `INS-44` e `INS-45` hechas (CI de Windows y de Linux en verde; pendiente de `INS-8` verlas en pantalla y en la Deck). Siguiente: las tres fases antes de `main` (code-review, gw-opt-tokens + retro a la usuaria, reviewed.sh); PR solo si la usuaria lo confirma. Presupuesto de compactaciones: 2. |
 | **Tests** | 2026-10-26: núcleo `cargo test -p tarkor-nucleo` 116, `cargo fmt --all --check` en verde, clippy 0 avisos, `tsc -b` 0, `cargo check` del núcleo y la app para Windows (mingw) en verde. Asistente `vitest` 27 y E2E con el Ollama falso: último verde el 2026-10-25. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -138,6 +138,8 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 
 Dos líneas cada una como mucho; el detalle está en el commit y la más antigua sale cuando hay más de 5.
 
+- ~~`INS-45` · AppImage, `.deb` y «Borrar datos del juego»~~ (2026-11-11, sin PR aún): CI de Linux construye y arranca
+  los paquetes; diálogo en Ajustes (solo Linux) que para el motor, borra y cierra; pendiente de `INS-8` en la Deck.
 - ~~`INS-44` · Instalador NSIS con las dos casillas~~ (2026-11-11, sin PR aún): plantilla propia, `tarkor.exe --desinstalar`
   y CI de Windows que instala y desinstala; pendiente de `INS-8` verlo en pantalla.
 - `INS-15` · Licencias en el instalador (2026-11-11, PR #15): pantalla «Licencias y avisos» y narrador `llama3.1:8b` en
@@ -146,8 +148,6 @@ Dos líneas cada una como mucho; el detalle está en el commit y la más antigua
   y nombres nuevos de los scripts en `test_herramientas_con_test.py`.
 - ~~`FLU-7` · Galivelop-workflow v0.5.0~~ (2026-11-04): `/gw-update`, rutas en inglés (`docs/records/`), CI partido en
   `check.yml` (del flujo) y `app.yml` (del instalador), `commitNext` y commits sin firmas del agente.
-- ~~`INS-34` · Backend empaquetado sin curación ni cloud~~ (2026-10-27): `define` de `TARKOR_EMPAQUETADO` e
-  `import()` dinámico; el empaquetador se para si entra algo. En `main` del juego (`c7f0e5f9`, sin PR, CI local).
 
 1. 2026-11-11 — Encargo de `INS-35` e `INS-36` lanzado en el juego (issue #93): `TARKOR_NARRADOR_BASE`, `TARKOR_NUM_THREAD`/`NUM_BATCH`/`NUM_CTX_NARRADOR`, escucha en 127.0.0.1, CORS de Tauri, `TARKOR_IMAGENES_DIR` y versión en build; `TARKOR_MODELOS_SIN_PENSAR` fuera porque el juego ya manda `think: false`.
 2. 2026-11-11 — 2026-11-11: `FLU-8` (flujo v0.5.1) fusionado en `main` por el PR #13, con la confirmación de la usuaria y el CI en verde; retro con P1 a P3 aplicadas; los 14 hallazgos del flujo, en el punto 16.

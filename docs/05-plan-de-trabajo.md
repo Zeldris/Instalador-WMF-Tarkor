@@ -197,10 +197,14 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
   La plantilla instala en `%LOCALAPPDATA%\Programs\Tarkor` (`07`; la de Tauri usaría `%LOCALAPPDATA%\Tarkor`,
   que es de la IA y los registros). Hecho el 2026-11-11: (a), (b) y (c), el job `instalador-windows` de
   `app.yml` con `tools/qa/desinstalar-windows.ps1`, en verde a la primera (el `.exe` queda como artefacto). Pendiente de `INS-8`: verlo en pantalla (casillas, tamaño).
-- [ ] **INS-45** AppImage (+ `.deb` opcional) compilado en Ubuntu 22.04. Incluye «Borrar datos del juego» en
+- [x] **INS-45** AppImage (+ `.deb` opcional) compilado en Ubuntu 22.04. Incluye «Borrar datos del juego» en
   Ajustes (Linux, `07`), con el mismo borrado del núcleo que el desinstalador de `INS-44`; el CI de Linux
   construye el `.AppImage` y el `.deb`. Diseño del diálogo decidido el 2026-11-11 (ver `07`): dos casillas, «Borrar»
   desactivado sin ninguna, para el motor, borra y cierra.
+  Hecho el 2026-11-11: el job `paquetes-linux` de `app.yml` construye el `.AppImage` y el `.deb` en Ubuntu 22.04 y
+  comprueba que los dos arrancan (en verde a la primera; los dos quedan como artefacto); órdenes `plataforma`,
+  `info_borrado`, `borrar_datos` y `cerrar_app`, y el diálogo `BorrarDatos` en Ajustes con vitest y el paso 7 de
+  `rendimiento.e2e.mjs`. Pendiente de `INS-8`: probar el `.AppImage` en la Steam Deck y en un escritorio limpio.
 - [ ] **INS-46** Workflow de GitHub Actions en el repo privado que publica releases con `SHA256SUMS`
   en este repo.
 - [ ] **INS-47** Pantalla "Licencias de terceros" generada en el build.

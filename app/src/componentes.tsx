@@ -300,7 +300,6 @@ export function DetallesTecnicos({ evaluacion }: { evaluacion: Evaluacion }) {
   )
 }
 
-/** «Copiar informe» y «Ver detalles» (docs/11): copia con el portapapeles de Tauri; si falla, deja el texto desplegado para copiarlo a mano. */
 /**
  * «Borrar datos del juego» (`INS-45`, solo Linux): botón y diálogo con las dos casillas sin marcar.
  * «Borrar» espera a que haya una marcada. `alBorrar` se llama cuando ya está todo borrado.
@@ -356,6 +355,7 @@ export function BorrarDatos({ desactivado, alBorrar, alOcupar }: { desactivado: 
   )
 }
 
+/** «Copiar informe» y «Ver detalles» (docs/11): copia con el portapapeles de Tauri; si falla, deja el texto desplegado para copiarlo a mano. */
 export function CopiarInforme() {
   const [texto, setTexto] = useState<string | null>(null)
   const [visible, setVisible] = useState(false)

@@ -101,7 +101,8 @@ carpetas existentes, LM Studio importa modelos).
   mismas dos casillas sin marcar y el tamaño de la IA (como el diálogo de desinstalar de Heroic, con sus
   casillas); "Borrar" está desactivado hasta marcar una. Al confirmar, como un desinstalador: para el motor,
   borra (los registros siempre, igual que en Windows) y enseña "Datos borrados. Ya puedes borrar el archivo
-  .AppImage" con un botón "Cerrar Tarkor". Al volver a abrirlo empieza el asistente.
+  .AppImage" con un botón "Cerrar Tarkor". Con las partidas borradas (también se va `config.json`), al volver a
+  abrirlo empieza el asistente; con solo la IA, la configuración se queda, como al desinstalar en Windows sin las partidas.
 
 ## Checklist de buenas prácticas
 
