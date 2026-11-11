@@ -29,6 +29,8 @@ antes de la `/retro`; todo en español, y solo lo que confirme la usuaria entra 
 - **Compactaciones de la tarea** (opt-tokens de `INS-43`): `recover.py --state` da también las compactaciones
   desde la última fusión de `origin/main` (el inicio de la tarea), que son las que se comparan con el presupuesto de
   la bitácora; las de toda la sesión sumaban tareas anteriores.
+- **`clippy` antes del E2E** (opt-tokens de `INS-15`): en [`gw-orchestrate-dealer.md`](gw-orchestrate-dealer.md),
+  «Encargo del implementador».
 - **Arreglos al mismo subagente y revisores acotados** (opt-tokens de `INS-43`): en
   [`gw-orchestrate-dealer.md`](gw-orchestrate-dealer.md).
 - **Check en una llamada y encargos por tramos** (opt-tokens de `INS-42`): en
@@ -90,3 +92,7 @@ antes de la `/retro`; todo en español, y solo lo que confirme la usuaria entra 
 - **2026-10-26, `INS-42`** (desde `f399a63`): sesión principal 87 llamadas, contexto medio 114k, 2 compactaciones;
   8 subagentes, 245 llamadas y 23,8M de entrada de 33,6M (71 %), de 52k al arrancar a ~100k de media. Acordado: el
   check con `ci-local.py`, encargos por tramos y la fila de la bitácora con `recover.py --state`.
+- **2026-11-11, `INS-15`, fase 1 de revisión** (desde el `/clear`): sesión principal 31 llamadas, contexto medio
+  115k, 1 compactación; 2 subagentes, 78 llamadas y 8,5M de entrada de 12,1M (70 %): el revisor de `/code-review`
+  (Opus, 29 llamadas, 3,3M) y el implementador de los arreglos (Sonnet, 49 llamadas, 5,2M, con tres E2E por dos
+  fallos de compilación). Acordado: `clippy` antes del E2E en el encargo del implementador.
