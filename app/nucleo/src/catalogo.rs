@@ -296,4 +296,32 @@ mod tests {
         c.version = 2;
         assert!(Catalogo::desde_json(&serde_json::to_string(&c).unwrap()).is_err());
     }
+
+    /// Los docs copian a mano el rango de descarga que sale del catálogo (retro de `INS-15`: se quedó en 9,4 GB).
+    #[test]
+    fn rango_de_descarga_de_los_docs_igual_que_el_catalogo() {
+        let c = Catalogo::incrustado();
+        let tamanos: Vec<f64> = c.perfiles.iter().filter(|p| !p.experimental).map(|p| c.descarga_gb(p)).collect();
+        let gb = |x: f64| format!("{x:.1}").replace('.', ",");
+        let min = tamanos.iter().copied().fold(f64::INFINITY, f64::min);
+        let max = tamanos.iter().copied().fold(0.0, f64::max);
+        let esperado = format!("{}-{} GB", gb(min), gb(max));
+        let docs = [
+            ("docs/04", include_str!("../../../docs/04-empaquetado-tauri.md")),
+            ("docs/07", include_str!("../../../docs/07-flujo-de-instalacion.md")),
+            ("docs/11", include_str!("../../../docs/11-diseno-del-frontal.md")),
+        ];
+        for (nombre, texto) in docs {
+            // Rangos «X,Y-Z,W GB»: cada uno tiene que ser el del catálogo.
+            let citados: Vec<&str> = texto
+                .match_indices(" GB")
+                .filter_map(|(i, _)| texto[..i].rsplit(|ch: char| ch.is_whitespace() || ch == '(').next())
+                .filter(|r| r.contains('-') && r.chars().all(|ch| ch.is_ascii_digit() || ch == ',' || ch == '-'))
+                .collect();
+            assert!(!citados.is_empty(), "{nombre} no cita ningún rango «X,Y-Z,W GB»");
+            for r in citados {
+                assert_eq!(format!("{r} GB"), esperado, "rango de descarga de {nombre} distinto del catálogo");
+            }
+        }
+    }
 }

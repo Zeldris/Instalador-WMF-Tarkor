@@ -156,4 +156,23 @@ mod tests {
         assert_eq!(valor(&a.backend, "TARKOR_NARRADOR_BASE"), Some("1"));
         assert_eq!(valor(&a.backend, "TARKOR_MODELOS_SIN_PENSAR"), None);
     }
+
+    /// El contrato con el backend del juego está en la tabla de `docs/12`: las `TARKOR_*` que manda el núcleo
+    /// tienen que ser exactamente las de esa tabla (retro de `INS-15`: se mandaba una variable ya retirada).
+    #[test]
+    fn variables_tarkor_iguales_que_el_contrato_de_docs_12() {
+        let doc = include_str!("../../../docs/12-catalogo-y-rendimiento.md");
+        let mut en_docs: Vec<&str> =
+            doc.lines().filter_map(|l| l.strip_prefix("| `TARKOR_")).filter_map(|l| l.split('`').next()).collect();
+        let c = Catalogo::incrustado();
+        let a = calcular(&c, c.perfil("equilibrado").unwrap(), None, UsoCpu::Moderado);
+        let mut en_codigo: Vec<&str> = a.backend.iter().filter_map(|(k, _)| k.strip_prefix("TARKOR_")).collect();
+        en_docs.sort_unstable();
+        en_codigo.sort_unstable();
+        assert!(!en_docs.is_empty(), "no hay filas `TARKOR_*` en la tabla del contrato de docs/12");
+        assert_eq!(
+            en_codigo, en_docs,
+            "las variables TARKOR_* del backend (izquierda) no coinciden con la tabla del contrato de docs/12 (derecha)"
+        );
+    }
 }
