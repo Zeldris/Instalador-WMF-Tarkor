@@ -12,9 +12,9 @@ cada commit.**
 |---|---|
 | **Actualizado** | 2026-11-11 |
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
-| **Último commit en `main`** | Fusión del PR #13 (2026-11-11, `db4e541`): `FLU-8` (flujo Galivelop-workflow v0.5.1), con la confirmación de la usuaria y el CI de GitHub en verde. |
+| **Último commit en `main`** | Fusión del PR #15 (2026-11-11, `5631e77`): `INS-15` (pantalla «Licencias y avisos», narrador `llama3.1:8b`) con `INS-7`, `INS-35` e `INS-36`, con la confirmación de la usuaria y el CI de GitHub en verde. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-11: `INS-15`, fases 1, 2 y 3 hechas; PR [#15](https://github.com/Zeldris/Instalador-WMF-Tarkor/pull/15) abierto, CI en verde en `fcf4600`. Siguiente: fusionar el PR #15 cuando la usuaria lo confirme; luego bitácora y plan en `main` y `/clear`. Presupuesto de compactaciones: 1. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-11: PR #15 (`INS-15`) fusionado en `main` (`5631e77`); rama rehecha desde `main`. Siguiente: lo que pida la usuaria tras el `/clear`; lo pendiente de `INS-15` (pantalla del juego e imágenes) está en el plan. Presupuesto de compactaciones: 1. |
 | **Tests** | 2026-10-26: núcleo `cargo test -p tarkor-nucleo` 116, `cargo fmt --all --check` en verde, clippy 0 avisos, `tsc -b` 0, `cargo check` del núcleo y la app para Windows (mingw) en verde. Asistente `vitest` 27 y E2E con el Ollama falso: último verde el 2026-10-25. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -138,6 +138,8 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 
 Dos líneas cada una como mucho; el detalle está en el commit y la más antigua sale cuando hay más de 5.
 
+- `INS-15` · Licencias en el instalador (2026-11-11, PR #15): pantalla «Licencias y avisos» y narrador `llama3.1:8b` en
+  Equilibrado y Máximo; falta la pantalla del juego y las imágenes.
 - ~~`FLU-8` · Galivelop-workflow v0.5.1~~ (2026-11-11): `/gw-update` del parche; regla de `## Tests` en `REVIEW.md`
   y nombres nuevos de los scripts en `test_herramientas_con_test.py`.
 - ~~`FLU-7` · Galivelop-workflow v0.5.0~~ (2026-11-04): `/gw-update`, rutas en inglés (`docs/records/`), CI partido en
@@ -146,8 +148,6 @@ Dos líneas cada una como mucho; el detalle está en el commit y la más antigua
   `import()` dinámico; el empaquetador se para si entra algo. En `main` del juego (`c7f0e5f9`, sin PR, CI local).
 - ~~`INS-33` · Frontend sin admin en el juego empaquetado~~ (2026-10-27): `esEmpaquetado()` quita enlace, rutas
   `/admin/*` y herramientas; «Crear desde cero» en construcción. En `main` del juego (`aae4a755`, sin PR, CI local).
-- ~~`INS-32` · Fuentes Cinzel e Inter en local~~ (2026-10-26): ya hecho en `main` del juego por su `BAS-1`
-  (`4a150259`, `frontend/src/assets/fonts/` con licencias OFL); sin cambios.
 
 1. 2026-11-11 — Encargo de `INS-35` e `INS-36` lanzado en el juego (issue #93): `TARKOR_NARRADOR_BASE`, `TARKOR_NUM_THREAD`/`NUM_BATCH`/`NUM_CTX_NARRADOR`, escucha en 127.0.0.1, CORS de Tauri, `TARKOR_IMAGENES_DIR` y versión en build; `TARKOR_MODELOS_SIN_PENSAR` fuera porque el juego ya manda `think: false`.
 2. 2026-11-11 — 2026-11-11: `FLU-8` (flujo v0.5.1) fusionado en `main` por el PR #13, con la confirmación de la usuaria y el CI en verde; retro con P1 a P3 aplicadas; los 14 hallazgos del flujo, en el punto 16.
