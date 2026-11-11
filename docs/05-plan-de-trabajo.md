@@ -248,4 +248,5 @@ ganchos, `.claude/gw/scripts`, `tools/qa` y las skills ([runbook](runbooks/skill
 - [x] **FLU-8** (2026-11-11) `/gw-update` a Galivelop-workflow v0.5.1 (parche): scripts, skills, ganchos y
   `check.yml` al día; `worktree.baseRef: "head"` en `settings.json`. `REVIEW.md` gana la regla de `## Tests` (un doble
   pide también una prueba de humo contra el real) y el docstring de `test_herramientas_con_test.py` usa los nombres
-  nuevos de los scripts.
+  nuevos de los scripts. Retro antes de `main` (P1 a P3, `docs/records/retro-2026-11-11-flu8.md`); fusionado en
+  `main` por el PR #13 (2026-11-11), con la confirmación de la usuaria y el CI en verde.
