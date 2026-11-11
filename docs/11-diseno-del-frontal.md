@@ -17,7 +17,8 @@ Prototipo navegable: [`diseno/prototipo-asistente.html`](../diseno/prototipo-asi
    `INS-56`): **la madera sostiene, el oro remata**: fondo de madera, como dentro del juego (decidido el 2026-11-11);
    oro `gold-*` solo en filos, juntas y el titular «TARKOR», como mucho un 10 % de la pantalla; luz desde arriba a la
    izquierda, sin sombras arrojadas ni halos; el cristal azul `accent-*` de Helek Sirik deja de ser color de marca y
-   queda para estados (recomendado, progreso); sin morado ni violeta.
+   queda para estados (recomendado, progreso); sin morado ni violeta. Las imágenes (icono, portada, texturas, las
+   del instalador de Windows y las de la Deck) están pedidas en [`13`](13-hoja-de-estilos-e-imagenes.md).
 2. **Todo se explica antes de hacerse.** Cada pantalla dice qué va a pasar y cuánto ocupa o tarda
    antes del botón que lo hace.
 3. **El jugador decide.** Nada preseleccionado que implique consentimiento; cada descarga tiene su

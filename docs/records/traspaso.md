@@ -14,14 +14,14 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #15 (2026-11-11, `5631e77`): `INS-15` (pantalla «Licencias y avisos», narrador `llama3.1:8b`) con `INS-7`, `INS-35` e `INS-36`, con la confirmación de la usuaria y el CI de GitHub en verde. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-11: `INS-44` e `INS-45` hechas (CI de Windows y de Linux en verde; pendiente de `INS-8` verlas en pantalla y en la Deck). Siguiente: las tres fases antes de `main` (code-review, gw-opt-tokens + retro a la usuaria, reviewed.sh); PR solo si la usuaria lo confirma. Presupuesto de compactaciones: 2. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-11: `INS-57` hecha: [`13`](../13-hoja-de-estilos-e-imagenes.md), la hoja de estilos del instalador con sus peticiones de imágenes; cuatro dudas para la usuaria en su §6 e `INS-58` para colocarlas. `INS-44` e `INS-45` hechas (CI de Windows y de Linux en verde; pendiente de `INS-8`). Siguiente: que la usuaria resuelva las dudas de `13`; luego las tres fases antes de `main` (code-review, gw-opt-tokens + retro a la usuaria, reviewed.sh); PR solo si la usuaria lo confirma. Presupuesto de compactaciones: 3 (van 2; el de 2 se agotó leyendo la hoja de Tarkor). |
 | **Tests** | 2026-10-26: núcleo `cargo test -p tarkor-nucleo` 116, `cargo fmt --all --check` en verde, clippy 0 avisos, `tsc -b` 0, `cargo check` del núcleo y la app para Windows (mingw) en verde. Asistente `vitest` 27 y E2E con el Ollama falso: último verde el 2026-10-25. |
 
 ## Dónde está todo (para saber qué sigue)
 
 1. **Esta bitácora**: qué se está haciendo ahora y el paso inmediato.
 2. **[Plan de implementación](../05-plan-de-trabajo.md)**: fases 0 a 5 con su casilla y su `INS-n`.
-3. **Los documentos de diseño** (`docs/01`…`docs/12`, índice en el [README](../../README.md)).
+3. **Los documentos de diseño** (`docs/01`…`docs/13`, índice en el [README](../../README.md)).
 4. **El asistente y el núcleo**: [`app/README.md`](../../app/README.md) (cómo se compila, se prueba
    y se mide un motor real).
 5. **El flujo de trabajo**: [skills y modelos](../runbooks/skills-y-modelos.md) y la guía de
@@ -32,7 +32,7 @@ cada commit.**
 1. Fusionar el PR #1 del repo del juego (fase 2): dos tests intermitentes de
    `routes/turn.integration.test.ts` y endurecer `lib/prisma.test.ts` (detalle en el
    [plan](../05-plan-de-trabajo.md#dónde-lo-dejamos-2026-09-28)).
-2. Fase 3 (modo empaquetado del juego, `INS-31`…`INS-37`) y fase 4 (`INS-41`…`INS-47`, e `INS-56`: la marca de Tarkor en el asistente cuando el juego fusione `UX-40`).
+2. Fase 3 (modo empaquetado del juego, `INS-31`…`INS-37`) y fase 4 (`INS-41`…`INS-47`, e `INS-56`: la marca de Tarkor en el asistente cuando el juego fusione `UX-40`; `INS-58`: colocar las imágenes de [`13`](../13-hoja-de-estilos-e-imagenes.md) cuando el generador las entregue).
 3. Pendientes leves de la revisión de `INS-48` (no vuelven a revisarse en su PR): `bloqueado` no descuenta lo
    ya descargado en Ajustes; no se impide mover la carpeta con una descarga en marcha (el asistente hoy no lo
    permite); `Estado::ia()` lee `config.json` en cada llamada; el aviso de restos del origen solo va a stderr;
@@ -138,6 +138,8 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 
 Dos líneas cada una como mucho; el detalle está en el commit y la más antigua sale cuando hay más de 5.
 
+- ~~`INS-57` · Hoja de estilos del instalador y peticiones de imágenes~~ (2026-11-11, sin PR aún):
+  [`13`](../13-hoja-de-estilos-e-imagenes.md); cuatro dudas para la usuaria; colocarlas es `INS-58`.
 - ~~`INS-45` · AppImage, `.deb` y «Borrar datos del juego»~~ (2026-11-11, sin PR aún): CI de Linux construye y arranca
   los paquetes; diálogo en Ajustes (solo Linux) que para el motor, borra y cierra; pendiente de `INS-8` en la Deck.
 - ~~`INS-44` · Instalador NSIS con las dos casillas~~ (2026-11-11, sin PR aún): plantilla propia, `tarkor.exe --desinstalar`
@@ -146,8 +148,6 @@ Dos líneas cada una como mucho; el detalle está en el commit y la más antigua
   Equilibrado y Máximo; falta la pantalla del juego y las imágenes.
 - ~~`FLU-8` · Galivelop-workflow v0.5.1~~ (2026-11-11): `/gw-update` del parche; regla de `## Tests` en `REVIEW.md`
   y nombres nuevos de los scripts en `test_herramientas_con_test.py`.
-- ~~`FLU-7` · Galivelop-workflow v0.5.0~~ (2026-11-04): `/gw-update`, rutas en inglés (`docs/records/`), CI partido en
-  `check.yml` (del flujo) y `app.yml` (del instalador), `commitNext` y commits sin firmas del agente.
 
 1. 2026-11-11 — Encargo de `INS-35` e `INS-36` lanzado en el juego (issue #93): `TARKOR_NARRADOR_BASE`, `TARKOR_NUM_THREAD`/`NUM_BATCH`/`NUM_CTX_NARRADOR`, escucha en 127.0.0.1, CORS de Tauri, `TARKOR_IMAGENES_DIR` y versión en build; `TARKOR_MODELOS_SIN_PENSAR` fuera porque el juego ya manda `think: false`.
 2. 2026-11-11 — 2026-11-11: `FLU-8` (flujo v0.5.1) fusionado en `main` por el PR #13, con la confirmación de la usuaria y el CI en verde; retro con P1 a P3 aplicadas; los 14 hallazgos del flujo, en el punto 16.

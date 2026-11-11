@@ -213,7 +213,20 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
   `.title-gold` (Cinzel 900), filo de oro en el paso activo y el riel, `.gold-hairline`, `h1` en Cinzel 700; el azul
   (`accent-*`) solo para estados. **Fondo de madera**, como dentro del juego. Espera a que la rama
   `claude/marca-interfaz` del juego (`docs/producto/diseno-interfaz-marca.md`) llegue a su `main`. Aparte, cuando
-  existan las imágenes (fila E14 de ese documento): iconos de la app en `app/src-tauri/icons/`.
+  existan las imágenes (fila E14 de ese documento): iconos de la app en `app/src-tauri/icons/`. Qué imágenes y dónde
+  va cada una: [`13`](13-hoja-de-estilos-e-imagenes.md) e `INS-58`.
+- [x] **INS-57** (2026-11-11) Hoja de estilos del instalador con sus peticiones de imágenes, a partir de la hoja de
+  Tarkor del generador (`galivelop-image-generator`, `docs/marcas/tarkor/`). Hecho:
+  [`13-hoja-de-estilos-e-imagenes.md`](13-hoja-de-estilos-e-imagenes.md): las piezas ya pedidas allí que el
+  instalador solo coloca (`E14`, `#17`, `E7`, `#9`, `#2`, `#3`, `#5`, `E13`, `E4`, `E5`, `E3`) y las nuevas (`I1`
+  lateral e `I2` cabecera del instalador de Windows, `I3` portada del asistente, `I4` hierro del riel, `I6` cápsula
+  vertical para la Deck), con medida, prompt, peso, criterio de aceptación y la referencia de diseño de cada una.
+  Cuatro dudas para la usuaria en su §6.
+- [ ] **INS-58** Colocar las imágenes de [`13`](13-hoja-de-estilos-e-imagenes.md) cuando el generador las entregue:
+  iconos (`E14`) en `app/src-tauri/icons/`; `sidebarImage`, `headerImage` e iconos del instalador en
+  `bundle.windows.nsis` de `tauri.conf.json` (BMP de 24 bits en `app/src-tauri/windows/`); portada, hierro del riel,
+  estados y barra de progreso en `app/src/imagenes/`, 1 MB entre todas como mucho. Va con `INS-56` o después.
+  Pendiente de `INS-8`, `INS-51` e `INS-52`: verlas en Windows al 100 % y al 150 %, y en la biblioteca de la Deck.
 - [x] **INS-48** (2026-10-25) Carpeta del motor y los modelos elegible antes de descargar y movible desde Ajustes
   (`OLLAMA_MODELS`); espacio necesario frente a libre en cada tarjeta, con la descarga bloqueada si no
   cabe (ver `07` y `11`). Hecho: `carpetaIa` en `config.json`, `nucleo/src/carpetas.rs`
@@ -230,7 +243,8 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
 
 ## Fase 5 — Prueba real
 
-- [ ] **INS-51** En la Steam Deck (modo escritorio y como juego ajeno a Steam).
+- [ ] **INS-51** En la Steam Deck (modo escritorio y como juego ajeno a Steam). Con sus imágenes de biblioteca
+  (bloque D de [`13`](13-hoja-de-estilos-e-imagenes.md)): dónde las lee Steam y si el instalador puede copiarlas.
 - [ ] **INS-52** En un Windows 10 y un Windows 11 limpios, sin Node ni Ollama.
 - [ ] **INS-53** En un equipo de 8 GB: el perfil Ligero debe ser jugable.
 - [ ] **INS-54** Actualizar de una versión a otra sin perder partidas.

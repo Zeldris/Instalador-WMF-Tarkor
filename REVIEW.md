@@ -146,5 +146,5 @@ que se repite, se añade aquí con su `FLU-n` o `INS-n`.
 - **Tarea cerrada:** su casilla marcada en el [plan](docs/05-plan-de-trabajo.md) con lo hecho y lo que
   queda, la bitácora al día en el mismo commit (`CLAUDE.md`).
   (check: `handoff.py closed --staged` en `.githooks/pre-commit` exige la bitácora; lo demás, criterio)
-- **Una decisión de diseño cambia su documento** (`docs/01`…`docs/12`) y la tabla de decisiones del
+- **Una decisión de diseño cambia su documento** (`docs/01`…`docs/13`) y la tabla de decisiones del
   [README](README.md) en el mismo diff. (criterio)

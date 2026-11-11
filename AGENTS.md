@@ -136,7 +136,7 @@ Instalador de escritorio de Tarkor (Tauri v2, Windows y Linux). El flujo viene d
 - Instalar: `bash tools/dev/instalar-entorno.sh`. Código, cómo se arranca y cómo se prueba: [`app/README.md`](app/README.md).
 - **Tareas:** `INS-n` (el [plan](docs/05-plan-de-trabajo.md)) y `FLU-n` (el flujo de trabajo). Ninguna tarea sin fase:
   toda tarea nueva entra en una fase del plan con su id; al cerrarla, su casilla `- [x]` con fecha y qué se hizo.
-- **Dónde está cada cosa:** diseño en `docs/01`…`docs/12` (índice en el [README](README.md)); skills y modelos en
+- **Dónde está cada cosa:** diseño en `docs/01`…`docs/13` (índice en el [README](README.md)); skills y modelos en
   [`docs/runbooks/skills-y-modelos.md`](docs/runbooks/skills-y-modelos.md).
 - **Diseño:** una ronda de diseño (una pantalla del asistente, un perfil, cómo se descarga o se actualiza algo) se
   contrasta con Steam, itch.io, Heroic, el asistente de LM Studio y el instalador de Ollama, citando de cuál sale cada

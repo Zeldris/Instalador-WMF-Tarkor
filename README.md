@@ -62,6 +62,8 @@ gestión de procesos). La build final se hace desde el repo privado (ver
   errores.
 - [`12-catalogo-y-rendimiento.md`](docs/12-catalogo-y-rendimiento.md) — catálogo de modelos y
   perfiles en JSON, y ajustes de rendimiento de Ollama.
+- [`13-hoja-de-estilos-e-imagenes.md`](docs/13-hoja-de-estilos-e-imagenes.md) — la marca de Tarkor en el
+  instalador y las imágenes que hay que generar, con su prompt.
 
 ## Relación con el repositorio del juego
 
