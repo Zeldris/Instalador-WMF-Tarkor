@@ -668,16 +668,24 @@ async fn borrar_datos(app: tauri::AppHandle, partidas: bool, ia: bool) -> Res<()
     let estado = app.state::<Estado>();
     let _ocupado = Ocupado::tomar(&estado.ocupado)?;
     let turno = estado.arranque.coger().await;
-    if let Some(mut p) = estado.sacar_motor(&turno) {
+    let parado = estado.sacar_motor(&turno);
+    let en_marcha = parado.is_some();
+    if let Some(mut p) = parado {
         p.parar();
     }
     let app2 = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    let borrado = tauri::async_runtime::spawn_blocking(move || {
         let estado = app2.state::<Estado>();
-        desinstalar::borrar(&estado.rutas, &estado.config(), partidas, ia).map_err(|e| e.to_string())
+        desinstalar::borrar(&estado.rutas, &estado.config(), partidas, ia).map_err(|e| desinstalar::mensaje_error(&e))
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())
+    .and_then(|r| r);
+    if borrado.is_err() && en_marcha {
+        // La app sigue abierta: el motor vuelve a estar en marcha. Con éxito se cierra y no hace falta.
+        rearrancar_o_avisar(&app, &turno).await;
+    }
+    borrado
 }
 
 /// «Cerrar Tarkor» de la pantalla final de «Borrar datos del juego»: sale por el camino normal, que
