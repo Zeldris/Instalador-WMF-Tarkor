@@ -32,8 +32,9 @@ perfil escrito en código.
    el incrustado. Nunca deja el juego sin arrancar. La app informa del motivo (`origen_catalogo`).
 
 Los tests del núcleo comprueban el catálogo incrustado en cada build: que esté ordenado, que todos
-los perfiles incluyan el modelo de embeddings, y que **todos los modelos tengan licencia Apache
-2.0** (un modelo con otra licencia no entra sin revisarlo antes, ver `08`).
+los perfiles incluyan el modelo de embeddings, y que **todos los modelos tengan una licencia ya revisada**: Apache 2.0 o, para el narrador
+`llama3.1:8b`, la Llama 3.1 Community License (un modelo con otra licencia no entra sin revisarlo
+antes, ver `08`).
 
 ## 2. Perfiles: que cualquiera pueda jugar
 
@@ -41,8 +42,8 @@ los perfiles incluyan el modelo de embeddings, y que **todos los modelos tengan 
 |---|---|---|---|---|---|
 | **Mínimo** | `qwen2.5:1.5b-instruct` (el mismo que el cronista) | el mismo | ~2 GB | 1,3 GB | Para probar en casi cualquier equipo. Narraciones cortas, simples, a veces equivocadas con el mundo |
 | **Ligero** | `qwen3.5:2b` | cronista | ~3,8 GB | 4 GB | Juego completo con narraciones más breves y menos matices |
-| **Equilibrado** | `qwen2.5:7b` | cronista | ~7 GB | 6 GB | La experiencia de diseño: el narrador de desarrollo |
-| **Máximo** | `qwen2.5:7b` | `qwen3.5:4b` | ~11 GB | 9,4 GB | Sugerencias más ricas y sin esperas entre modelos |
+| **Equilibrado** | `llama3.1:8b` | cronista | ~7,5 GB | 6,2 GB | La experiencia de diseño: el narrador del juego (`tarkor-narrador-llama31`) |
+| **Máximo** | `llama3.1:8b` | `qwen3.5:4b` | ~11,5 GB | 9,6 GB | Sugerencias más ricas y sin esperas entre modelos |
 | **Ultra** *(experimental)* | `qwen3.5:9b` | `qwen3.5:4b` | ~14 GB | 11,3 GB | Narrador más grande para gráficas potentes; sin afinar para Tarkor |
 
 Todos incluyen el cronista (`qwen2.5:1.5b-instruct`) y `nomic-embed-text`.

@@ -51,12 +51,14 @@ describe('asistente de primer arranque', () => {
     expect(equilibrado.getAttribute('aria-pressed')).toBe('true')
     expect(screen.getByText('Máximo seguro')).toBeTruthy()
     expect(screen.getByText(/Tu equipo puede dedicar unos 11 GB/)).toBeTruthy()
-    expect(await boton('Descargar 6 GB')).toBeTruthy()
+    expect(await boton('Descargar 6,2 GB')).toBeTruthy()
 
+    // Con el narrador `llama3.1:8b`, Máximo (11,5 GB) ya no cabe en la Deck: se elige con aviso.
     fireEvent.click(await boton(/^Máximo/))
-    expect(await boton('Descargar 9,4 GB')).toBeTruthy()
+    expect(await boton('Descargar 9,6 GB')).toBeTruthy()
+    expect(screen.getByText(/Puede dejar tu equipo lento/)).toBeTruthy()
 
-    // Ultra no cabe en la Deck, pero se puede elegir: tras el aviso hay que confirmar.
+    // Ultra tampoco cabe, pero se puede elegir: tras el aviso hay que confirmar.
     expect(screen.getByText('Experimental')).toBeTruthy()
     expect(screen.queryByRole('checkbox', { name: /Mostrar perfiles no recomendados/ })).toBeNull()
   })
@@ -91,10 +93,11 @@ describe('asistente de primer arranque', () => {
   })
 
   it('sin disco para el perfil elegido se bloquea la descarga hasta cambiar de carpeta', async () => {
-    fijarDiscoLibreIa(8)
+    // Equilibrado cabe en memoria pero necesita 6,2 × 1,1 GB de disco.
+    fijarDiscoLibreIa(6)
     await hastaElPerfil()
-    fireEvent.click(await boton(/^Máximo/))
-    const sin = await screen.findAllByText(/libres 8 GB/)
+    fireEvent.click(await boton(/^Equilibrado/))
+    const sin = await screen.findAllByText(/libres 6 GB/)
     expect(sin.some((n) => n.closest('.espacio')?.classList.contains('sin'))).toBe(true)
     expect(await boton(/^Descargar/)).toHaveProperty('disabled', true)
 
@@ -167,7 +170,7 @@ describe('asistente de primer arranque', () => {
     expect(screen.getAllByText(/Llega con el juego empaquetado/)).toHaveLength(3)
     fireEvent.click(await boton('Continuar'))
     await screen.findByText('Todo preparado')
-    expect((await ejemplo.cargarConfig()).modelosDescargados).toEqual(['qwen2.5:7b', 'qwen2.5:1.5b-instruct', 'nomic-embed-text'])
+    expect((await ejemplo.cargarConfig()).modelosDescargados).toEqual(['llama3.1:8b', 'qwen2.5:1.5b-instruct', 'nomic-embed-text'])
   }, 20000)
 
   it('si falla un modelo en la comprobación, Reparar lo repone y la comprobación sigue', async () => {

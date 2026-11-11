@@ -39,12 +39,32 @@ técnica sube el listón y la licencia da el derecho a reclamar.
 | Pieza | Licencia | Qué exige |
 |---|---|---|
 | Ollama | MIT | Incluir el aviso de copyright y la licencia |
-| `qwen2.5:7b`, `qwen2.5:1.5b-instruct` | Apache 2.0 | Incluir la licencia y los avisos |
+| `llama3.1:8b` (narrador de Equilibrado y Máximo) | **Llama 3.1 Community License**, revisada el 2026-11-11 | Ver abajo |
+| `qwen2.5:1.5b-instruct` | Apache 2.0 | Incluir la licencia y los avisos |
 | `qwen3.5:0.8b`, `2b`, `4b`, `9b` | Apache 2.0 | Incluir la licencia y los avisos |
 | `qwen2.5:3b` | **Qwen Research License**, no es Apache 2.0 | **Descartado** del catálogo; el perfil Ligero usa `qwen3.5:2b` |
 | `nomic-embed-text` | Apache 2.0 | Incluir la licencia |
 | Tauri, dependencias de Rust y npm | Mayoritariamente MIT / Apache 2.0 | Aviso de licencias de terceros generado en el build (`cargo-about` y `license-checker`) |
 | Fuentes Cinzel e Inter | SIL Open Font License | Incluir la licencia al empaquetarlas |
+
+**Llama 3.1 Community License** (revisada el 2026-11-11 en
+[`meta-llama/llama-models`](https://github.com/meta-llama/llama-models/blob/main/models/llama3_1/LICENSE)).
+La usuaria eligió `llama3.1:8b` como narrador porque es el que usa el juego (`tarkor-narrador-llama31`).
+Qué exige a Tarkor:
+
+- Mostrar **«Built with Llama»** de forma visible en la interfaz, la página de «Acerca de» o la
+  documentación del producto (§1.b.i), e incluir una copia de la licencia.
+- Incluir un archivo de aviso con el texto: «Llama 3.1 is licensed under the Llama 3.1 Community
+  License, Copyright © Meta Platforms, Inc. All Rights Reserved.» (§1.b.iii).
+- Cumplir la [política de uso aceptable](https://llama.meta.com/llama3_1/use-policy) (§1.b.iv):
+  se enlaza desde la pantalla de licencias.
+- Un modelo **entrenado o ajustado** con Llama o con sus salidas y distribuido tiene que llevar
+  «Llama» al principio del nombre (§1.b.i). Mandar el `system` y las `options` en cada petición no
+  crea un modelo nuevo; un ajuste fino futuro, sí.
+- El límite de 700 millones de usuarios activos al mes (§2) no afecta a Tarkor.
+- Las salidas se dan «tal cual» y son responsabilidad de quien usa el modelo (§3).
+
+Va en la pantalla «Licencias de terceros» del juego y en la del instalador (`INS-15`).
 
 Las licencias de los modelos hay que **comprobarlas en la fuente oficial** en el momento de
 publicar: cambian entre versiones.

@@ -64,8 +64,10 @@ Objetivo: demostrar que el patrón completo funciona en Windows y en la Steam De
   (lecturas, crear partida, `FOR UPDATE`). Herramienta en `herramientas/empaquetar-backend.mjs`.
   Pendiente para después de la fase 2: repetirla sobre SQLite y probar Prisma sin motor nativo
   (`queryCompiler` + adaptador SQLite).
-- [ ] **INS-7** Narrador con `system` + `options` por petición sobre `qwen2.5:7b`: comparar con
-  `tarkor-narrador` (ver [`03`](03-ollama-y-modelos-ia.md)).
+- [ ] **INS-7** Narrador con `system` + `options` por petición sobre `llama3.1:8b`: comparar con
+  `tarkor-narrador-llama31` (ver [`03`](03-ollama-y-modelos-ia.md)). Decidido con la usuaria el
+  2026-11-11: el narrador de Equilibrado y Máximo es `llama3.1:8b`, el mismo que el juego, en lugar de
+  `qwen2.5:7b` (catálogo, `03`, `09`, `12`; Máximo ya no cabe en la Deck, ver `09`).
 - [ ] **INS-8** Prueba en la Steam Deck y en un Windows limpio: tiempos de descarga, memoria real
   de cada perfil, tokens por segundo, Vulkan frente a ROCm en la Deck, calidad de narración de
   Mínimo y Ligero. Ajustar el catálogo con lo medido.
@@ -83,7 +85,9 @@ Se pueden resolver en paralelo a la fase 0. Ver la tabla del [README](../README.
 - [x] **INS-14** (2026-10-25) Perfiles por encima del máximo seguro: se pueden elegir con aviso y
   confirmación en la tarjeta, sin interruptor (ver `09` y `11`). Implementado el mismo día en el
   asistente y en Ajustes (`Tarjetas`, `pideConfirmar`/`bloqueado` en `app/src/tipos.ts`).
-- [ ] **INS-15** Confirmar licencias de modelos e imágenes.
+- [ ] **INS-15** Confirmar licencias de modelos e imágenes. Revisada la de `llama3.1:8b` (2026-11-11, ver
+  `08`): falta mostrar «Built with Llama», su aviso, la licencia y el enlace a su política de uso en la
+  pantalla de licencias del juego y del instalador.
 
 ## Fase 2 — Migración a SQLite (repo del juego) — código hecho, PR #1 sin fusionar
 

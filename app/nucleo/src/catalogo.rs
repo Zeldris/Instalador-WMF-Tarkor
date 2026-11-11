@@ -226,10 +226,12 @@ mod tests {
     }
 
     #[test]
-    fn todos_los_modelos_con_licencia_apache() {
-        // docs/08: un modelo con licencia restrictiva no entra en el catálogo sin revisarlo antes.
+    fn todos_los_modelos_con_licencia_revisada() {
+        // docs/08: un modelo con otra licencia no entra en el catálogo sin revisarlo antes; las revisadas
+        // son Apache 2.0 y la Llama 3.1 Community License (pide «Built with Llama» y su aviso, ver 08).
         let c = Catalogo::incrustado();
-        assert!(c.modelos.values().all(|m| m.licencia == "Apache-2.0"));
+        let revisadas = ["Apache-2.0", "Llama-3.1-Community"];
+        assert!(c.modelos.values().all(|m| revisadas.contains(&m.licencia.as_str())));
     }
 
     #[test]
@@ -246,7 +248,7 @@ mod tests {
         assert_eq!(minimo.modelos(), ["qwen2.5:1.5b-instruct", "nomic-embed-text"]);
         assert!((c.descarga_gb(minimo) - 1.3).abs() < 1e-9);
         let maximo = c.perfil("maximo").unwrap();
-        assert!((c.descarga_gb(maximo) - (4.7 + 1.0 + 3.4 + 0.3)).abs() < 1e-9);
+        assert!((c.descarga_gb(maximo) - (4.9 + 1.0 + 3.4 + 0.3)).abs() < 1e-9);
     }
 
     #[test]
