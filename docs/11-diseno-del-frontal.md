@@ -200,6 +200,29 @@ ajustes de Ollama del perfil, origen del catálogo, estado del motor (versión, 
 lo que dice `/api/ps` y las últimas 200 líneas de `motor-ia.log`. La carpeta personal se cambia por `~` y la carpeta de la IA sale como `<carpeta de la IA>`. Nunca sale
 del equipo si el jugador no lo pega él mismo (`08`).
 
+### Licencias y avisos
+
+Página propia, sin conexión, que se abre con **Leer las licencias** en el paso 2 (junto a la casilla que las
+acepta) y con **Licencias** en la barra de Ajustes (desactivado mientras el motor está ocupado: la página
+desmonta Reparar y las tarjetas). **Volver** deja la pantalla como estaba (la casilla del paso 2, marcada o no).
+Contenido (`INS-15`, lo que pide `08`):
+
+- **Built with Llama**, lo primero y como título, mientras el catálogo tenga un modelo Llama.
+- Motor de IA: Ollama, licencia MIT.
+- Modelos, agrupados por licencia desde `catalogo.json` (un modelo nuevo sale solo; una licencia sin texto
+  incluido no pasa los tests). Bajo Llama 3.1, el aviso literal de Meta y la política de uso aceptable con
+  **Copiar enlace**: la ventana no abre el navegador (no lleva el plugin `opener` de Tauri), y el enlace se
+  copia con el plugin de portapapeles que ya usa «Copiar informe».
+- El texto completo de cada licencia, desplegable, incluido en la app (`app/src/licencias/`, copiado de la
+  fuente oficial el 2026-11-11).
+
+Contraste (2026-11-11): el instalador de Windows de Ollama no tiene página de licencia (`app/ollama.iss` no
+declara `LicenseFile` ni `InfoBeforeFile`); itch.io y Heroic dejan su licencia en el repo, no en la interfaz
+(no se comprobó si su app tiene «Acerca de» con licencias). Steam y LM Studio no se pudieron consultar desde
+esta sesión. Ninguno distribuye un modelo Llama, así que imitarlos no basta: la licencia de Llama 3.1 pide
+«Built with Llama» visible y una copia de la licencia, y por eso esta página. Las dependencias de Rust y npm
+llegan a la misma página con `INS-47`, y la licencia del juego con `INS-12`.
+
 ### Error: el motor se ha detenido
 
 Un hilo de Rust vigila los procesos cada 2 s, cargue lo que cargue la ventana, y avisa al frontal con un evento; la

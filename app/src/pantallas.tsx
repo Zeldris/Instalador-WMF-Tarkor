@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, ErrorIa } from './api'
 import { textoEspera, useEsperaRed } from './esperaRed'
+import { Licencias } from './pantallaLicencias'
 import { CarpetaIa, CopiarInforme, ControlUsoCpu, DetallesTecnicos, Marco, Medidor, Pagina, Reparar, Tarjetas, textoModelo, useMoverCarpeta } from './componentes'
 import * as tx from './textos'
 import type { Config, Equipo, Evaluacion, PerfilId, Rutas, Sobrante, UsoIa } from './tipos'
@@ -33,6 +34,8 @@ export function Bienvenida({ ir }: Nav) {
 
 export function QueSeInstala({ ir, config, rutas, actualizar }: Nav & { config: Config; rutas: Rutas | null; actualizar: (c: Partial<Config>) => void }) {
   const t = tx.queSeInstala
+  const [licencias, setLicencias] = useState(false)
+  if (licencias) return <Licencias volver={() => setLicencias(false)} />
   return (
     <Marco paso={2} titulo={t.titulo} lead={t.lead}
       barra={<><Atras ir={ir} paso={2} /><span className="hueco" />
@@ -49,6 +52,7 @@ export function QueSeInstala({ ir, config, rutas, actualizar }: Nav & { config: 
         </div>
       </div>
       <p className="tenue peq">{t.red}</p>
+      <div className="fila"><button type="button" className="btn" onClick={() => setLicencias(true)}>{tx.licencias.abrir}</button></div>
       <label className="casilla">
         <input id="acepto" type="checkbox" checked={config.consentimientoAceptado}
           onChange={(e) => actualizar({ consentimientoAceptado: e.target.checked })} />
@@ -345,11 +349,15 @@ export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpe
   // Un id que no está en la evaluación (un perfil que ya no existe) no deja nada preseleccionado.
   const nuevo = evaluacion.perfiles.find((x) => x.id === elegido)
   const extra = nuevo ? Math.max(0, nuevo.descargaGb - actual.descargaGb) : 0
+  // Con el motor ocupado no se abre: Licencias desmonta Reparar y las tarjetas, que perderían su estado.
+  const [licencias, setLicencias] = useState(false)
+  if (licencias) return <Licencias volver={() => setLicencias(false)} />
   return (
     <div className="ventana">
       <Pagina sola titulo={t.titulo} lead={t.actual(actual.nombre, fmt(actual.memoriaGb), fmt(actual.descargaGb))}
         barra={<><button type="button" className="btn" disabled={ocupado} onClick={volver}>{t.volver}</button>
-          <button type="button" className="btn" disabled={ocupado} onClick={reanalizar}>{t.reanalizar}</button><span className="hueco" />
+          <button type="button" className="btn" disabled={ocupado} onClick={reanalizar}>{t.reanalizar}</button>
+          <button type="button" className="btn" disabled={ocupado} onClick={() => setLicencias(true)}>{tx.licencias.abrirAjustes}</button><span className="hueco" />
           {cambio.cambiando && <button type="button" className="btn" onClick={cambio.pausar}>{t.pausar}</button>}
           {cambio.segundosEspera !== null && <button type="button" className="btn" onClick={cambio.reintentarAhora}>{tx.descarga.reintentarAhora}</button>}
           <button type="button" className="btn pri" disabled={cambio.cambiando || reparando || !nuevo || nuevo.id === actual.id || bloqueado(evaluacion, nuevo, confirmado)} onClick={() => nuevo && void cambio.cambiar(nuevo.id)}>

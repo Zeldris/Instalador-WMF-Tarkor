@@ -64,7 +64,9 @@ Qué exige a Tarkor:
 - El límite de 700 millones de usuarios activos al mes (§2) no afecta a Tarkor.
 - Las salidas se dan «tal cual» y son responsabilidad de quien usa el modelo (§3).
 
-Va en la pantalla «Licencias de terceros» del juego y en la del instalador (`INS-15`).
+Va en la pantalla «Licencias de terceros» del juego y en la del instalador (`INS-15`). La del instalador ya
+está: «Licencias y avisos» (ver `11`), con «Built with Llama», el aviso, el enlace a la política y la licencia
+completa dentro de la app. Falta la del juego.
 
 Las licencias de los modelos hay que **comprobarlas en la fuente oficial** en el momento de
 publicar: cambian entre versiones.

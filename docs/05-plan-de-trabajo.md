@@ -86,8 +86,10 @@ Se pueden resolver en paralelo a la fase 0. Ver la tabla del [README](../README.
   confirmación en la tarjeta, sin interruptor (ver `09` y `11`). Implementado el mismo día en el
   asistente y en Ajustes (`Tarjetas`, `pideConfirmar`/`bloqueado` en `app/src/tipos.ts`).
 - [ ] **INS-15** Confirmar licencias de modelos e imágenes. Revisada la de `llama3.1:8b` (2026-11-11, ver
-  `08`): falta mostrar «Built with Llama», su aviso, la licencia y el enlace a su política de uso en la
-  pantalla de licencias del juego y del instalador.
+  `08`). Hecha la pantalla del instalador (2026-11-11): «Licencias y avisos» desde el paso 2 y Ajustes, con
+  «Built with Llama», el aviso de Meta, la política de uso (copiar enlace) y los textos completos de Llama 3.1,
+  MIT (Ollama) y Apache 2.0 en `app/src/licencias/` (`pantallaLicencias.tsx`, ver `11`). Falta: la misma
+  pantalla en el juego, las licencias de las imágenes y comprobar las de los modelos al publicar.
 
 ## Fase 2 — Migración a SQLite (repo del juego) — código hecho, PR #1 sin fusionar
 

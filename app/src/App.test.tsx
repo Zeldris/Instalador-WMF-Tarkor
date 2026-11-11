@@ -232,6 +232,25 @@ describe('asistente de primer arranque', () => {
     fireEvent.click(await boton(/Ajustes/))
   }
 
+  it('las licencias se leen desde el paso 2, y Volver deja la casilla como estaba', async () => {
+    render(<App />)
+    fireEvent.click(await boton('Empezar'))
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(await boton('Leer las licencias'))
+    expect(await screen.findByRole('heading', { name: 'Built with Llama' })).toBeTruthy()
+    fireEvent.click(await boton('Volver'))
+    expect(screen.getByRole('checkbox')).toHaveProperty('checked', true)
+    expect(await boton('Aceptar y continuar')).toHaveProperty('disabled', false)
+  })
+
+  it('las licencias se leen desde Ajustes, y Volver deja Ajustes como estaba', async () => {
+    await hastaAjustes()
+    fireEvent.click(await boton('Licencias'))
+    expect(await screen.findByRole('heading', { name: 'Licencias y avisos' })).toBeTruthy()
+    fireEvent.click(await boton('Volver'))
+    expect(await boton('Reparar')).toBeTruthy()
+  }, 30000)
+
   it('en Ajustes dice dónde corre la IA, y si no responde la pantalla sigue', async () => {
     await hastaAjustes()
     expect(await screen.findByText(/La IA usa la gráfica al 100 %/)).toBeTruthy()
