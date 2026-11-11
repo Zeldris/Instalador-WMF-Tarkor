@@ -12,10 +12,12 @@
 //!   modelos guardados (docs/03 y docs/11).
 //! - [`informe`]: el texto de «Copiar informe» (docs/11).
 //! - [`config`]: `config.json` en la carpeta de datos (docs/07 y docs/09, "Dónde se guarda").
+//! - [`desinstalar`]: borrado de datos al desinstalar y opciones del ejecutable (`INS-44`).
 
 pub mod carpetas;
 pub mod catalogo;
 pub mod config;
+pub mod desinstalar;
 pub mod equipo;
 pub mod informe;
 pub mod modelos;
