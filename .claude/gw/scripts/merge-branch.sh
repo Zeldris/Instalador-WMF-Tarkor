@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.5.0
+# galivelop-workflow v0.5.1
 # Merges a subagent's branch into the current one (merge, never rebase: branches are pushed), runs the config's
 # `check` commands and the related tests (`relatedTests`) on the result and, if they pass, cleans up the subagent's
 # worktree and branch.
 #   bash merge-branch.sh <branch> "<merge message>" [--reviewed]
 #  - `git merge --no-ff`. On conflict it stops, lists the files and leaves the merge open (resolve it, or abort
 #    with: git merge --abort), exit 1.
-#  - then every `check` command of .claude/gw.json runs in the project root. If one fails the merge IS already
-#    done: it says how to undo it (git reset --hard HEAD^1) and exits 1; branch and worktree stay.
+#  - then `check.sh --quiet` runs every `check` command of .claude/gw.json in the project root (E20): its registry
+#    stays in <git common dir>/gw/check-<sha>.log (never deleted here), it shows that run's summary and the closing
+#    `CHECK <ok|FAILED>: ...` line (not the last output lines), and a green is recorded for the pre-push. If it
+#    fails the merge IS already done: it says how to undo it (git reset --hard HEAD^1) and exits 1; branch and
+#    worktree stay.
 #  - after a green check, the related tests the pre-push would run: related-tests.sh gets the files the merge
 #    changed (git diff --name-only --no-renames <HEAD before the merge> HEAD) and runs the `relatedTests` commands
 #    that apply (a no-op without `relatedTests`). If they fail it behaves like a failed check: the merge IS already
@@ -36,10 +39,6 @@ root="$(unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; git -C "$here" rev-parse --s
   echo "merge-branch: $here is not inside a git repository; reinstall the workflow: /gw-update" >&2; exit 2; }
 cd "$root" || exit 2
 config="$here/config.py"
-checks="$(python3 "$config" --root "$root" get check)" || {
-  echo "merge-branch: cannot read check; fix the config: python3 $config --root $root validate" >&2; exit 2; }
-wrapper="$(python3 "$config" --root "$root" get checkWrapper)" || {
-  echo "merge-branch: cannot read checkWrapper; fix the config: python3 $config --root $root validate" >&2; exit 2; }
 protected="$(python3 "$config" --root "$root" get protectedBranch)" || {
   echo "merge-branch: cannot read protectedBranch; fix the config: python3 $config --root $root validate" >&2; exit 2; }
 logs="$(mktemp -d "${TMPDIR:-/tmp}/gw-merge-branch.XXXXXX")" || { echo "merge-branch: cannot create a temp dir; free space and retry" >&2; exit 2; }
@@ -115,20 +114,39 @@ if [ "$(git rev-parse HEAD)" = "$before" ]; then
 fi
 echo "merge-branch: merged $branch into $(git branch --show-current) at $(git rev-parse --short HEAD)"
 
-n=0
-while IFS= read -r cmd; do
-  [ -n "$cmd" ] || continue
-  n=$((n + 1))
-  [ -z "$wrapper" ] || cmd="$wrapper bash -c '$(printf '%s' "$cmd" | sed "s/'/'\\\\''/g")'"
-  if bash -c "$cmd" > "$logs/check-$n.log" 2>&1 < /dev/null; then
-    echo "merge-branch: check OK: $cmd"
-  else
-    tail -n 20 "$logs/check-$n.log" >&2
-    echo "merge-branch: CHECK FAILED: $cmd. The merge is ALREADY done in the current branch; branch and worktree stay." >&2
-    echo "merge-branch: fix it and commit, or undo the merge with: git reset --hard HEAD^1" >&2
-    exit 1
+# The check is scripts/check.sh --quiet (E20): one registry per sha in <git common dir>/gw/check-<sha>.log that stays
+# after the run, a lock against a second check, a closing `CHECK <ok|FAILED>: ...` line, and the green recorded for
+# the pre-push (check-green.sh) so the push does not repeat it. Only its summary is shown here, never the tail.
+check_script="$here/check.sh"
+if [ ! -f "$check_script" ]; then
+  echo "merge-branch: CHECK CANNOT RUN: $check_script is not installed. The merge is ALREADY done in the current branch; branch and worktree stay." >&2
+  echo "merge-branch: reinstall the workflow with: /gw-update, or undo the merge with: git reset --hard HEAD^1" >&2
+  exit 1
+fi
+bash "$check_script" --quiet > "$logs/check.out" 2> "$logs/check.err" < /dev/null
+check_rc=$?
+check_line="$(grep '^CHECK ' "$logs/check.out" "$logs/check.err" | tail -n 1 | sed 's/^[^:]*://')"
+check_log="$(grep '^check: log: ' "$logs/check.out" | tail -n 1 | sed 's/^check: log: //')"
+if [ "$check_rc" -eq 0 ]; then
+  echo "merge-branch: check OK: ${check_line:-CHECK ok} (log: ${check_log:-unknown})"
+else
+  # The summary block (each command, ok/FAILED, seconds) and the closing CHECK line; the log has the rest.
+  awk '/^check: summary/ {on=1; next} /^check: last / {on=0} on' "$logs/check.out" >&2
+  if [ -n "$check_line" ]; then
+    echo "merge-branch: $check_line" >&2
+  else  # check.sh stopped before running anything (no CHECK line): its own message says why
+    cat "$logs/check.err" >&2
+    tail -n 5 "$logs/check.out" >&2
   fi
-done <<<"$checks"
+  echo "merge-branch: the check did not pass. The merge is ALREADY done in the current branch; branch and worktree stay." >&2
+  [ -z "$check_log" ] || echo "merge-branch: full log: $check_log" >&2
+  if [ "$check_rc" -eq 3 ]; then
+    echo "merge-branch: another check holds the lock; once it ends rerun the check with: bash $check_script --quiet (or undo the merge with: git reset --hard HEAD^1)" >&2
+  else
+    echo "merge-branch: fix it and commit, or undo the merge with: git reset --hard HEAD^1" >&2
+  fi
+  exit 1
+fi
 
 # The related tests the pre-push would run, on the files this merge brought. Fail closed: with commands in
 # `relatedTests` but related-tests.sh not installed they cannot run, so that is an error (with an empty

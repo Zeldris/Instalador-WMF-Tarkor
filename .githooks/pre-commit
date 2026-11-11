@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.5.0
+# galivelop-workflow v0.5.1
 # Git pre-commit hook (copied into projects as .githooks/pre-commit; enable with: git config core.hooksPath .githooks).
 #   - No secrets in a commit: by file (.env except .env.example/.sample/.template, *.pem, *.key, *.p12, *.pfx, *.jks,
 #     id_rsa and friends, .netrc, and the local private list .claude/gw.local.json) and by added content (well-known
@@ -81,13 +81,26 @@ fi
 PROVIDER='[Oo][Pp][Ee][Nn][Aa][Ii]|[Aa][Nn][Tt][Hh][Rr][Oo][Pp][Ii][Cc]|[Cc][Ll][Aa][Uu][Dd][Ee]|[Gg][Ee][Mm][Ii][Nn][Ii]|[Gg][Rr][Oo][Qq]|[Mm][Ii][Ss][Tt][Rr][Aa][Ll]|[Cc][Oo][Hh][Ee][Rr][Ee]|[Dd][Ee][Ee][Pp][Ss][Ee][Ee][Kk]|[Hh][Uu][Gg][Gg][Ii][Nn][Gg][Ff][Aa][Cc][Ee]|[Oo][Pp][Ee][Nn][Rr][Oo][Uu][Tt][Ee][Rr]|[Pp][Ee][Rr][Pp][Ll][Ee][Xx][Ii][Tt][Yy]'
 NAME="[A-Za-z0-9_.-]*([Ss][Ee][Cc][Rr][Ee][Tt]|[Pp][Aa][Ss][Ss][Ww]([Oo][Rr])?[Dd]|[Tt][Oo][Kk][Ee][Nn]|[Aa][Pp][Ii][._-]?[Kk][Ee][Yy]|(${PROVIDER})[._-]?[Kk][Ee][Yy])"
 QUOTED="^\\+.*${NAME}[\"']?[[:space:]]*(:=|=|:)[[:space:]]*(\"[^\"\$<{][^\"]{3,}\"|'[^'\$<{][^']{3,}')"
+# In Markdown (.md, .markdown, .mdx, any case) a quoted key is usually an example or a translation label, so an
+# assignment whose value looks like prose is dropped before QUOTED runs: it starts with a capital and has no digit
+# ("Bearer ..." never counts as prose). Anything else there (a token, a passphrase, a value with digits) is still refused.
+PROSE_ASSIGN="${NAME}[\"']?[[:space:]]*(:=|=|:)[[:space:]]*(\"[A-Z][^\"0-9]{3,}\"|'[A-Z][^'0-9]{3,}')"
 UNQUOTED="^\\+[[:space:]]*(export[[:space:]]+)?${NAME}[[:space:]]*[=:][[:space:]]*[^[:space:]\$<{\"'#]"
 HARMLESS="^\\+[[:space:]]*(export[[:space:]]+)?${NAME}[[:space:]]*[=:][[:space:]]*([Rr][Ee][Aa][Dd]|[Ww][Rr][Ii][Tt][Ee]|[Nn][Oo][Nn][Ee]|[Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee]|[^[:space:]#]{1,7})[[:space:]]*(#.*)?$"
 added_lines() { grep -E '^\+' | grep -vE '^\+\+\+ ' | grep -v 'gw-allow-secret' || true; }
 examples=(':!*.env.example' ':!*.env.sample' ':!*.env.template')
-# A dict of absolute path -> error code ("/srv/app/token": "E123") is not an assignment: that pair is dropped first. gw-allow-secret
+# A dict of absolute path -> error code ("/srv/app/token": "E123") is not an assignment: that pair is dropped first.
 PATHCODE='"\/[^"]*"[[:space:]]*:[[:space:]]*"[A-Z]{1,4}[-_]?[0-9]{1,6}"'
-literal="$(diff_of -U0 --no-renames --diff-filter=ACMR -- . "${examples[@]}" | added_lines | sed -E "s/$PATHCODE//g" | grep -E "$QUOTED" | head -n 5 || true)"
+literal="$(diff_of -U0 --no-renames --diff-filter=ACMR -- . "${examples[@]}" ':(exclude,icase)*.md' ':(exclude,icase)*.markdown' ':(exclude,icase)*.mdx' | added_lines | sed -E "s/$PATHCODE//g" | grep -E "$QUOTED" | head -n 5 || true)"
+md_prose_dropped() { # lines of stdin that still match QUOTED once the prose assignments (and PATHCODE pairs) are removed
+  local line stripped
+  while IFS= read -r line; do
+    stripped="$(printf '%s\n' "$line" | sed -E "s/$PATHCODE//g; s/([\"'])Bearer /\10earer /g; s/$PROSE_ASSIGN//g")"
+    if printf '%s\n' "$stripped" | grep -qE "$QUOTED"; then printf '%s\n' "$line"; fi
+  done
+}
+md_literal="$(diff_of -U0 --no-renames --diff-filter=ACMR -- ':(icase)*.md' ':(icase)*.markdown' ':(icase)*.mdx' "${examples[@]}" | added_lines | md_prose_dropped | head -n 5 || true)"
+literal="$literal$(printf '\n%s' "$md_literal")"
 config_added="$(diff_of -U0 --no-renames --diff-filter=ACMR -- '*.env' '.env*' '*.properties' '*.yml' '*.yaml' \
   '*.toml' '*.ini' '*.cfg' '*.conf' "${examples[@]}" | added_lines)"
 literal="$literal$(printf '\n%s' "$(printf '%s\n' "$config_added" | grep -E "$UNQUOTED" | grep -vE "$HARMLESS" | head -n 5 || true)")"

@@ -1,4 +1,4 @@
-# galivelop-workflow v0.5.0
+# galivelop-workflow v0.5.1
 # The project's check in CI: each `ciInstall` command (else each `install` command), then each `check` command of
 # .claude/gw.json, on every push outside the protected branch and on every pull request. On a pull request it also
 # runs the BASE branch's copy of .githooks/pre-commit over the PR's commits, so a pull request cannot weaken the check

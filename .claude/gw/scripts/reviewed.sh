@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.5.0
+# galivelop-workflow v0.5.1
 # After /code-review of the diff against the protected branch, with its fixes pushed: records HEAD's sha in the
 # config's `reviewMark` and commits it ("Revisado: <sha>" / "Reviewed: <sha>" by `language`). The mark travels with
 # the repo, so other accounts and scheduled tasks see it; .githooks/pre-push and the PR hook accept code up to it.

@@ -1,4 +1,4 @@
-<!-- galivelop-workflow v0.5.0 -->
+<!-- galivelop-workflow v0.5.1 -->
 # gw-scout-updates — notas del proyecto
 
 Las lee primero la skill `gw-scout-updates`: qué vigilar y qué no. El flujo las crea una vez; desde entonces son del

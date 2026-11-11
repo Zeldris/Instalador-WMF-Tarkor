@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.5.0
+# galivelop-workflow v0.5.1
 """Broken links and stale references in the project's Markdown (a check for CI and `check`).
 
 1. Relative links `[text](path)` and `[text](path#anchor)` in the tracked .md files: the file must exist and, when

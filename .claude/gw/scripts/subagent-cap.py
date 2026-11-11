@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.5.0
+# galivelop-workflow v0.5.1
 """PreToolUse hook: ask the user when a session has launched many subagents, so a loop does not burn tokens unseen.
 
 It counts every Agent/Task call of a session (the matcher in hooks/hooks.json and in the settings.json template is

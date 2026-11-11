@@ -4,7 +4,7 @@ description: Run the main session as an orchestrator that deals work out to clea
 license: MIT
 compatibility: Claude Code or any Agent Skills agent with subagents; git; reads .claude/gw.json
 metadata:
-  version: "0.5.0"
+  version: "0.5.1"
   source: "Galivelop workshop; generalised from the Tarkor, installer and portal gw-orchestrate-dealer"
 ---
 
@@ -35,7 +35,8 @@ A read of more than ~200 lines, or a long output, in the main session is a chunk
 
 1. **Split.** With the `gw-selector` already applied, cut the task into chunks one subagent can close in one go: a fix,
    a module, a screen, a command. Each chunk gets a **done criterion** that can be checked (a green test, a green
-   CI job, a pushed commit), a list of what blocks it and the files it touches. The **frontier** (one wave) is the chunks
+   CI job, a pushed commit), a list of what blocks it and the files it touches. Each chunk carries its task id; if the
+   commit hook checks ids against a roadmap, commit the missing rows before dealing (a subagent cannot add them). The **frontier** (one wave) is the chunks
    nothing pending blocks: they go out together (see Rules), but two chunks of one wave never share a file: the second
    waits for the first. With more than ~5 chunks, a cheap-model subagent may review the split before launch (missing
    blockers, shared files, criteria that cannot be checked). Cap a subagent at ~30 tool calls (one or two proposal rows); at the cap it saves its state in `log` and the
@@ -122,10 +123,15 @@ A read of more than ~200 lines, or a long output, in the main session is a chunk
   one-file fix whose place the reviewer gave stays in the main session.
 - **One writing subagent at a time on the same branch.** Two that commit to the same branch collide in the log and in
   shared files. In parallel, only what does not write (searching, reading, measuring).
+- **A subagent that writes in the background always works in a worktree, even alone:** the main session keeps
+  committing on the working branch, and a lone writer there collides with it (the `Stop` hook halts the session over
+  the writer's uncommitted changes). Same setup as the next rule; it never edits the main tree.
 - **Code fixes of the frontier, in parallel, in isolated worktrees:** each subagent runs with `isolation: "worktree"` in
   the background, commits at every stable point (`WIP:` if still red, so a restart loses nothing), does not touch the
-  log or push, and returns its branch. The main session has each one reviewed (step 3), merges them one by one
-  (merge, never rebase; `check` after each), writes the log and pushes. When the session folder is not the repo root
+  log or push, and returns its branch. In its worktree it runs the tests of what it touches, the linters and the copy
+  check, not the full `check`: the check's lock is one per repo, so parallel full checks run in series. The main
+  session has each one reviewed (step 3), merges them one by one (merge, never rebase), runs one full `check` on the
+  merged wave without editing the tree while it runs (drafts go to the scratchpad), writes the log and pushes. When the session folder is not the repo root
   (a cloud session starts in `/home/user`, next to other repos, and `isolation` lands the worktree in the wrong one),
   the main session creates each worktree itself with `git -C <repo> worktree add <folder> -b agent/<id>-<topic>` and
   puts that folder in the brief, without `isolation` (put it under `.claude/worktrees/`: a folder elsewhere is not

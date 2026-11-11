@@ -1,4 +1,4 @@
-<!-- galivelop-workflow v0.5.0 -->
+<!-- galivelop-workflow v0.5.1 -->
 # Guía de revisión
 
 Lo que el revisor (`/code-review`) comprueba en cada diff del instalador, además de los fallos de
@@ -52,6 +52,12 @@ que se repite, se añade aquí con su `FLU-n` o `INS-n`.
   (`[s]ervidor`). (criterio)
 - Un runbook o encargo que sigue una tarea programada (una sesión sin persona delante) se revisa como código, aunque
   case con `content`: lo que dice se ejecuta tal cual. (criterio)
+
+## Tests
+
+- Un componente que los tests sustituyen por un doble (fake, mock, stub) tiene también una prueba de humo contra el
+  real: arrancarlo y hacer una llamada de punta a punta. Se omite en local si falta el real y falla en el CI.
+  (criterio)
 
 ## Traído de otro repo: se adapta a los contratos de este
 

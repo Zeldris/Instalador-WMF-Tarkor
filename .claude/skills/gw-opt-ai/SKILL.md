@@ -5,7 +5,7 @@ disable-model-invocation: true
 license: MIT
 compatibility: Projects with local or self-hosted AI models; python3 (standard library) for scripts/measure.py
 metadata:
-  version: "0.5.0"
+  version: "0.5.1"
   source: "Galivelop workshop; generalised from the Tarkor and installer gw-opt-ai"
 ---
 

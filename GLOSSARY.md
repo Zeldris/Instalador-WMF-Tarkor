@@ -1,4 +1,4 @@
-<!-- galivelop-workflow v0.5.0 -->
+<!-- galivelop-workflow v0.5.1 -->
 # Glosario
 
 Vocabulario de Instalador-WMF-Tarkor. Primero van los términos del flujo; el proyecto añade debajo los de su dominio y los

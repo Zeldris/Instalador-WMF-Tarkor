@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.5.0
+# galivelop-workflow v0.5.1
 """Reads the GitHub Actions status of a branch or a commit through the API: "look at the CI of the last push" without
 opening the web. The same reader review-before-main.sh uses to gate a merge (one place for the token / `gh` logic).
 
@@ -32,7 +32,9 @@ NOT_STARTED = ("job was not started because recent account payments have failed"
 
 
 class ApiError(Exception):
-    pass
+    def __init__(self, message, output=""):
+        super().__init__(message)
+        self.output = output  # what gh or curl printed, without the request path (a sha may contain "422")
 
 
 # git exports GIT_DIR and friends to hooks: they would point git at the hook's repo, not at --root.
@@ -81,7 +83,8 @@ def api(path):
                 stdin=f"Authorization: Bearer {token}\n")
         how = "GET https://api.github.com/" + path
     if r.returncode != 0:
-        raise ApiError(f"{how} failed: {(r.stderr or r.stdout).strip()[:300]}")
+        output = (r.stderr or r.stdout).strip()[:300]
+        raise ApiError(f"{how} failed: {output}", output)
     try:
         return json.loads(r.stdout)
     except ValueError:
@@ -205,7 +208,7 @@ def main(argv=None):
             try:
                 api(f"repos/{repo}/commits/{sha}")
             except ApiError as exc:
-                if "422" in str(exc) or "No commit found" in str(exc):
+                if re.search(r"\b422\b", exc.output) or "No commit found" in exc.output:
                     out["error"] = f"HEAD {sha[:12]} is not on GitHub"
                     return finish(2, f"ci-status: {out['error']}\npush first and retry: git push && python3 {me}")
                 raise

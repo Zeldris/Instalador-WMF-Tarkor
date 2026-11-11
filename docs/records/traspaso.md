@@ -10,11 +10,11 @@ cada commit.**
 
 | | |
 |---|---|
-| **Actualizado** | 2026-11-05 |
+| **Actualizado** | 2026-11-11 |
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #12 (2026-11-05, `ce9f33a`): `INS-12` (licencia MIT del repo), `FLU-7` e `INS-35` a `INS-37`, con la confirmación de la usuaria y la CI de GitHub en verde (Linux y Windows). |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-05: PR #12 fusionado (`INS-12`, licencia MIT del repo; falta la del juego). La CI de GitHub vuelve a arrancar: ya no hace falta `ci-local`. `INS-35` e `INS-36` encargadas a una sesión del juego. `INS-37`: contrato fijado en `04` (`window.__TARKOR__.abrirAjustes()`); falta su lado del juego (encargo, si la usuaria lo confirma) y la inyección en `INS-41`. Siguiente: cuando vuelvan, cerrar `INS-35` e `INS-36` y llevar las variables a `04`, `10` y `12`. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-11: `FLU-8` hecha (`/gw-update` a Galivelop-workflow v0.5.1), en la rama, sin PR todavía. 2026-11-05: PR #12 fusionado (`INS-12`, licencia MIT del repo; falta la del juego). La CI de GitHub vuelve a arrancar: ya no hace falta `ci-local`. `INS-35` e `INS-36` encargadas a una sesión del juego. `INS-37`: contrato fijado en `04` (`window.__TARKOR__.abrirAjustes()`); falta su lado del juego (encargo, si la usuaria lo confirma) y la inyección en `INS-41`. Siguiente: cuando vuelvan, cerrar `INS-35` e `INS-36` y llevar las variables a `04`, `10` y `12`. |
 | **Tests** | 2026-10-26: núcleo `cargo test -p tarkor-nucleo` 116, `cargo fmt --all --check` en verde, clippy 0 avisos, `tsc -b` 0, `cargo check` del núcleo y la app para Windows (mingw) en verde. Asistente `vitest` 27 y E2E con el Ollama falso: último verde el 2026-10-25. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -121,6 +121,8 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 
 Dos líneas cada una como mucho; el detalle está en el commit y la más antigua sale cuando hay más de 5.
 
+- ~~`FLU-8` · Galivelop-workflow v0.5.1~~ (2026-11-11): `/gw-update` del parche; regla de `## Tests` en `REVIEW.md`
+  y nombres nuevos de los scripts en `test_herramientas_con_test.py`.
 - ~~`FLU-7` · Galivelop-workflow v0.5.0~~ (2026-11-04): `/gw-update`, rutas en inglés (`docs/records/`), CI partido en
   `check.yml` (del flujo) y `app.yml` (del instalador), `commitNext` y commits sin firmas del agente.
 - ~~`INS-34` · Backend empaquetado sin curación ni cloud~~ (2026-10-27): `define` de `TARKOR_EMPAQUETADO` e
@@ -129,5 +131,3 @@ Dos líneas cada una como mucho; el detalle está en el commit y la más antigua
   `/admin/*` y herramientas; «Crear desde cero» en construcción. En `main` del juego (`aae4a755`, sin PR, CI local).
 - ~~`INS-32` · Fuentes Cinzel e Inter en local~~ (2026-10-26): ya hecho en `main` del juego por su `BAS-1`
   (`4a150259`, `frontend/src/assets/fonts/` con licencias OFL); sin cambios.
-- ~~`INS-31` · URL del backend en tiempo de ejecución~~ (2026-10-26): `apiBaseUrl()` en el `api.ts` del juego con
-  `window.__TARKOR__.apiUrl`; en `main` del juego (`b76c66b2`, sin PR, CI local).

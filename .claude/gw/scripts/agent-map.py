@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.5.0
+# galivelop-workflow v0.5.1
 """The agent map must not point at anything that no longer exists (a check for CI and `check`).
 
 The map (default docs/agent-map.md; config `agentMap.path`) says where each contract lives and what implements it.

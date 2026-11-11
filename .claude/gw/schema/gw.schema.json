@@ -1,5 +1,5 @@
 {
-  "$comment": "galivelop-workflow v0.5.0",
+  "$comment": "galivelop-workflow v0.5.1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/zeldris/Galivelop-workflow/main/schema/gw.schema.json",
   "title": "Galivelop-workflow project config (.claude/gw.json)",
@@ -110,6 +110,35 @@
       "default": "",
       "description": "Prefix put before every `check` and `relatedTests` command (e.g. tools/qa/host.sh); empty for none."
     },
+    "checkLockWait": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "Seconds scripts/check.sh waits for another check that holds the lock (<git common dir>/gw/check.lock) before exiting 3 and naming its pid and sha; 0 = do not wait."
+    },
+    "checkReuseMark": {
+      "type": "boolean",
+      "default": true,
+      "description": "The pre-push skips its check on a commit that only adds or edits the reviewMark file on top of a parent whose tree is recorded green (the commit scripts/reviewed.sh makes); false runs the check on it."
+    },
+    "checkCacheInputs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^(?!/)(?!(.*/)?\\.\\.(/|$)).+$"
+      },
+      "default": [
+        ".claude/gw.local.json"
+      ],
+      "description": "Files (relative to the repo root, no '..') whose content is part of the check-cache key, for ignored files the check reads and the git tree does not see; a missing file counts as absent; [] = the key is the tree alone."
+    },
+    "checkOutputGrace": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 5,
+      "description": "Seconds scripts/check.sh waits, after a command ends, for the output it was copying to the log; a command that leaves a background process holding the output cannot hang the check longer than this."
+    },
     "worktreeLinks": {
       "type": "array",
       "items": {
@@ -190,6 +219,28 @@
       "default": [],
       "description": "Repo-relative workflow files that `ci-local.py` runs, whatever their triggers; empty: every .github/workflows/*.yml|yaml triggered by the event."
     },
+    "ciKeepSteps": {
+      "type": "boolean",
+      "default": true,
+      "description": "true: apply.py never replaces .github/workflows/check.yml when it has lines of the project's own (steps, Node version, cache...) that neither the template nor an earlier one has, not even with --update; it writes check.yml.gw-new and says how to merge. false: the old behaviour (an older copy is replaced)."
+    },
+    "legacyNames": {
+      "type": "boolean",
+      "default": true,
+      "description": "true: apply.py lists, as warnings with file:line, the uses of the pre-A8 Spanish names (scripts, skill folders, notes, comprobar.yml, docs/traspaso.md...) in the project's own text files. false: no listing."
+    },
+    "legacyNamesSkip": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "default": ["CHANGELOG*"],
+      "description": "Globs (fnmatch, on the repo-relative path) of files apply.py never lists old-name uses in, as history that is not renamed. The log, recordsDir and proposalsDir are always skipped."
+    },
+    "legacyNamesMax": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 50,
+      "description": "Most old-name uses apply.py lists per run (the rest is counted)."
+    },
     "ciPython": {
       "type": "array",
       "items": {"type": "string", "pattern": "^\\S+$"},
@@ -202,6 +253,12 @@
       "items": {"type": "string", "minLength": 1},
       "default": [],
       "description": "Names of foreign CI checks (a check-run name or a commit status context, e.g. a deploy) that do not block the merge nor count as the project's CI. An exact name, or a name with `*` for any text (`vercel*`); case matters; no regex. An ignored check never turns a red or pending check of the project into green, and a commit where only ignored checks reported counts as no CI."
+    },
+    "nonTestExtensions": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^[a-z0-9]+$"},
+      "default": ["md", "json", "yml", "yaml", "properties", "txt", "csv"],
+      "description": "File extensions (lower case, no dot; the file's own extension is compared in lower case) of text and data files that red-without-fix.sh does not search for test code, so prose such as `improve it (URL)` is not mistaken for an `it(` test. A file with no extension is always searched. [] searches every file. Some stacks keep tests in .md/.txt (doctest) or .yml/.yaml (specs): remove those extensions from the list, otherwise an uncommitted test there is skipped and stashed with the fix."
     },
     "content": {
       "type": "array",

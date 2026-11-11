@@ -244,3 +244,7 @@ ganchos, `.claude/gw/scripts`, `tools/qa` y las skills ([runbook](runbooks/skill
   salen del CI del proyecto (los prueba el repo del flujo). `tools/qa` deja `ci-local.py` y sus tests, que ya trae el
   flujo; `instalar-entorno.sh` instala con `sudo -n` si no es root. `REVIEW.md` etiqueta cada regla con
   `(check: …)` o `(criterio)`. **Pendiente:** el CI de GitHub sigue sin cuota; `app.yml` no ha corrido allí.
+- [x] **FLU-8** (2026-11-11) `/gw-update` a Galivelop-workflow v0.5.1 (parche): scripts, skills, ganchos y
+  `check.yml` al día; `worktree.baseRef: "head"` en `settings.json`. `REVIEW.md` gana la regla de `## Tests` (un doble
+  pide también una prueba de humo contra el real) y el docstring de `test_herramientas_con_test.py` usa los nombres
+  nuevos de los scripts.
