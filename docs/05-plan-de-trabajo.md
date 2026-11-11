@@ -132,10 +132,12 @@ Ver [`06`](06-inventario-exclusiones.md).
   descarga de Chromium, pasado desde aquí (382 tests de `tools/qa`).
 - [ ] **INS-35** Backend: `SYSTEM` del narrador incrustado en build; narrador con modelo base +
   `system` por petición detrás de variable de entorno; leer `TARKOR_NUM_THREAD`,
-  `TARKOR_NUM_BATCH`, `TARKOR_NUM_CTX_NARRADOR` y `TARKOR_MODELOS_SIN_PENSAR` (ver `12`). Encargo: sin rastro en
-  el juego (2026-11-11: ni rama, ni commit, ni mención); hay que lanzarlo y apuntar aquí su rama o issue.
+  `TARKOR_NUM_BATCH` y `TARKOR_NUM_CTX_NARRADOR` (ver `12`). Encargo: issue [#93](https://github.com/Zeldris/World-Maker-Fantasy/issues/93) del juego (2026-11-11), con
+  `INS-36`; el modo base va detrás de `TARKOR_NARRADOR_BASE=1`. `TARKOR_MODELOS_SIN_PENSAR` sobra: el juego ya
+  manda `think: false` en todas las peticiones.
 - [ ] **INS-36** Backend: CORS restringido y escucha solo en `127.0.0.1` en modo empaquetado; rutas de
-  imágenes y datos por variable de entorno. Encargo: el mismo que `INS-35`, sin rastro en el juego (2026-11-11).
+  imágenes y datos por variable de entorno (`TARKOR_IMAGENES_DIR`) y versión fijada en el build. Encargo: el issue
+  [#93](https://github.com/Zeldris/World-Maker-Fantasy/issues/93) del juego, con `INS-35` (2026-11-11).
 - [ ] **INS-37** Menú del juego: enlace a Ajustes → Rendimiento de la IA. Contrato fijado (2026-11-04, `04`):
   «Rendimiento de la IA» en el menú solo si `window.__TARKOR__.abrirAjustes` es una función, y la llama al pulsarlo.
   Falta: hacerlo en el juego (encargo a una sesión del juego) e inyectar la función en `INS-41`.

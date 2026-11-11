@@ -97,7 +97,11 @@ tiene que leer y pasar en cada petición a Ollama (`INS-35` del plan):
 | `TARKOR_NUM_THREAD` | `num_thread` | Mitad de los hilos (Moderado) o todos menos uno (Alto) |
 | `TARKOR_NUM_BATCH` | `num_batch` | 512, o 256 con margen justo |
 | `TARKOR_NUM_CTX_NARRADOR` | `num_ctx` | 8192 |
-| `TARKOR_MODELOS_SIN_PENSAR` | `think: false` | Modelos Qwen 3.x del perfil: pensar antes de narrar multiplica el tiempo de cada turno |
+| `TARKOR_NARRADOR_BASE` | — | `1`: el narrador es el modelo base de `OLLAMA_MODEL_NARRADOR` con el `SYSTEM` incrustado por petición (`03`) |
+
+Sin la variable, el juego hace lo de hoy (`num_thread` 8, sin `num_batch`, el `num_ctx` del Modelfile). Los Qwen 3.x
+no piensan antes de narrar: el juego ya manda `think: false` en todas las peticiones, así que no hace falta variable.
+Encargo en el juego: issue [#93](https://github.com/Zeldris/World-Maker-Fantasy/issues/93).
 
 ### Otras mejoras de rendimiento previstas
 
