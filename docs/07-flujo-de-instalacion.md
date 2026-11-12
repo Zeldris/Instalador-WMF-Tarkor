@@ -103,10 +103,11 @@ carpetas existentes, LM Studio importa modelos).
   borra (los registros siempre, igual que en Windows) y enseña "Datos borrados. Ya puedes borrar el archivo
   .AppImage o desinstalar el paquete .deb." con un botón "Cerrar Tarkor". Con las partidas borradas (también se va `config.json`), al volver a
   abrirlo empieza el asistente; con solo la IA, la configuración se queda, como al desinstalar en Windows sin las partidas.
-  Decidido el 2026-11-11 (`INS-59`, sin implementar): con solo la IA borrada, la configuración se queda pero deja
-  de dar el asistente por completado, así que al volver a abrir Tarkor empieza el asistente y la descarga otra vez
-  (Steam e itch.io, cuando faltan los archivos de un juego, ofrecen instalarlo de nuevo en vez de abrirlo roto).
-  Hasta entonces sale la vista de juego con "El motor de IA no está instalado" y se arregla con Ajustes → Reparar.
+  Con solo la IA borrada (`INS-59`, decidido el 2026-11-11), la configuración se queda pero deja de dar el
+  asistente por completado y olvida los modelos descargados: al volver a abrir Tarkor, el asistente sigue en
+  "Elige perfil" (con el equipo, el perfil y la carpeta de antes) y la descarga empieza otra vez (Steam e itch.io,
+  cuando faltan los archivos de un juego, ofrecen instalarlo de nuevo en vez de abrirlo roto). Si la carpeta de la
+  IA no se pudo borrar, la configuración no cambia.
   Una excepción, igual en el desinstalador de Windows: si la usuaria eligió otra carpeta para la IA y esa carpeta
   sigue ahí (no se marcó "IA", o no se pudo borrar), queda un `config.json` que solo guarda esa carpeta, para que
   al reinstalar o al repetir el asistente se encuentre la IA ya descargada en vez de dejarla huérfana.
