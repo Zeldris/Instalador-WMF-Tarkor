@@ -12,9 +12,9 @@ cada commit.**
 |---|---|
 | **Actualizado** | 2026-11-12 |
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
-| **Último commit en `main`** | Fusión del PR #15 (2026-11-11, `5631e77`): `INS-15` (pantalla «Licencias y avisos», narrador `llama3.1:8b`) con `INS-7`, `INS-35` e `INS-36`, con la confirmación de la usuaria y el CI de GitHub en verde. |
+| **Último commit en `main`** | Fusión del PR #16 (2026-11-12, `5d3fcf3`): `INS-44`, `INS-45` e `INS-57` (borrar datos al desinstalar en Windows y Linux, hoja de estilos), con la confirmación de la usuaria y el CI de GitHub en verde. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-12: `INS-57`, `INS-44` e `INS-45` hechas (pendiente de `INS-8`). Fases 1 y 2 cerradas; leves en el paso 19; `INS-59` al plan, fuera de este PR. El CI `App` falló en Windows (`5a08df0`): dos tests de `desinstalar.rs` comparaban con la ruta temporal sin normalizar (`RUNNER~1`); arreglados y vistos en rojo en Linux con `TMPDIR` tras un enlace. PR a `main` confirmado por la usuaria; fusionarlo, solo con su confirmación y el CI en verde. Siguiente: `reviewed.sh`, subir, `Check` y `App` en verde y crear el PR. Presupuesto de compactaciones: 8 (van 11). |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-12: sin tarea en curso. PR #16 (`INS-44`, `INS-45`, `INS-57`) fusionado en `main` con la confirmación de la usuaria y el CI en verde; `INS-44` e `INS-45`, pendientes de verlos en `INS-8`. Siguiente: el paso 1 de «Siguiente paso», o lo que pida la usuaria. |
 | **Tests** | 2026-10-26: núcleo `cargo test -p tarkor-nucleo` 116, `cargo fmt --all --check` en verde, clippy 0 avisos, `tsc -b` 0, `cargo check` del núcleo y la app para Windows (mingw) en verde. Asistente `vitest` 27 y E2E con el Ollama falso: último verde el 2026-10-25. |
 
 ## Dónde está todo (para saber qué sigue)
@@ -148,11 +148,11 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 
 Dos líneas cada una como mucho; el detalle está en el commit y la más antigua sale cuando hay más de 5.
 
-- ~~`INS-57` · Hoja de estilos del instalador y peticiones de imágenes~~ (2026-11-11, sin PR aún):
+- ~~`INS-57` · Hoja de estilos del instalador y peticiones de imágenes~~ (2026-11-11, PR #16):
   [`13`](../13-hoja-de-estilos-e-imagenes.md); sus cuatro dudas, resueltas por la usuaria (§6); colocarlas es `INS-58`.
-- ~~`INS-45` · AppImage, `.deb` y «Borrar datos del juego»~~ (2026-11-11, sin PR aún): CI de Linux construye y arranca
+- ~~`INS-45` · AppImage, `.deb` y «Borrar datos del juego»~~ (2026-11-11, PR #16): CI de Linux construye y arranca
   los paquetes; diálogo en Ajustes (solo Linux) que para el motor, borra y cierra; pendiente de `INS-8` en la Deck.
-- ~~`INS-44` · Instalador NSIS con las dos casillas~~ (2026-11-11, sin PR aún): plantilla propia, `tarkor.exe --desinstalar`
+- ~~`INS-44` · Instalador NSIS con las dos casillas~~ (2026-11-11, PR #16): plantilla propia, `tarkor.exe --desinstalar`
   y CI de Windows que instala y desinstala; pendiente de `INS-8` verlo en pantalla.
 - `INS-15` · Licencias en el instalador (2026-11-11, PR #15): pantalla «Licencias y avisos» y narrador `llama3.1:8b` en
   Equilibrado y Máximo; falta la pantalla del juego y las imágenes.
