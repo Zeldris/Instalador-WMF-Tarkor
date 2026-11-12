@@ -321,7 +321,12 @@ mod tests {
         assert!(rara.join("importante.txt").exists());
         assert!(!r.registros.exists());
         assert!(!r.datos.join("partida.json").exists(), "las partidas sí se borran");
-        assert_eq!(Config::cargar(&r.datos).carpeta_ia, Some(rara), "la IA que sobrevive no queda huérfana");
+        // Se guarda normalizada: en Windows la carpeta temporal llega con nombre corto (`RUNNER~1`).
+        assert_eq!(
+            Config::cargar(&r.datos).carpeta_ia,
+            Some(normalizada(&rara)),
+            "la IA que sobrevive no queda huérfana"
+        );
     }
 
     #[test]
@@ -346,7 +351,7 @@ mod tests {
         c.guardar(&r.datos).unwrap();
         borrar(&r, &c, true, false).unwrap();
         assert!(!r.datos.join("partida.json").exists());
-        assert_eq!(Config::cargar(&r.datos), Config { carpeta_ia: Some(elegida.clone()), ..Config::default() });
+        assert_eq!(Config::cargar(&r.datos), Config { carpeta_ia: Some(normalizada(&elegida)), ..Config::default() });
         assert!(elegida.join("modelo.bin").exists());
     }
 

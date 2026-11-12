@@ -10,11 +10,11 @@ cada commit.**
 
 | | |
 |---|---|
-| **Actualizado** | 2026-11-11 |
+| **Actualizado** | 2026-11-12 |
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #15 (2026-11-11, `5631e77`): `INS-15` (pantalla «Licencias y avisos», narrador `llama3.1:8b`) con `INS-7`, `INS-35` e `INS-36`, con la confirmación de la usuaria y el CI de GitHub en verde. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-11: `INS-57`, `INS-44` e `INS-45` hechas (pendiente de `INS-8`). Fase 1 cerrada (`caedb74`); leves en el paso 19. Fase 2 decidida por la usuaria y aplicada: regla de borrado en `REVIEW.md`, test `textosNsis.test.ts`, cuatro notas de ahorro; `INS-59` (volver al asistente tras borrar la IA) al plan, fuera de este PR. PR a `main` confirmado por la usuaria; fusionarlo, solo con su confirmación y el CI en verde. Siguiente: revisión corta del test, `reviewed.sh`, subir, CI en verde y crear el PR. Presupuesto de compactaciones: 8 (van 10). |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-12: `INS-57`, `INS-44` e `INS-45` hechas (pendiente de `INS-8`). Fases 1 y 2 cerradas; leves en el paso 19; `INS-59` al plan, fuera de este PR. El CI `App` falló en Windows (`5a08df0`): dos tests de `desinstalar.rs` comparaban con la ruta temporal sin normalizar (`RUNNER~1`); arreglados y vistos en rojo en Linux con `TMPDIR` tras un enlace. PR a `main` confirmado por la usuaria; fusionarlo, solo con su confirmación y el CI en verde. Siguiente: `reviewed.sh`, subir, `Check` y `App` en verde y crear el PR. Presupuesto de compactaciones: 8 (van 11). |
 | **Tests** | 2026-10-26: núcleo `cargo test -p tarkor-nucleo` 116, `cargo fmt --all --check` en verde, clippy 0 avisos, `tsc -b` 0, `cargo check` del núcleo y la app para Windows (mingw) en verde. Asistente `vitest` 27 y E2E con el Ollama falso: último verde el 2026-10-25. |
 
 ## Dónde está todo (para saber qué sigue)
