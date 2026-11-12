@@ -25,6 +25,9 @@ antes de la `/retro`; todo en español, y solo lo que confirme la usuaria entra 
 - **Bitácora en el pre-commit** (opt-tokens del 2026-10-25): `.githooks/pre-commit` corre `handoff.py own-row --staged` sobre
   la bitácora preparada, y la fila se escribe con `handoff.py set-row`, que rechaza pasar de 600 caracteres: el fallo
   salta antes del commit y no al subir, cuando arreglarlo obliga a rehacer commits.
+- **Entrada de «Hecho» con `handoff.py done`** (opt-tokens de `INS-59`): al cerrar una tarea, la entrada se escribe
+  con `python3 .claude/gw/scripts/handoff.py done`, no a mano; a mano, el gancho rechazó dos commits y cada reintento
+  arrastró el contexto entero (~220k).
 
 - **Compactaciones de la tarea** (opt-tokens de `INS-43`): `recover.py --state` da también las compactaciones
   desde la última fusión de `origin/main` (el inicio de la tarea), que son las que se comparan con el presupuesto de

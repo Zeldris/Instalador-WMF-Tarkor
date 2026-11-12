@@ -44,6 +44,9 @@ Un test nuevo del núcleo vive en el `mod tests` del mismo archivo que el arregl
 `red-without-fix.sh` se llevaría también el test: se comprueba a mano, quitando solo la lógica del arreglo,
 viendo fallar el test con su motivo y devolviéndola.
 
+En el contenedor de Claude se corre como root: `chmod` no impide borrar, así que un fallo de permisos no se puede
+provocar en un test; el fallo parcial se prueba con una ruta que no existe o con una costura en el código.
+
 ## Prueba de punta a punta (Linux)
 
 **Para correrlas:** `bash tools/qa/e2e.sh [app/e2e/<prueba>.e2e.mjs]...` desde la raíz (sin argumentos, todas). Compila

@@ -8,9 +8,10 @@
 //! Con `partidas` se borra también `config.json`, el único sitio donde vive `carpeta_ia`: si la
 //! carpeta de la IA elegida sobrevive (no se pidió borrarla, o no era borrable), se deja un
 //! `config.json` que solo conserva esa ruta, para que la IA no quede huérfana.
+//! Con solo `ia`, `config.json` se queda pero vuelve al asistente para descargarla otra vez (`INS-59`).
 
 use crate::carpetas::normalizada;
-use crate::config::{Config, Rutas};
+use crate::config::{Config, Rutas, NOMBRE_CONFIG};
 use std::ffi::OsString;
 use std::fs;
 use std::io;
@@ -18,6 +19,9 @@ use std::path::{Path, PathBuf};
 
 /// Nombre de la carpeta que crea el asistente dentro de la elegida por la usuaria.
 const NOMBRE_IA_ELEGIDA: &str = "Tarkor IA";
+
+/// Paso «Elige perfil» del asistente (`App.tsx`): el anterior a la descarga.
+const PASO_ELEGIR_PERFIL: u8 = 4;
 
 /// Qué se le enseña a la usuaria antes de borrar.
 #[derive(Debug, Clone, PartialEq)]
@@ -116,10 +120,11 @@ pub fn borrar(rutas: &Rutas, config: &Config, partidas: bool, ia: bool) -> io::R
     // Antes de borrar: escrita con `..` o a través de un enlace, la ruta puede pasar por algo que se va a ir.
     let ia_normalizada = normalizada(&ia_en_uso);
     let mut error = None;
+    let ia_tocada = ia && ia_borrable(rutas, &ia_en_uso);
 
     anotar(&mut error, quitar(&rutas.registros));
     if ia {
-        if ia_borrable(rutas, &ia_en_uso) {
+        if ia_tocada {
             anotar(&mut error, quitar(&ia_en_uso));
         } else {
             anotar(
@@ -137,6 +142,10 @@ pub fn borrar(rutas: &Rutas, config: &Config, partidas: bool, ia: bool) -> io::R
     if partidas && rutas.datos.is_dir() {
         anotar(&mut error, borrar_salvo(&normalizada(&rutas.datos), &ia_normalizada));
     }
+    // Aunque el borrado se quede a medias: la IA ya no sirve y la descarga del asistente la repone.
+    if ia_tocada && !partidas && rutas.datos.join(NOMBRE_CONFIG).exists() {
+        anotar(&mut error, sin_ia(config).guardar(&rutas.datos));
+    }
     if partidas && config.carpeta_ia.is_some() && ia_normalizada.exists() {
         let conservar = Config { carpeta_ia: Some(ia_normalizada), ..Config::default() };
         anotar(&mut error, conservar.guardar(&rutas.datos));
@@ -147,6 +156,18 @@ pub fn borrar(rutas: &Rutas, config: &Config, partidas: bool, ia: bool) -> io::R
         }
     }
     error.map_or(Ok(()), Err)
+}
+
+/// La configuración tras borrar solo la IA (`INS-59`): las partidas y lo elegido se quedan, pero el
+/// asistente deja de darse por completado y vuelve a «Elige perfil» para descargarla otra vez, como
+/// Steam o itch.io cuando faltan los archivos de un juego. Los modelos vivían en la IA: ya no están.
+fn sin_ia(config: &Config) -> Config {
+    Config {
+        asistente_completado: false,
+        modelos_descargados: Vec::new(),
+        paso_asistente: config.paso_asistente.min(PASO_ELEGIR_PERFIL),
+        ..config.clone()
+    }
 }
 
 /// El mensaje que ve la usuaria cuando el borrado falla (sin rutas internas, salvo la de la IA que ella eligió).
@@ -364,6 +385,82 @@ mod tests {
         borrar(&r, &Config::default(), true, false).unwrap();
         assert!(!r.datos.join("config.json").exists());
         assert!(!r.datos.exists());
+    }
+
+    fn completada(carpeta_ia: Option<PathBuf>) -> Config {
+        Config {
+            consentimiento_aceptado: true,
+            perfil: Some("equilibrado".into()),
+            modelos_descargados: vec!["llama3.1:8b".into()],
+            paso_asistente: 7,
+            asistente_completado: true,
+            carpeta_ia,
+            ..Config::default()
+        }
+    }
+
+    #[test]
+    fn solo_ia_vuelve_al_asistente_en_elegir_perfil_sin_modelos() {
+        let d = tempfile::tempdir().unwrap();
+        let r = rutas(d.path());
+        montar(&r);
+        let c = completada(None);
+        c.guardar(&r.datos).unwrap();
+        borrar(&r, &c, false, true).unwrap();
+        assert!(r.datos.join("partida.json").exists());
+        assert_eq!(
+            Config::cargar(&r.datos),
+            Config { asistente_completado: false, modelos_descargados: vec![], paso_asistente: 4, ..c }
+        );
+    }
+
+    #[test]
+    fn solo_ia_elegida_borrada_conserva_la_carpeta_en_la_config() {
+        let d = tempfile::tempdir().unwrap();
+        let r = rutas(d.path());
+        montar(&r);
+        let elegida = d.path().join("disco/Tarkor IA");
+        archivo(&elegida.join("modelo.bin"), 10);
+        let c = completada(Some(elegida.clone()));
+        c.guardar(&r.datos).unwrap();
+        borrar(&r, &c, false, true).unwrap();
+        let tras = Config::cargar(&r.datos);
+        assert!(!tras.asistente_completado);
+        assert_eq!(tras.carpeta_ia, Some(elegida));
+    }
+
+    #[test]
+    fn solo_ia_que_no_se_pudo_borrar_deja_la_config_igual() {
+        let d = tempfile::tempdir().unwrap();
+        let r = rutas(d.path());
+        montar(&r);
+        let rara = d.path().join("disco/Otra");
+        archivo(&rara.join("modelo.bin"), 10);
+        let c = completada(Some(rara));
+        c.guardar(&r.datos).unwrap();
+        let e = borrar(&r, &c, false, true).unwrap_err();
+        assert!(e.to_string().contains("no se borra la carpeta de la IA"), "{e}");
+        assert_eq!(Config::cargar(&r.datos), c);
+    }
+
+    #[test]
+    fn solo_ia_no_borrable_que_ya_no_existe_deja_la_config_igual() {
+        let d = tempfile::tempdir().unwrap();
+        let r = rutas(d.path());
+        montar(&r);
+        let c = completada(Some(d.path().join("disco/Otra")));
+        c.guardar(&r.datos).unwrap();
+        borrar(&r, &c, false, true).unwrap_err();
+        assert_eq!(Config::cargar(&r.datos), c);
+    }
+
+    #[test]
+    fn solo_ia_sin_config_no_la_crea() {
+        let d = tempfile::tempdir().unwrap();
+        let r = rutas(d.path());
+        montar(&r);
+        borrar(&r, &completada(None), false, true).unwrap();
+        assert!(!r.datos.join("config.json").exists());
     }
 
     #[test]

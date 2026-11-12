@@ -12,7 +12,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 pub const VERSION_CONFIG: u32 = 1;
-const NOMBRE_CONFIG: &str = "config.json";
+pub(crate) const NOMBRE_CONFIG: &str = "config.json";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
