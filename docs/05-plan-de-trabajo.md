@@ -208,6 +208,12 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
 - [ ] **INS-46** Workflow de GitHub Actions en el repo privado que publica releases con `SHA256SUMS`
   en este repo.
 - [ ] **INS-47** Pantalla "Licencias de terceros" generada en el build.
+  Decidido con la usuaria (2026-11-12): las licencias de las dependencias de Rust que entran en el binario
+  (Linux y Windows) las saca `cargo-about`, que además se para ante una licencia no aceptada; las de npm de
+  producción, un script propio que lee `node_modules`. Se enseñan como `chrome://credits`: una sección «Licencias
+  de terceros» al final de la página de licencias, agrupada por licencia y desplegable (paquete, versión y texto,
+  sin repetir textos iguales), generada en el build y no versionada. El mismo contenido va a un
+  `THIRD-PARTY-NOTICES.txt` que `INS-46` publica con cada versión, junto al `NOTICE` de Llama (`08`).
 - [ ] **INS-56** La marca de Tarkor en el asistente (de `UX-40` del juego, decidido con la usuaria el
   2026-11-11): tokens `gold-*`, `stone-*`, `night-*` y `crystal-deep` en `app/src/estilos.css`; «TARKOR» del riel en
   `.title-gold` (Cinzel 900), filo de oro en el paso activo y el riel, `.gold-hairline`, `h1` en Cinzel 700; el azul
