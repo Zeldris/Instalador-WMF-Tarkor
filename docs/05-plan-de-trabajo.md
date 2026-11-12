@@ -234,9 +234,9 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
 - [x] **INS-59** (2026-11-12) Tras borrar solo la IA (casilla del desinstalador de Windows o «Borrar datos del
   juego» en Linux), al volver a abrir Tarkor empieza el asistente en vez de la vista de juego con «El motor de IA no
   está instalado». Decidido por la usuaria el 2026-11-11 (ver `07`, «Desinstalación»). Hecho: `desinstalar::borrar`,
-  con la IA borrada de verdad y las partidas conservadas, reescribe `config.json` con `asistenteCompletado` a false,
-  sin `modelosDescargados` y con el paso del asistente en «Elige perfil» (4) como mucho; si la IA no se pudo borrar
-  o no había `config.json`, no lo toca. Cuatro tests en `desinstalar.rs`. Pendiente de `INS-8`: verlo en Windows
+  al borrar una IA borrable (aunque se quede a medias) con las partidas conservadas, reescribe `config.json` con `asistenteCompletado` a false,
+  sin `modelosDescargados` y con el paso del asistente en «Elige perfil» (4) como mucho; si la IA no es borrable
+  o no había `config.json`, no lo toca. Cinco tests en `desinstalar.rs`. Pendiente de `INS-8`: verlo en Windows
   tras reinstalar y en Linux con «Borrar datos del juego».
 - [x] **INS-48** (2026-10-25) Carpeta del motor y los modelos elegible antes de descargar y movible desde Ajustes
   (`OLLAMA_MODELS`); espacio necesario frente a libre en cada tarjeta, con la descarga bloqueada si no

@@ -11,7 +11,7 @@
 //! Con solo `ia`, `config.json` se queda pero vuelve al asistente para descargarla otra vez (`INS-59`).
 
 use crate::carpetas::normalizada;
-use crate::config::{Config, Rutas};
+use crate::config::{Config, Rutas, NOMBRE_CONFIG};
 use std::ffi::OsString;
 use std::fs;
 use std::io;
@@ -120,10 +120,11 @@ pub fn borrar(rutas: &Rutas, config: &Config, partidas: bool, ia: bool) -> io::R
     // Antes de borrar: escrita con `..` o a través de un enlace, la ruta puede pasar por algo que se va a ir.
     let ia_normalizada = normalizada(&ia_en_uso);
     let mut error = None;
+    let ia_tocada = ia && ia_borrable(rutas, &ia_en_uso);
 
     anotar(&mut error, quitar(&rutas.registros));
     if ia {
-        if ia_borrable(rutas, &ia_en_uso) {
+        if ia_tocada {
             anotar(&mut error, quitar(&ia_en_uso));
         } else {
             anotar(
@@ -141,7 +142,8 @@ pub fn borrar(rutas: &Rutas, config: &Config, partidas: bool, ia: bool) -> io::R
     if partidas && rutas.datos.is_dir() {
         anotar(&mut error, borrar_salvo(&normalizada(&rutas.datos), &ia_normalizada));
     }
-    if ia && !partidas && !ia_normalizada.exists() && rutas.datos.join("config.json").exists() {
+    // Aunque el borrado se quede a medias: la IA ya no sirve y la descarga del asistente la repone.
+    if ia_tocada && !partidas && rutas.datos.join(NOMBRE_CONFIG).exists() {
         anotar(&mut error, sin_ia(config).guardar(&rutas.datos));
     }
     if partidas && config.carpeta_ia.is_some() && ia_normalizada.exists() {
@@ -438,6 +440,17 @@ mod tests {
         c.guardar(&r.datos).unwrap();
         let e = borrar(&r, &c, false, true).unwrap_err();
         assert!(e.to_string().contains("no se borra la carpeta de la IA"), "{e}");
+        assert_eq!(Config::cargar(&r.datos), c);
+    }
+
+    #[test]
+    fn solo_ia_no_borrable_que_ya_no_existe_deja_la_config_igual() {
+        let d = tempfile::tempdir().unwrap();
+        let r = rutas(d.path());
+        montar(&r);
+        let c = completada(Some(d.path().join("disco/Otra")));
+        c.guardar(&r.datos).unwrap();
+        borrar(&r, &c, false, true).unwrap_err();
         assert_eq!(Config::cargar(&r.datos), c);
     }
 

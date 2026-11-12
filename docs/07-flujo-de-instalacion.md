@@ -106,8 +106,9 @@ carpetas existentes, LM Studio importa modelos).
   Con solo la IA borrada (`INS-59`, decidido el 2026-11-11), la configuración se queda pero deja de dar el
   asistente por completado y olvida los modelos descargados: al volver a abrir Tarkor, el asistente sigue en
   "Elige perfil" (con el equipo, el perfil y la carpeta de antes) y la descarga empieza otra vez (Steam e itch.io,
-  cuando faltan los archivos de un juego, ofrecen instalarlo de nuevo en vez de abrirlo roto). Si la carpeta de la
-  IA no se pudo borrar, la configuración no cambia.
+  cuando faltan los archivos de un juego, ofrecen instalarlo de nuevo en vez de abrirlo roto), también si el borrado
+  se quedó a medias. Si la carpeta de la IA no se toca (otro nombre que «Tarkor IA», fuera de la de por defecto), la
+  configuración no cambia.
   Una excepción, igual en el desinstalador de Windows: si la usuaria eligió otra carpeta para la IA y esa carpeta
   sigue ahí (no se marcó "IA", o no se pudo borrar), queda un `config.json` que solo guarda esa carpeta, para que
   al reinstalar o al repetir el asistente se encuentre la IA ya descargada en vez de dejarla huérfana.
