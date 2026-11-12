@@ -4,11 +4,16 @@
 import { useEffect, useState } from 'react'
 import { api } from './api'
 import { Pagina } from './componentes'
-import type { Catalogo, Perfil } from './tipos'
+import type { Catalogo, GrupoLicencias, LicenciasTerceros, Perfil } from './tipos'
 import * as tx from './textos'
 import apache from './licencias/Apache-2.0.txt?raw'
 import llama from './licencias/Llama-3.1-Community.txt?raw'
 import ollama from './licencias/ollama-MIT.txt?raw'
+
+// Las licencias de terceros las genera el build (INS-47) y no se versionan: con `glob` el archivo es opcional y
+// `tsc`, vitest y `npm run dev` funcionan sin generarlo.
+const generadas = import.meta.glob<LicenciasTerceros>('./licencias/generadas/terceros.json', { eager: true, import: 'default' })
+const tercerosGenerados: LicenciasTerceros | null = Object.values(generadas)[0] ?? null
 
 /** Id de la licencia de Llama en el catálogo (pide «Built with Llama» y su aviso). */
 export const LICENCIA_LLAMA = 'Llama-3.1-Community'
@@ -39,6 +44,44 @@ function TextoCompleto({ licencia }: { licencia: string }) {
       <summary>{t.textoCompleto(t.nombres[licencia] ?? licencia)}</summary>
       <pre className="licencia">{textosLicencia[licencia]}</pre>
     </details>
+  )
+}
+
+function GrupoTerceros({ grupo }: { grupo: GrupoLicencias }) {
+  const t = tx.licencias
+  // El contenido (hasta cientos de textos) solo se pinta al abrir el grupo.
+  const [abierto, setAbierto] = useState(false)
+  return (
+    <details className="grupo-licencia" onToggle={(e) => setAbierto(e.currentTarget.open)}>
+      <summary><b>{grupo.licencia}</b> · <span>{t.tercerosResumen(grupo.paquetes.length)}</span></summary>
+      {abierto && <>
+        <ul className="peq">
+          {grupo.paquetes.map((p) => <li key={`${p.ecosistema}/${p.nombre}@${p.version}`}><span className="mono">{p.nombre} {p.version}</span> <span className="tenue">({t.tercerosEcosistema[p.ecosistema] ?? p.ecosistema})</span></li>)}
+        </ul>
+        {grupo.textos.map((x, i) => (
+          <div key={i}>
+            <p className="peq tenue">{t.tercerosUsadoPor(x.paquetes.length)}: {x.paquetes.map((n) => grupo.paquetes[n].nombre).join(', ')}</p>
+            <pre className="licencia">{x.texto}</pre>
+          </div>
+        ))}
+      </>}
+    </details>
+  )
+}
+
+/** «Licencias de terceros», como chrome://credits: un grupo desplegable por licencia. Sin datos, una línea discreta. */
+export function LicenciasDeTerceros({ datos = tercerosGenerados }: { datos?: LicenciasTerceros | null }) {
+  const t = tx.licencias
+  return (
+    <div className="caja">
+      <h2>{t.terceros}</h2>
+      {datos && datos.grupos.length > 0
+        ? <>
+          <p className="peq">{t.tercerosLead}</p>
+          {datos.grupos.map((g) => <GrupoTerceros key={g.licencia} grupo={g} />)}
+        </>
+        : <p className="peq tenue">{t.tercerosSin}</p>}
+    </div>
   )
 }
 
@@ -106,6 +149,7 @@ export function Licencias({ volver }: { volver: () => void }) {
           ))}
         </div>
         <p className="peq tenue">{t.fuentes}</p>
+        <LicenciasDeTerceros />
       </Pagina>
     </div>
   )

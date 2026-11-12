@@ -46,4 +46,7 @@ fi
 (cd app && cargo fetch -q) || echo "AVISO: cargo fetch falló (¿red?); se reintentará al compilar."
 git config blame.ignoreRevsFile .git-blame-ignore-revs
 command -v tauri-driver >/dev/null || echo "Para las e2e falta tauri-driver: cargo install tauri-driver --locked"
+# INS-47: las licencias de terceros las saca cargo-about en cada `npm run build` (versión fijada en app/herramientas/licencias-terceros.mjs).
+command -v cargo-about >/dev/null || cargo install cargo-about --locked --features cli --version 0.9.3 \
+  || echo "AVISO: falta cargo-about y no se pudo instalar; el build lo necesita: cargo install cargo-about --locked --features cli --version 0.9.3"
 echo "Entorno listo: dependencias de Tauri, npm del asistente y crates de Cargo."

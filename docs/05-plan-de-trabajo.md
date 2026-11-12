@@ -207,13 +207,20 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
   `rendimiento.e2e.mjs`. Pendiente de `INS-8`: probar el `.AppImage` en la Steam Deck y en un escritorio limpio.
 - [ ] **INS-46** Workflow de GitHub Actions en el repo privado que publica releases con `SHA256SUMS`
   en este repo.
-- [ ] **INS-47** Pantalla "Licencias de terceros" generada en el build.
+- [x] **INS-47** (2026-11-12) Pantalla "Licencias de terceros" generada en el build.
   Decidido con la usuaria (2026-11-12): las licencias de las dependencias de Rust que entran en el binario
   (Linux y Windows) las saca `cargo-about`, que además se para ante una licencia no aceptada; las de npm de
   producción, un script propio que lee `node_modules`. Se enseñan como `chrome://credits`: una sección «Licencias
   de terceros» al final de la página de licencias, agrupada por licencia y desplegable (paquete, versión y texto,
   sin repetir textos iguales), generada en el build y no versionada. El mismo contenido va a un
   `THIRD-PARTY-NOTICES.txt` que `INS-46` publica con cada versión, junto al `NOTICE` de Llama (`08`).
+  Hecho el 2026-11-12: `app/herramientas/licencias-terceros.mjs` (lo corre `npm run build`) junta cargo-about 0.9.3
+  (`app/about.toml`: licencias aceptadas y los dos destinos) y las dependencias de producción de `package-lock.json`, y
+  escribe `app/src/licencias/generadas/terceros.json` y `app/dist-licencias/THIRD-PARTY-NOTICES.txt` (los dos
+  ignorados). Hoy: 24 licencias y 368 paquetes (360 crates y 8 de npm), ~410 KB. La sección `LicenciasDeTerceros`
+  solo pinta un grupo al abrirlo; sin el archivo (dev, vitest) dice que no se generó. El CI instala cargo-about en
+  los tres jobs que compilan, e `instalar-entorno.sh` en local. Entran también las dependencias de build (más de lo
+  estricto, nunca menos). Los dos plugins de Tauri de npm no traen archivo de licencia: van con el texto estándar.
 - [ ] **INS-56** La marca de Tarkor en el asistente (de `UX-40` del juego, decidido con la usuaria el
   2026-11-11): tokens `gold-*`, `stone-*`, `night-*` y `crystal-deep` en `app/src/estilos.css`; «TARKOR» del riel en
   `.title-gold` (Cinzel 900), filo de oro en el paso activo y el riel, `.gold-hairline`, `h1` en Cinzel 700; el azul

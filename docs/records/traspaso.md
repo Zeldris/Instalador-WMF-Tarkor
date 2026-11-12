@@ -14,7 +14,7 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #16 (2026-11-12, `5d3fcf3`): `INS-44`, `INS-45` e `INS-57` (borrar datos al desinstalar en Windows y Linux, hoja de estilos), con la confirmación de la usuaria y el CI de GitHub en verde. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-12: `INS-47` (licencias de terceros generadas en el build) empezado; decisiones de la usuaria en el plan y en `11`. Presupuesto de compactaciones: 1. Siguiente: implementar el generador (cargo-about + script de npm) y la sección de la página de licencias. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-12: `INS-47` hecho (licencias de terceros generadas en el build, sección en la página de licencias); falta ver el CI de la subida en verde (instala cargo-about con taiki-e). Presupuesto de compactaciones: 1. Siguiente: mirar el CI; luego el siguiente paso de la bitácora (`INS-46` lleva el THIRD-PARTY-NOTICES.txt). |
 | **Tests** | 2026-11-12: núcleo `cargo test -p tarkor-nucleo` 149 y el check del proyecto en verde. Asistente `vitest` y E2E con el Ollama falso: último verde el 2026-10-25 (`vitest` 27 entonces). |
 
 ## Dónde está todo (para saber qué sigue)
@@ -152,6 +152,8 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 
 Dos líneas cada una como mucho; el detalle está en el commit y la más antigua sale cuando hay más de 5.
 
+- ~~`INS-47` · Licencias de terceros generadas en el build~~ (2026-11-12, en la rama): cargo-about + npm, sección en
+  la página de licencias y `THIRD-PARTY-NOTICES.txt` para `INS-46`.
 - ~~`INS-59` · Borrar solo la IA vuelve al asistente~~ (2026-11-12, en la rama): `desinstalar::borrar` deja `config.json`
   en «Elige perfil» sin modelos; pendiente de `INS-8`.
 - ~~`INS-57` · Hoja de estilos del instalador y peticiones de imágenes~~ (2026-11-11, PR #16):
@@ -160,8 +162,6 @@ Dos líneas cada una como mucho; el detalle está en el commit y la más antigua
   los paquetes; diálogo en Ajustes (solo Linux) que para el motor, borra y cierra; pendiente de `INS-8` en la Deck.
 - ~~`INS-44` · Instalador NSIS con las dos casillas~~ (2026-11-11, PR #16): plantilla propia, `tarkor.exe --desinstalar`
   y CI de Windows que instala y desinstala; pendiente de `INS-8` verlo en pantalla.
-- `INS-15` · Licencias en el instalador (2026-11-11, PR #15): pantalla «Licencias y avisos» y narrador `llama3.1:8b` en
-  Equilibrado y Máximo; falta la pantalla del juego y las imágenes.
 
 1. 2026-11-11 — Encargo de `INS-35` e `INS-36` lanzado en el juego (issue #93): `TARKOR_NARRADOR_BASE`, `TARKOR_NUM_THREAD`/`NUM_BATCH`/`NUM_CTX_NARRADOR`, escucha en 127.0.0.1, CORS de Tauri, `TARKOR_IMAGENES_DIR` y versión en build; `TARKOR_MODELOS_SIN_PENSAR` fuera porque el juego ya manda `think: false`.
 2. 2026-11-11 — 2026-11-11: `FLU-8` (flujo v0.5.1) fusionado en `main` por el PR #13, con la confirmación de la usuaria y el CI en verde; retro con P1 a P3 aplicadas; los 14 hallazgos del flujo, en el punto 16.

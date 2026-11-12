@@ -3,3 +3,6 @@ dist/
 target/
 src-tauri/gen/
 *.tsbuildinfo
+# INS-47: las licencias de terceros se generan en cada build (herramientas/licencias-terceros.mjs).
+src/licencias/generadas/
+dist-licencias/
