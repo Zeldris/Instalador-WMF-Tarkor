@@ -14,7 +14,7 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #16 (2026-11-12, `5d3fcf3`): `INS-44`, `INS-45` e `INS-57` (borrar datos al desinstalar en Windows y Linux, hoja de estilos), con la confirmación de la usuaria y el CI de GitHub en verde. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-12: PR de `INS-59` a `main` en curso: fases 1 y 2 hechas (retro aprobada y aplicada, P1 y P2). Presupuesto de compactaciones: 0. Siguiente: fase 3 (`reviewed.sh`, push, descripción con `pr` y crear el PR). |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-12: PR #17 de `INS-59` a `main` abierto con las tres fases hechas (marca `71f3e8d`); espera el CI en verde y la confirmación de la usuaria para fusionar. Presupuesto de compactaciones: 0. Siguiente: fusionar #17 con CI verde y confirmación. |
 | **Tests** | 2026-11-12: núcleo `cargo test -p tarkor-nucleo` 149 y el check del proyecto en verde. Asistente `vitest` y E2E con el Ollama falso: último verde el 2026-10-25 (`vitest` 27 entonces). |
 
 ## Dónde está todo (para saber qué sigue)
