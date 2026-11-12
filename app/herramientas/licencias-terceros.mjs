@@ -10,7 +10,8 @@
 // el resto es entrada y salida.
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -153,14 +154,22 @@ function correrCargoAbout() {
   if (version.error || version.status !== 0) {
     fallar(`falta cargo-about. Instálalo con:\n  ${ORDEN_INSTALAR}`)
   }
-  const r = spawnSync('cargo', ['about', 'generate', '--workspace', '--locked', '--format', 'json'], {
-    cwd: APP, encoding: 'utf8', maxBuffer: 1 << 30,
-  })
-  if (r.status !== 0) {
-    process.stderr.write(r.stderr ?? '')
-    fallar('cargo-about falló (arriba, el motivo; una licencia no aceptada se añade a `accepted` de app/about.toml solo tras revisarla).')
+  // A un archivo con -o, no por stdout: bajo PowerShell (el CI de Windows) cargo-about se niega a escribir en una
+  // salida redirigida, por los problemas de codificación de PowerShell.
+  const dir = mkdtempSync(join(tmpdir(), 'cargo-about-'))
+  const salida = join(dir, 'licencias.json')
+  try {
+    const r = spawnSync('cargo', ['about', 'generate', '--workspace', '--locked', '--format', 'json', '-o', salida], {
+      cwd: APP, encoding: 'utf8', maxBuffer: 1 << 30,
+    })
+    if (r.status !== 0 || !existsSync(salida)) {
+      process.stderr.write(r.stderr ?? '')
+      fallar('cargo-about falló (arriba, el motivo; una licencia no aceptada se añade a `accepted` de app/about.toml solo tras revisarla).')
+    }
+    return JSON.parse(readFileSync(salida, 'utf8'))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
   }
-  return JSON.parse(r.stdout)
 }
 
 function entradasDeNpm(porId) {
