@@ -10,18 +10,18 @@ cada commit.**
 
 | | |
 |---|---|
-| **Actualizado** | 2026-11-11 |
+| **Actualizado** | 2026-11-12 |
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
-| **Último commit en `main`** | Fusión del PR #13 (2026-11-11, `db4e541`): `FLU-8` (flujo Galivelop-workflow v0.5.1), con la confirmación de la usuaria y el CI de GitHub en verde. |
+| **Último commit en `main`** | Fusión del PR #15 (2026-11-11, `5631e77`): `INS-15` (pantalla «Licencias y avisos», narrador `llama3.1:8b`) con `INS-7`, `INS-35` e `INS-36`, con la confirmación de la usuaria y el CI de GitHub en verde. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-11: `INS-15`, fases 1, 2 y 3 hechas; PR [#15](https://github.com/Zeldris/Instalador-WMF-Tarkor/pull/15) abierto, CI en verde en `fcf4600`. Siguiente: fusionar el PR #15 cuando la usuaria lo confirme; luego bitácora y plan en `main` y `/clear`. Presupuesto de compactaciones: 1. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-12: `INS-57`, `INS-44` e `INS-45` hechas (pendiente de `INS-8`). Fases 1 y 2 cerradas; leves en el paso 19; `INS-59` al plan, fuera de este PR. El CI `App` falló en Windows (`5a08df0`): dos tests de `desinstalar.rs` comparaban con la ruta temporal sin normalizar (`RUNNER~1`); arreglados y vistos en rojo en Linux con `TMPDIR` tras un enlace. PR a `main` confirmado por la usuaria; fusionarlo, solo con su confirmación y el CI en verde. Siguiente: `reviewed.sh`, subir, `Check` y `App` en verde y crear el PR. Presupuesto de compactaciones: 8 (van 11). |
 | **Tests** | 2026-10-26: núcleo `cargo test -p tarkor-nucleo` 116, `cargo fmt --all --check` en verde, clippy 0 avisos, `tsc -b` 0, `cargo check` del núcleo y la app para Windows (mingw) en verde. Asistente `vitest` 27 y E2E con el Ollama falso: último verde el 2026-10-25. |
 
 ## Dónde está todo (para saber qué sigue)
 
 1. **Esta bitácora**: qué se está haciendo ahora y el paso inmediato.
 2. **[Plan de implementación](../05-plan-de-trabajo.md)**: fases 0 a 5 con su casilla y su `INS-n`.
-3. **Los documentos de diseño** (`docs/01`…`docs/12`, índice en el [README](../../README.md)).
+3. **Los documentos de diseño** (`docs/01`…`docs/13`, índice en el [README](../../README.md)).
 4. **El asistente y el núcleo**: [`app/README.md`](../../app/README.md) (cómo se compila, se prueba
    y se mide un motor real).
 5. **El flujo de trabajo**: [skills y modelos](../runbooks/skills-y-modelos.md) y la guía de
@@ -32,7 +32,7 @@ cada commit.**
 1. Fusionar el PR #1 del repo del juego (fase 2): dos tests intermitentes de
    `routes/turn.integration.test.ts` y endurecer `lib/prisma.test.ts` (detalle en el
    [plan](../05-plan-de-trabajo.md#dónde-lo-dejamos-2026-09-28)).
-2. Fase 3 (modo empaquetado del juego, `INS-31`…`INS-37`) y fase 4 (`INS-41`…`INS-47`).
+2. Fase 3 (modo empaquetado del juego, `INS-31`…`INS-37`) y fase 4 (`INS-41`…`INS-47`, e `INS-56`: la marca de Tarkor en el asistente cuando el juego fusione `UX-40`; `INS-58`: colocar las imágenes de [`13`](../13-hoja-de-estilos-e-imagenes.md) cuando el generador las entregue; `INS-59`: tras borrar solo la IA, al reabrir empieza el asistente, decidido por la usuaria el 2026-11-11).
 3. Pendientes leves de la revisión de `INS-48` (no vuelven a revisarse en su PR): `bloqueado` no descuenta lo
    ya descargado en Ajustes; no se impide mover la carpeta con una descarga en marcha (el asistente hoy no lo
    permite); `Estado::ia()` lee `config.json` en cada llamada; el aviso de restos del origen solo va a stderr;
@@ -115,6 +115,16 @@ cada commit.**
     migración de `qwen2.5:7b` a `llama3.1:8b` para quien ya completó el asistente (hoy no hay versión publicada;
     hará falta antes de cambiar un modelo tras `INS-46`); «Copiado» de la pantalla de licencias no se borra nunca;
     el motor sale solo como «Ollama · MIT», sin los avisos de llama.cpp/ggml ni de los runtimes de GPU.
+19. Leves de la fase 1 antes de `main` (`INS-44`, `INS-45`, 2026-11-11; no vuelven a revisarse en su PR): si la
+    carpeta de la IA es un enlace simbólico o una junction solo se quita el enlace y el tamaño sale 0;
+    `--info-desinstalar` usa `Config::cargar`, que aparta un `config.json` corrupto; el «desinstalar antes de
+    instalar» de una reinstalación corre el desinstalador sin `/UPDATE` (enseña las casillas y borra los registros);
+    en Linux no se borran las carpetas de WebKit de `io.github.zeldris.tarkor`; una instalación previa en
+    `%LOCALAPPDATA%\Tarkor` se queda ahí al actualizar; `ia_borrable` se fía del nombre `Tarkor IA`; `texto_gb` usa 1024³ y
+    `modelos_sobrantes` 1e9; brazo `Orden::Normal` inalcanzable y `use` interno repetido en `lib.rs`. `desinstalar::mensaje_error`
+    toma cualquier `InvalidInput` por «IA no borrable» y, en el resto, la causa real no llega a los registros. Pendiente de
+    `INS-8` (Windows real): el aviso del desinstalador cuando el borrado falla (nuevo, solo compilado en el CI), el
+    borrado con archivos bloqueados (no hay reintento) y el caso de la junction.
 
 ## Decisiones de la usuaria que bloquean algo
 
@@ -138,16 +148,16 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 
 Dos líneas cada una como mucho; el detalle está en el commit y la más antigua sale cuando hay más de 5.
 
+- ~~`INS-57` · Hoja de estilos del instalador y peticiones de imágenes~~ (2026-11-11, sin PR aún):
+  [`13`](../13-hoja-de-estilos-e-imagenes.md); sus cuatro dudas, resueltas por la usuaria (§6); colocarlas es `INS-58`.
+- ~~`INS-45` · AppImage, `.deb` y «Borrar datos del juego»~~ (2026-11-11, sin PR aún): CI de Linux construye y arranca
+  los paquetes; diálogo en Ajustes (solo Linux) que para el motor, borra y cierra; pendiente de `INS-8` en la Deck.
+- ~~`INS-44` · Instalador NSIS con las dos casillas~~ (2026-11-11, sin PR aún): plantilla propia, `tarkor.exe --desinstalar`
+  y CI de Windows que instala y desinstala; pendiente de `INS-8` verlo en pantalla.
+- `INS-15` · Licencias en el instalador (2026-11-11, PR #15): pantalla «Licencias y avisos» y narrador `llama3.1:8b` en
+  Equilibrado y Máximo; falta la pantalla del juego y las imágenes.
 - ~~`FLU-8` · Galivelop-workflow v0.5.1~~ (2026-11-11): `/gw-update` del parche; regla de `## Tests` en `REVIEW.md`
   y nombres nuevos de los scripts en `test_herramientas_con_test.py`.
-- ~~`FLU-7` · Galivelop-workflow v0.5.0~~ (2026-11-04): `/gw-update`, rutas en inglés (`docs/records/`), CI partido en
-  `check.yml` (del flujo) y `app.yml` (del instalador), `commitNext` y commits sin firmas del agente.
-- ~~`INS-34` · Backend empaquetado sin curación ni cloud~~ (2026-10-27): `define` de `TARKOR_EMPAQUETADO` e
-  `import()` dinámico; el empaquetador se para si entra algo. En `main` del juego (`c7f0e5f9`, sin PR, CI local).
-- ~~`INS-33` · Frontend sin admin en el juego empaquetado~~ (2026-10-27): `esEmpaquetado()` quita enlace, rutas
-  `/admin/*` y herramientas; «Crear desde cero» en construcción. En `main` del juego (`aae4a755`, sin PR, CI local).
-- ~~`INS-32` · Fuentes Cinzel e Inter en local~~ (2026-10-26): ya hecho en `main` del juego por su `BAS-1`
-  (`4a150259`, `frontend/src/assets/fonts/` con licencias OFL); sin cambios.
 
 1. 2026-11-11 — Encargo de `INS-35` e `INS-36` lanzado en el juego (issue #93): `TARKOR_NARRADOR_BASE`, `TARKOR_NUM_THREAD`/`NUM_BATCH`/`NUM_CTX_NARRADOR`, escucha en 127.0.0.1, CORS de Tauri, `TARKOR_IMAGENES_DIR` y versión en build; `TARKOR_MODELOS_SIN_PENSAR` fuera porque el juego ya manda `think: false`.
 2. 2026-11-11 — 2026-11-11: `FLU-8` (flujo v0.5.1) fusionado en `main` por el PR #13, con la confirmación de la usuaria y el CI en verde; retro con P1 a P3 aplicadas; los 14 hallazgos del flujo, en el punto 16.

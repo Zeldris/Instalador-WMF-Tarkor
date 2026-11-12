@@ -186,11 +186,56 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
   sobrantes, `CopiarInforme` y la pantalla del motor detenido (Reintentar, "Cambiar a un perfil más ligero");
   tests de vitest y E2E `app/e2e/rendimiento.e2e.mjs`. Pendiente de `INS-8`: en Windows, la vigilancia y el
   reinicio del motor, el informe con rutas de Windows (`anonimizar`) y la línea de uso con una gráfica real.
-- [ ] **INS-44** NSIS: castellano, instalación por usuario, desinstalador con las dos casillas.
-- [ ] **INS-45** AppImage (+ `.deb` opcional) compilado en Ubuntu 22.04.
+- [x] **INS-44** NSIS: castellano, instalación por usuario, desinstalador con las dos casillas. Decidido el
+  2026-11-11 (ver `04`): plantilla NSIS propia (`app/src-tauri/windows/installer.nsi`), copia de la de Tauri
+  2.12.0 con la casilla de Tauri cambiada por las dos de `07`; los ganchos (`installerHooks`) no pueden añadir
+  una casilla a la página de confirmación. Lo borra `tarkor.exe --desinstalar [--partidas] [--ia]`, llamado antes
+  de quitar los archivos (lee `carpetaIa` de `config.json`); el tamaño de la casilla, de
+  `tarkor.exe --info-desinstalar <ini>`. Pasos: (a) núcleo y opciones del ejecutable; (b) plantilla y test
+  que para si cambia la versión de `@tauri-apps/cli`; (c) CI de Windows que construye el `.exe`, instala en
+  silencio, siembra datos y desinstala con `/BORRARPARTIDAS` y `/BORRARIA`.
+  La plantilla instala en `%LOCALAPPDATA%\Programs\Tarkor` (`07`; la de Tauri usaría `%LOCALAPPDATA%\Tarkor`,
+  que es de la IA y los registros). Hecho el 2026-11-11: (a), (b) y (c), el job `instalador-windows` de
+  `app.yml` con `tools/qa/desinstalar-windows.ps1`, en verde a la primera (el `.exe` queda como artefacto). Pendiente de `INS-8`: verlo en pantalla (casillas, tamaño).
+- [x] **INS-45** AppImage (+ `.deb` opcional) compilado en Ubuntu 22.04. Incluye «Borrar datos del juego» en
+  Ajustes (Linux, `07`), con el mismo borrado del núcleo que el desinstalador de `INS-44`; el CI de Linux
+  construye el `.AppImage` y el `.deb`. Diseño del diálogo decidido el 2026-11-11 (ver `07`): dos casillas, «Borrar»
+  desactivado sin ninguna, para el motor, borra y cierra.
+  Hecho el 2026-11-11: el job `paquetes-linux` de `app.yml` construye el `.AppImage` y el `.deb` en Ubuntu 22.04 y
+  comprueba que los dos arrancan (en verde a la primera; los dos quedan como artefacto); órdenes `plataforma`,
+  `info_borrado`, `borrar_datos` y `cerrar_app`, y el diálogo `BorrarDatos` en Ajustes con vitest y el paso 7 de
+  `rendimiento.e2e.mjs`. Pendiente de `INS-8`: probar el `.AppImage` en la Steam Deck y en un escritorio limpio.
 - [ ] **INS-46** Workflow de GitHub Actions en el repo privado que publica releases con `SHA256SUMS`
   en este repo.
 - [ ] **INS-47** Pantalla "Licencias de terceros" generada en el build.
+- [ ] **INS-56** La marca de Tarkor en el asistente (de `UX-40` del juego, decidido con la usuaria el
+  2026-11-11): tokens `gold-*`, `stone-*`, `night-*` y `crystal-deep` en `app/src/estilos.css`; «TARKOR» del riel en
+  `.title-gold` (Cinzel 900), filo de oro en el paso activo y el riel, `.gold-hairline`, `h1` en Cinzel 700; el azul
+  (`accent-*`) solo para estados. **Fondo de madera**, como dentro del juego. Espera a que la rama
+  `claude/marca-interfaz` del juego (`docs/producto/diseno-interfaz-marca.md`) llegue a su `main`. Aparte, cuando
+  existan las imágenes (fila E14 de ese documento): iconos de la app en `app/src-tauri/icons/`. Qué imágenes y dónde
+  va cada una: [`13`](13-hoja-de-estilos-e-imagenes.md) e `INS-58`.
+- [x] **INS-57** (2026-11-11) Hoja de estilos del instalador con sus peticiones de imágenes, a partir de la hoja de
+  Tarkor del generador (`galivelop-image-generator`, `docs/marcas/tarkor/`). Hecho:
+  [`13-hoja-de-estilos-e-imagenes.md`](13-hoja-de-estilos-e-imagenes.md): las piezas ya pedidas allí que el
+  instalador solo coloca (`E14`, `#17`, `E7`, `#9`, `#2`, `#3`, `#5`, `E13`, `E4`, `E5`, `E3`) y las nuevas (`I1`
+  lateral e `I2` cabecera del instalador de Windows, `I3` portada del asistente, `I4` hierro del riel, `I6` cápsula
+  vertical para la Deck), con medida, prompt, peso, criterio de aceptación y la referencia de diseño de cada una.
+  Sus cuatro dudas, resueltas por la usuaria el 2026-11-11 (§6): icono sobre noche; la portada `I3` se pide,
+  enmarcada y solo en «Bienvenida» y «Listo»; el pedido llega a GVIG con una sesión allí; la entrega la copia ella.
+- [ ] **INS-58** Colocar las imágenes de [`13`](13-hoja-de-estilos-e-imagenes.md) cuando el generador las entregue.
+  Antes, dos pasos de la usuaria (`13` §6): abrir en GVIG la sesión que lee `13` y añade el bloque «Instalador» y el
+  perfil `lateral` (encargo en GVIG: sin rama todavía, **pendiente**), y copiar la entrega a `entrega/` en la raíz
+  de este repo. Luego:
+  iconos (`E14`) en `app/src-tauri/icons/`; `sidebarImage`, `headerImage` e iconos del instalador en
+  `bundle.windows.nsis` de `tauri.conf.json` (BMP de 24 bits en `app/src-tauri/windows/`); portada, hierro del riel,
+  estados y barra de progreso en `app/src/imagenes/`, 1 MB entre todas como mucho. Va con `INS-56` o después.
+  Pendiente de `INS-8`, `INS-51` e `INS-52`: verlas en Windows al 100 % y al 150 %, y en la biblioteca de la Deck.
+- [ ] **INS-59** Tras borrar solo la IA (casilla del desinstalador de Windows o «Borrar datos del juego» en Linux),
+  al volver a abrir Tarkor empieza el asistente en vez de la vista de juego con «El motor de IA no está instalado».
+  Decidido por la usuaria el 2026-11-11 (ver `07`, «Desinstalación»). El borrado del núcleo (`desinstalar.rs`) deja
+  `config.json` sin `asistenteCompletado` (y sin los modelos que ya no están) cuando se va la IA y las partidas se
+  quedan; `07` se pone al día al implementarlo. Pendiente de `INS-8`: verlo en Windows tras reinstalar.
 - [x] **INS-48** (2026-10-25) Carpeta del motor y los modelos elegible antes de descargar y movible desde Ajustes
   (`OLLAMA_MODELS`); espacio necesario frente a libre en cada tarjeta, con la descarga bloqueada si no
   cabe (ver `07` y `11`). Hecho: `carpetaIa` en `config.json`, `nucleo/src/carpetas.rs`
@@ -207,7 +252,8 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
 
 ## Fase 5 — Prueba real
 
-- [ ] **INS-51** En la Steam Deck (modo escritorio y como juego ajeno a Steam).
+- [ ] **INS-51** En la Steam Deck (modo escritorio y como juego ajeno a Steam). Con sus imágenes de biblioteca
+  (bloque D de [`13`](13-hoja-de-estilos-e-imagenes.md)): dónde las lee Steam y si el instalador puede copiarlas.
 - [ ] **INS-52** En un Windows 10 y un Windows 11 limpios, sin Node ni Ollama.
 - [ ] **INS-53** En un equipo de 8 GB: el perfil Ligero debe ser jugable.
 - [ ] **INS-54** Actualizar de una versión a otra sin perder partidas.

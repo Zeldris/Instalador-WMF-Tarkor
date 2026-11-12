@@ -12,6 +12,7 @@ use std::time::Duration;
 use tarkor_nucleo::carpetas::{espacio_libre_mb, mover_carpeta};
 use tarkor_nucleo::catalogo::{Catalogo, Origen, Perfil};
 use tarkor_nucleo::config::{Config, Rutas};
+use tarkor_nucleo::desinstalar;
 use tarkor_nucleo::equipo::{self, Equipo};
 use tarkor_nucleo::informe::{self, EstadoMotor};
 use tarkor_nucleo::ollama::{self, resumen_uso, tiene, Cargado, Cliente, ProgresoModelo, Uso};
@@ -632,6 +633,68 @@ async fn borrar_modelos(app: tauri::AppHandle, modelos: Vec<String>) -> Res<()> 
     .map_err(|e| e.to_string())?
 }
 
+/// Qué enseña el diálogo «Borrar datos del juego» (`INS-45`): la carpeta de la IA y su tamaño ya
+/// formateado como en el desinstalador de Windows ("9,6 GB"; vacío si no hay nada).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InfoBorrado {
+    ruta_ia: String,
+    tamano: String,
+}
+
+/// En qué sistema corre la app (`linux`, `windows`, `macos`): el frontal enseña «Borrar datos del
+/// juego» solo en Linux, donde no hay desinstalador.
+#[tauri::command]
+fn plataforma() -> &'static str {
+    std::env::consts::OS
+}
+
+#[tauri::command]
+async fn info_borrado(app: tauri::AppHandle) -> Res<InfoBorrado> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let estado = app.state::<Estado>();
+        let info = desinstalar::info(&estado.rutas, &estado.config());
+        InfoBorrado { ruta_ia: info.ruta_ia.display().to_string(), tamano: desinstalar::texto_gb(info.bytes_ia) }
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+/// «Borrar datos del juego» (Linux, `INS-45`): para el motor y borra como el desinstalador de Windows
+/// (los registros siempre; las partidas y la IA si se piden). Sin `Ocupado` cogido no se borra: un
+/// cambio de perfil o una reparación a medias dejarían archivos a medio escribir.
+#[tauri::command]
+async fn borrar_datos(app: tauri::AppHandle, partidas: bool, ia: bool) -> Res<()> {
+    let estado = app.state::<Estado>();
+    let _ocupado = Ocupado::tomar(&estado.ocupado)?;
+    let turno = estado.arranque.coger().await;
+    let parado = estado.sacar_motor(&turno);
+    let en_marcha = parado.is_some();
+    if let Some(mut p) = parado {
+        p.parar();
+    }
+    let app2 = app.clone();
+    let borrado = tauri::async_runtime::spawn_blocking(move || {
+        let estado = app2.state::<Estado>();
+        desinstalar::borrar(&estado.rutas, &estado.config(), partidas, ia).map_err(|e| desinstalar::mensaje_error(&e))
+    })
+    .await
+    .map_err(|e| e.to_string())
+    .and_then(|r| r);
+    if borrado.is_err() && en_marcha {
+        // La app sigue abierta: el motor vuelve a estar en marcha. Con éxito se cierra y no hace falta.
+        rearrancar_o_avisar(&app, &turno).await;
+    }
+    borrado
+}
+
+/// «Cerrar Tarkor» de la pantalla final de «Borrar datos del juego»: sale por el camino normal, que
+/// también para el motor si lo hubiera.
+#[tauri::command]
+fn cerrar_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
 /// Dónde corre la IA ahora mismo (`/api/ps`). Error si el motor no está en marcha.
 #[tauri::command]
 async fn uso_ia(app: tauri::AppHandle) -> Res<Uso> {
@@ -901,7 +964,35 @@ async fn comprobar(app: tauri::AppHandle, id: String) -> Res<Comprobacion> {
     }
 }
 
+/// `--info-desinstalar <archivo>` y `--desinstalar [--partidas] [--ia]` (las usa el desinstalador de
+/// Windows, `INS-44`): se atienden sin abrir ventana y el proceso termina aquí.
+fn ejecutar_orden_de_desinstalacion() {
+    use tarkor_nucleo::config::{Config, Rutas};
+    use tarkor_nucleo::desinstalar::{analizar_args, borrar, escribir_ini, info, Orden};
+    let orden = match analizar_args(std::env::args_os().skip(1)) {
+        Ok(Orden::Normal) => return,
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("tarkor: {e}");
+            std::process::exit(1);
+        }
+    };
+    let rutas = Rutas::del_sistema();
+    let config = Config::cargar(&rutas.datos);
+    let resultado = match orden {
+        Orden::InfoDesinstalar(archivo) => escribir_ini(&info(&rutas, &config), &archivo),
+        Orden::Desinstalar { partidas, ia } => borrar(&rutas, &config, partidas, ia),
+        Orden::Normal => Ok(()),
+    };
+    if let Err(e) = resultado {
+        eprintln!("tarkor: {e}");
+        std::process::exit(1);
+    }
+    std::process::exit(0);
+}
+
 pub fn run() {
+    ejecutar_orden_de_desinstalacion();
     let rutas_app = Rutas::del_sistema();
     let (catalogo, origen) = Catalogo::cargar(&rutas_app.datos);
     let app = tauri::Builder::default()
@@ -943,6 +1034,10 @@ pub fn run() {
             cambiar_perfil,
             modelos_sobrantes,
             borrar_modelos,
+            plataforma,
+            info_borrado,
+            borrar_datos,
+            cerrar_app,
             uso_ia,
             informe,
             reparar,

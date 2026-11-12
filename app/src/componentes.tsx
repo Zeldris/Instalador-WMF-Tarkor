@@ -4,7 +4,7 @@ import { api, ErrorIa } from './api'
 import { textoEspera, useEsperaRed } from './esperaRed'
 import { comun, pasos, perfil as t, reparar as tr } from './textos'
 import * as tx from './textos'
-import type { Evaluacion, PerfilId, ProgresoModelo, ProgresoMotor, Reparacion, UsoCpu } from './tipos'
+import type { Evaluacion, InfoBorrado, PerfilId, ProgresoModelo, ProgresoMotor, Reparacion, UsoCpu } from './tipos'
 import { pideConfirmar } from './tipos'
 import { fmt } from './formato'
 
@@ -297,6 +297,62 @@ export function DetallesTecnicos({ evaluacion }: { evaluacion: Evaluacion }) {
       </div>
       <p className="peq tenue" style={{ marginTop: 6 }}>{t.detallesPie}</p>
     </details>
+  )
+}
+
+/**
+ * «Borrar datos del juego» (`INS-45`, solo Linux): botón y diálogo con las dos casillas sin marcar.
+ * «Borrar» espera a que haya una marcada y a que no haya otra operación en curso (`desactivado`). `alBorrar` se
+ * llama cuando ya está todo borrado.
+ */
+export function BorrarDatos({ desactivado, alBorrar, alOcupar }: { desactivado: boolean; alBorrar: () => void; alOcupar?: (ocupado: boolean) => void }) {
+  const t = tx.borrarDatos
+  const [abierto, setAbierto] = useState(false)
+  const [info, setInfo] = useState<InfoBorrado | null>(null)
+  const [partidas, setPartidas] = useState(false)
+  const [ia, setIa] = useState(false)
+  const [borrando, setBorrando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const abrir = () => {
+    setPartidas(false)
+    setIa(false)
+    setError(null)
+    setAbierto(true)
+    void api.infoBorrado().then(setInfo, () => setInfo({ rutaIa: '', tamano: '' }))
+  }
+  const borrar = async () => {
+    setError(null)
+    setBorrando(true)
+    alOcupar?.(true)
+    try {
+      await api.borrarDatos(partidas, ia)
+      alBorrar()
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setBorrando(false)
+      alOcupar?.(false)
+    }
+  }
+  return (
+    <div>
+      <div className="fila">
+        <button type="button" className="btn" disabled={desactivado || abierto} onClick={abrir}>{t.boton}</button>
+      </div>
+      {abierto && (
+        <div className="aviso" role="dialog" aria-label={t.titulo} style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <strong>{t.titulo}</strong>
+          <span>{t.lead}</span>
+          <label className="casilla"><input type="checkbox" checked={partidas} disabled={borrando} onChange={(e) => setPartidas(e.target.checked)} /><span>{t.partidas}</span></label>
+          <label className="casilla"><input type="checkbox" checked={ia} disabled={borrando} onChange={(e) => setIa(e.target.checked)} /><span>{t.ia(info?.tamano ?? '')}</span></label>
+          {error && <div className="error" role="alert">{error}</div>}
+          <div className="fila">
+            <button type="button" className="btn pri" disabled={borrando || desactivado || (!partidas && !ia)} onClick={() => void borrar()}>{borrando ? t.borrando : t.borrar}</button>
+            <button type="button" className="btn" disabled={borrando} onClick={() => setAbierto(false)}>{t.cancelar}</button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 

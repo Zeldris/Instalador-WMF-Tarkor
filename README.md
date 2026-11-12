@@ -32,7 +32,7 @@ gestión de procesos). La build final se hace desde el repo privado (ver
 | Rendimiento | Ajustes de Ollama y del backend calculados para cada equipo y perfil | Implementado, cifras por medir | [12](docs/12-catalogo-y-rendimiento.md) |
 | Protección del código | Backend a bytecode, frontend minificado, sin *source maps* | Decidido, técnica exacta en fase 0 | [10](docs/10-proteccion-del-codigo-y-build.md) |
 | Dónde se compila | CI en el repo privado; releases en este repo | Decidido | [10](docs/10-proteccion-del-codigo-y-build.md) |
-| Instalación | NSIS por usuario sin admin (Windows); AppImage (Linux) | Decidido | [07](docs/07-flujo-de-instalacion.md) |
+| Instalación | NSIS por usuario sin admin, con plantilla propia y un desinstalador que pregunta por partidas e IA (Windows); AppImage y `.deb`, con «Borrar datos del juego» en Ajustes (Linux) | Decidido | [07](docs/07-flujo-de-instalacion.md) |
 | Consentimiento y validación | En el asistente de primer arranque | Decidido | [07](docs/07-flujo-de-instalacion.md), [11](docs/11-diseno-del-frontal.md) |
 | Firma en Windows | Azure Trusted Signing / certificado / sin firma en v1 | **Abierto** | [04](docs/04-empaquetado-tauri.md) |
 | Licencia del juego | Todos los derechos reservados, uso personal gratuito | **Propuesta, confirmar** | [08](docs/08-legal-y-privacidad.md) |
@@ -62,6 +62,8 @@ gestión de procesos). La build final se hace desde el repo privado (ver
   errores.
 - [`12-catalogo-y-rendimiento.md`](docs/12-catalogo-y-rendimiento.md) — catálogo de modelos y
   perfiles en JSON, y ajustes de rendimiento de Ollama.
+- [`13-hoja-de-estilos-e-imagenes.md`](docs/13-hoja-de-estilos-e-imagenes.md) — la marca de Tarkor en el
+  instalador y las imágenes que hay que generar, con su prompt.
 
 ## Relación con el repositorio del juego
 

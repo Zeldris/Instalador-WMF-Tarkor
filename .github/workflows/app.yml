@@ -1,5 +1,6 @@
 # El CI propio del instalador (FLU-7): lo que el check de .claude/gw.json no cubre. Compila y prueba el asistente en
-# Linux, comprueba que el núcleo y la app compilan para Windows y corre los tests del núcleo en Windows. El check
+# Linux, comprueba que el núcleo y la app compilan para Windows, corre los tests del núcleo en Windows y construye,
+# instala y desinstala el instalador NSIS (INS-44) y construye y arranca el .AppImage y el .deb (INS-45). El check
 # (tsc, fmt, clippy, enlaces y los tests de tools/qa) lo corre .github/workflows/check.yml, que es del flujo
 # Galivelop-workflow y no se toca: lo actualiza /gw-update.
 name: App
@@ -52,3 +53,82 @@ jobs:
         with:
           workspaces: app
       - run: cargo test -p tarkor-nucleo
+
+  # INS-44: el instalador de Windows (NSIS, con la plantilla propia app/src-tauri/windows/installer.nsi) se compila,
+  # se instala en silencio y se desinstala sin casillas, con las dos y con las dos al actualizar (`/UPDATE`); el .exe queda como artefacto para
+  # probarlo a mano (INS-8).
+  instalador-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Rust de app/rust-toolchain.toml
+        run: rustup toolchain install --no-self-update
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app
+      - run: npm ci
+      - name: Instalador NSIS
+        run: npx tauri build --bundles nsis --ci
+      - name: Instalar, sembrar datos y desinstalar
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          pwsh -NoProfile -File ../tools/qa/desinstalar-windows.ps1 $setup.FullName
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tarkor-windows-setup
+          path: app/target/release/bundle/nsis/*-setup.exe
+          retention-days: 7
+
+  # INS-45: el .AppImage y el .deb se construyen en Ubuntu 22.04 (la glibc más vieja que se soporta) y se comprueba
+  # que arrancan: `--info-desinstalar` sale antes de abrir ninguna ventana. Quedan como artefacto (INS-8).
+  paquetes-linux:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Rust de app/rust-toolchain.toml
+        run: rustup toolchain install --no-self-update
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app
+      - name: Dependencias del sistema
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libxdo-dev libssl-dev libfuse2 file
+      - run: npm ci
+      - name: AppImage y .deb
+        run: npx tauri build --bundles appimage,deb --ci
+      - name: Los paquetes arrancan
+        run: |
+          set -eu
+          appimage=$(ls target/release/bundle/appimage/*.AppImage)
+          deb=$(ls target/release/bundle/deb/*.deb)
+          export TARKOR_DATOS="$RUNNER_TEMP/datos"
+          mkdir -p "$TARKOR_DATOS/ia" && head -c 1048576 /dev/zero > "$TARKOR_DATOS/ia/modelo.bin"
+          APPIMAGE_EXTRACT_AND_RUN=1 "$appimage" --info-desinstalar "$RUNNER_TEMP/appimage.ini"
+          iconv -f UTF-16 -t UTF-8 "$RUNNER_TEMP/appimage.ini" | tee /dev/stderr | grep -q "ruta=$TARKOR_DATOS/ia"
+          sudo apt-get install -y "./$deb"
+          tarkor --info-desinstalar "$RUNNER_TEMP/deb.ini"
+          iconv -f UTF-16 -t UTF-8 "$RUNNER_TEMP/deb.ini" | grep -q "ruta=$TARKOR_DATOS/ia"
+          ls /usr/share/applications | grep -i tarkor
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tarkor-linux
+          path: |
+            app/target/release/bundle/appimage/*.AppImage
+            app/target/release/bundle/deb/*.deb
+          retention-days: 7

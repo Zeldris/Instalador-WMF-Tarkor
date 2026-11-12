@@ -36,6 +36,10 @@ npm run tauri build              # instaladores (.exe en Windows; .AppImage y .d
 
 `TARKOR_DATOS=/ruta` cambia la carpeta de datos (para pruebas sin tocar la real).
 
+Opciones del ejecutable que usa el desinstalador de Windows (`INS-44`), sin abrir ventana: `tarkor --info-desinstalar <archivo>` escribe un INI (UTF-16) con la ruta y el tamaño de la IA en uso, y `tarkor --desinstalar [--partidas] [--ia]` borra los registros y, si se piden, las partidas y la carpeta de la IA (solo si es la de por defecto o se llama `Tarkor IA`).
+
+En Linux (AppImage, sin desinstalador), Ajustes tiene al pie «Borrar datos del juego» (`INS-45`): un diálogo con las mismas dos casillas que el de Windows que, al confirmar, para el motor y llama a `desinstalar::borrar` (órdenes `plataforma`, `info_borrado`, `borrar_datos` y `cerrar_app`); el frontal lo enseña solo si `plataforma` dice `linux`.
+
 Un test nuevo del núcleo vive en el `mod tests` del mismo archivo que el arreglo, así que
 `red-without-fix.sh` se llevaría también el test: se comprueba a mano, quitando solo la lógica del arreglo,
 viendo fallar el test con su motivo y devolviéndola.

@@ -60,7 +60,7 @@ fn absoluta(ruta: &Path) -> PathBuf {
 }
 
 /// Sin `.` ni `..` ni enlaces: lo que hace falta para decidir si una carpeta está dentro de otra.
-fn normalizada(ruta: &Path) -> PathBuf {
+pub(crate) fn normalizada(ruta: &Path) -> PathBuf {
     let mut fin = PathBuf::new();
     for c in absoluta(ruta).components() {
         match c {

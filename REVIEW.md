@@ -94,6 +94,9 @@ que se repite, se añade aquí con su `FLU-n` o `INS-n`.
 - **Disco que falla a medias.** Copiar, mover o guardar puede fallar en mitad: lo que queda es el estado de antes o
   el nuevo entero (la copia parcial se borra, la carpeta vuelve si no se pudo guardar la config), y los enlaces
   simbólicos se copian como enlaces, no siguiéndolos. (criterio)
+- **Lo que borra** (`desinstalar.rs`, `installer.nsi`). Las rutas se comparan y se guardan ya pasadas por
+  `carpetas::normalizada`, calculadas antes de borrar; y cada borrado dice qué queda si falla o se hace a medias:
+  lo que se paró vuelve a arrancar, la usuaria ve el fallo y nada queda huérfano (retro del 2026-11-11). (criterio)
 - **Puertos.** Se pide un puerto libre (`puerto_libre`) y solo se escucha en `127.0.0.1`, nunca en
   `0.0.0.0`: el motor y el backend no se exponen a la red. (criterio)
 - **Esperas con tope.** Una espera (health-check, descarga, `/api/pull`) tiene límite y se puede
@@ -146,5 +149,5 @@ que se repite, se añade aquí con su `FLU-n` o `INS-n`.
 - **Tarea cerrada:** su casilla marcada en el [plan](docs/05-plan-de-trabajo.md) con lo hecho y lo que
   queda, la bitácora al día en el mismo commit (`CLAUDE.md`).
   (check: `handoff.py closed --staged` en `.githooks/pre-commit` exige la bitácora; lo demás, criterio)
-- **Una decisión de diseño cambia su documento** (`docs/01`…`docs/12`) y la tabla de decisiones del
+- **Una decisión de diseño cambia su documento** (`docs/01`…`docs/13`) y la tabla de decisiones del
   [README](README.md) en el mismo diff. (criterio)
