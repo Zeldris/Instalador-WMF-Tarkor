@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.5.1
+# galivelop-workflow v0.6.0
 # What pre-push checks about the hand-off log of each branch it pushes (for projects with "logRows": true; a no-op
 # otherwise). Called by .githooks/pre-push as:   prepush-branches.sh <changed-files-file> <pushed-commits-file>
 # with git's ref lines ("local-ref local-sha remote-ref remote-sha" per ref) on stdin. For each pushed ref:
@@ -85,7 +85,7 @@ while read -r local_ref sha_local remote_ref sha_remote; do
   { [ -n "$branch" ] && [ "$branch" != "$remote_ref" ]; } || branch="$(git branch --show-current 2>/dev/null)"
 
   # A task id this branch opens that the protected branch (or a merge of it) also took for another task; other
-  # remote branches, the 10 most recent, only warn (they may never be merged).
+  # remote branches, the prepushClashBranches (10) most recent, only warn (they may never be merged).
   if git rev-parse -q --verify "refs/remotes/origin/$protected^{commit}" >/dev/null 2>&1; then
     handoff clash "$sha_local" "refs/remotes/origin/$protected" || exit 1
   fi
@@ -93,11 +93,15 @@ while read -r local_ref sha_local remote_ref sha_remote; do
     [ -n "$commit" ] || continue
     handoff clash --merge "$commit" --tip "$sha_local" || { echo "handoff: in merge $(git log -1 --format='%h %s' "$commit")"; exit 1; }
   done <<<"$(git rev-list --merges "$sha_local" --not --remotes 2>/dev/null)"
+  # prepushClashBranches as the pushed commit has it, not the working copy
+  clash_branches="$(python3 "$config" --root "$root" --rev "$sha_local" get prepushClashBranches)" || {
+    echo "prepush-branches: cannot read prepushClashBranches from .claude/gw.json in commit ${sha_local:0:7}; commit a valid one: python3 $config --root $root --rev ${sha_local:0:7} validate" >&2; exit 1; }
+  case "$clash_branches" in ''|*[!0-9]*|0) echo "prepush-branches: prepushClashBranches must be a whole number of 1 or more, got '$clash_branches'; fix .claude/gw.json" >&2; exit 1 ;; esac
   others=()
   while IFS= read -r ref; do
     case "$ref" in ""|refs/remotes/origin/HEAD|"refs/remotes/origin/$protected"|"refs/remotes/origin/$branch") continue ;; esac
     others+=("$ref")
-    [ "${#others[@]}" -ge 10 ] && break
+    [ "${#others[@]}" -ge "$clash_branches" ] && break
   done <<<"$(git for-each-ref --sort=-committerdate --format='%(refname)' refs/remotes/origin/ 2>/dev/null)"
   if [ "${#others[@]}" -gt 0 ]; then handoff clash --warn "$sha_local" "${others[@]}"; fi
 

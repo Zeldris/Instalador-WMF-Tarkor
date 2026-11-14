@@ -3,7 +3,7 @@ name: domain-modeling
 description: Build and sharpen a project's domain model. Use when discussing codebase terminology, writing or editing a GLOSSARY.md, or recording or editing an ADR.
 license: MIT (see LICENSE-mattpocock-skills)
 metadata:
-  version: "0.5.1"
+  version: "0.6.0"
   source: "mattpocock/skills@5beb35b"
 ---
 

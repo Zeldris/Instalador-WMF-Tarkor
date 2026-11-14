@@ -319,3 +319,10 @@ ganchos, `.claude/gw/scripts`, `tools/qa` y las skills ([runbook](runbooks/skill
   pide también una prueba de humo contra el real) y el docstring de `test_herramientas_con_test.py` usa los nombres
   nuevos de los scripts. Retro antes de `main` (P1 a P3, `docs/records/retro-2026-11-11-flu8.md`); fusionado en
   `main` por el PR #13 (2026-11-11), con la confirmación de la usuaria y el CI en verde.
+- [ ] **FLU-9** (2026-11-14) `/gw-update` a Galivelop-workflow v0.6.0 (pasando por la 0.5.2): scripts, skills, ganchos,
+  `check.yml`, el agente `gw-worker` y dos ganchos nuevos en `settings.json` (`PreToolUse` de Read y `Stop`, que
+  apunta las métricas de tokens). `AGENTS.md` fusionado a mano (pre-push por rama con `branchCheck`, trailers
+  `Findings:`/`Retries:`, `close-row`, revisión por bloques con `review-scope.py`); `REVIEW.md` gana dos reglas
+  (`< /dev/null` en un `while read`, probar con los ganchos instalados); `gw-opt-ai.md`, «Script de parada». Parche
+  local en `.claude/skills/gw-opt-tokens/scripts/test_measure.py` (con la estructura de un proyecto no encontraba
+  `config.py`), para proponerlo al flujo; la 0.6.1 lo sobrescribe. Falta: CI en verde y las tres fases antes de `main`.

@@ -5,7 +5,7 @@ disable-model-invocation: true
 license: MIT
 compatibility: Claude Code or any Agent Skills agent; git and python3 3.8+; the Galivelop-workflow repo cloned or added to the session
 metadata:
-  version: "0.5.1"
+  version: "0.6.0"
   source: "Galivelop workshop"
 ---
 
@@ -28,7 +28,7 @@ listed (or `origin` unreachable): stop and tell the user the workflow has no pub
 fall back to `pull`.
 
 - Project version: `version` in `.claude/gw.json`.
-- Copied headers: `# galivelop-workflow vX.Y.Z` in `.claude/gw/scripts/*` and `.githooks/*`.
+- Copied headers: `# galivelop-workflow vX.Y.Z` in `.claude/gw/scripts/*`, `.claude/agents/*` and `.githooks/*`.
 - Workflow version: `version` in `<workflow>/.claude-plugin/plugin.json`, and its entries in `CHANGELOG.md`.
 - Config format: `schemaVersion` in the project's `.claude/gw.json` (absent = 0) against `SCHEMA_VERSION` in
   `<workflow>/scripts/config.py`. Older: `apply.py` migrates it (step 2). Newer: the workflow clone is behind; stop
@@ -68,6 +68,17 @@ If there is no tag `v<X>`, take the commit where `plugin.json` said X: `git -C <
 shows only the template's own change. Offer each hunk to the user; apply the ones accepted to the project's file by
 hand.
 
+**Deal the reading out** (`gw-orchestrate-dealer`): each template diff, each `.gw-new` against the project's file
+(step 4), and any diff or `--dry-run` output of more than ~200 lines go to a read-only subagent (the selector's
+"light" rung), one per file or per group of small files; the main session never reads them whole. The brief gives
+the paths to compare and the versions X and Y. The subagent returns only a table, one row per hunk, with line refs:
+
+| Drift (what the project changed locally) | Upstream (what the workflow changed) | Decision (proposed) |
+|---|---|---|
+
+The decision is `take upstream`, `keep project` or `merge: <how>`. The main session decides each merge with the
+user from the tables and opens a file only for a row in doubt.
+
 ## 4. Apply what the user confirms
 
 1. Workflow-owned files with no local edits update in place:
@@ -76,7 +87,7 @@ hand.
    and `.githooks/`; tell the user first. The run also writes the migrated `.claude/gw.json` (one write, together with
    any path change); its other keys keep their values.
 2. A `<file>.gw-new` (or the old `<file>.gw-nuevo`, still recognized in `0.x`) is a proposal: merge it by hand with the
-   user, then delete it. `AGENTS.md` and `CLAUDE.md`
+   user from its subagent's table (step 3), then delete it. `AGENTS.md` and `CLAUDE.md`
    merge block by block, keeping the project's rules and the `galivelop-workflow` marker line.
 3. Files the workflow no longer has are reported, never deleted: ask before `git rm`.
 4. Personal notes: the missing ones are created by the run above. For each `personal note … differs` line, show the
@@ -86,13 +97,18 @@ hand.
    a file of the project still cites under its pre-0.5 name. Show the list to the user and rename each use (or tell
    them which ones you left and why) before closing; `--check` exit 0 does not cover them. `legacyNames: false`
    turns the list off.
-6. Set `version` in `.claude/gw.json` to Y once the proposals are reviewed.
+6. `apply.py` already set `version` in `.claude/gw.json` (step 4.1); check it says Y once the proposals are reviewed.
 
 ## 5. Check and commit
 
 1. `python3 <project>/.claude/gw/scripts/doctor.py` until no `FAIL`; `python3 <workflow>/scripts/apply.py --check
    <project>` exits 0 when nothing is left to merge.
-2. Commit with the message `apply.py` suggested and a real `Next:` line (`Siguiente:` in Spanish projects), update
+2. A `/code-review` of the update branch leaves out the files that are identical copies of the workflow at Y
+   (`.claude/gw/`, `.claude/skills/gw-*`, `.githooks/`; `python3 <project>/.claude/gw/scripts/review-scope.py --workflow <workflow>` lists the rest): reviewed upstream, they
+   were 89% of the paths of one update. Review the files the project merged by hand and its own files.
+3. Commit with the message `apply.py` suggested and a real `Next:` line (`Siguiente:` in Spanish projects), update
    the log in the same commit, and `git push`; the pre-push runs the check.
+4. Open the PR from the update branch to `protectedBranch` (the `pr` skill writes the body, listing the CHANGELOG
+   entries between X and Y and what was merged by hand) and give the user its link. Merging stays the user's call.
 
-Done when doctor is green, no `*.gw-new` is left and `version` equals Y.
+Done when doctor is green, no `*.gw-new` is left, `version` equals Y and the PR is open.

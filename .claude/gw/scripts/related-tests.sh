@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.5.1
+# galivelop-workflow v0.6.0
 # The tests of what changes, in the push. Called by .githooks/pre-push as:
 #   related-tests.sh <changed-files-file> [<checkout-dir>]
 # (one repo-relative path per line; git's ref lines on stdin are ignored). <checkout-dir> is where the pushed commit
@@ -15,7 +15,7 @@
 # nonexistent paths are never passed. Deleted files are decided PER ENTRY: if an entry's scope (`paths`/`cwd`) matches
 # an existing changed file it behaves as always; if it matches none but matches a deleted file, an entry whose command
 # uses {files} is skipped (a note on stdout) and one without {files} runs. Fast ones go first; the first failure stops
-# the run (exit 1). A no-op when relatedTests is absent or empty. Fails closed on an invalid config.
+# the run (exit 1). A command that carries 2+ changed files is printed as "N files; the full command is in <temp file>". A no-op when relatedTests is absent or empty. Fails closed on an invalid config.
 # Bash 3.2 compatible. Root from this script's path, never from $CLAUDE_PROJECT_DIR or the current directory.
 set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -49,12 +49,29 @@ run() {  # run <kind>: every command config.py says applies, one NUL-terminated 
   cmds="$(printf '%s' "$existing" | python3 "$config" --root "$root" --rev "$sha" related --kind "$kind" --deleted-file "$delfile" 2>&4 | tr '\0' '\001')" || {
     echo "related-tests: cannot work out the $kind commands; fix the config: python3 $config --root $root --rev ${sha:0:7} validate" >&2; exit 1; }
   while IFS= read -r -d $'\001' full; do
-    echo "pre-push: related tests ($kind): $full"
+    # A command that carries the changed files (2 or more) is not echoed whole: it says how many files and where the
+    # full command is (a temp file, kept if the command fails), so a big push does not flood the output (D74).
+    local shown="$full" again="$full" n=0 f cmdfile=""
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      case "$full" in *"$f"*) n=$((n + 1));; esac
+    done <<<"$existing"
+    if [ "$n" -ge 2 ]; then
+      cmdfile="$(mktemp "${TMPDIR:-/tmp}/gw-related-cmd.XXXXXX")" || { echo "related-tests: cannot create a temp file; check \$TMPDIR" >&2; exit 2; }
+      printf '%s\n' "$full" > "$cmdfile"
+      shown="$n files; the full command is in $cmdfile"
+      again="bash $cmdfile"
+    fi
+    echo "pre-push: related tests ($kind): $shown"
     bash -c "$full" < /dev/null || {
-      echo "related-tests: failed ($kind): $full; fix it and run it again: $full" >&2; exit 1; }
+      echo "related-tests: failed ($kind): $shown; fix it and run it again: $again" >&2; exit 1; }
+    [ -z "$cmdfile" ] || rm -f "$cmdfile"
   done <<<"$cmds"
 }
 exec 4>&1  # config.py notes (skipped entries) go to stdout
-run fast
-run slow
+# GW_RELATED_KINDS (default "fast slow") picks the kinds to run: the pre-push sets "slow" when the full check is cached green
+# on the tree, because the check already covers the fast ones.
+for kind in ${GW_RELATED_KINDS:-fast slow}; do
+  case "$kind" in fast|slow) run "$kind";; *) echo "related-tests: GW_RELATED_KINDS has '$kind'; use fast and/or slow" >&2; exit 2;; esac
+done
 exit 0

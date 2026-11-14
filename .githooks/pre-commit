@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.5.1
+# galivelop-workflow v0.6.0
 # Git pre-commit hook (copied into projects as .githooks/pre-commit; enable with: git config core.hooksPath .githooks).
 #   - No secrets in a commit: by file (.env except .env.example/.sample/.template, *.pem, *.key, *.p12, *.pfx, *.jks,
 #     id_rsa and friends, .netrc, and the local private list .claude/gw.local.json) and by added content (well-known
@@ -83,8 +83,9 @@ NAME="[A-Za-z0-9_.-]*([Ss][Ee][Cc][Rr][Ee][Tt]|[Pp][Aa][Ss][Ss][Ww]([Oo][Rr])?[D
 QUOTED="^\\+.*${NAME}[\"']?[[:space:]]*(:=|=|:)[[:space:]]*(\"[^\"\$<{][^\"]{3,}\"|'[^'\$<{][^']{3,}')"
 # In Markdown (.md, .markdown, .mdx, any case) a quoted key is usually an example or a translation label, so an
 # assignment whose value looks like prose is dropped before QUOTED runs: it starts with a capital and has no digit
-# ("Bearer ..." never counts as prose). Anything else there (a token, a passphrase, a value with digits) is still refused.
-PROSE_ASSIGN="${NAME}[\"']?[[:space:]]*(:=|=|:)[[:space:]]*(\"[A-Z][^\"0-9]{3,}\"|'[A-Z][^'0-9]{3,}')"
+# and at least two words (E38: a one-word capitalised value is a password, not prose; "Bearer ..." never counts).
+# Anything else there (a token, a passphrase, a value with digits) is still refused.
+PROSE_ASSIGN="${NAME}[\"']?[[:space:]]*(:=|=|:)[[:space:]]*(\"[A-Z][^\"0-9[:space:]]*[[:space:]][^\"0-9]{2,}\"|'[A-Z][^'0-9[:space:]]*[[:space:]][^'0-9]{2,}')"
 UNQUOTED="^\\+[[:space:]]*(export[[:space:]]+)?${NAME}[[:space:]]*[=:][[:space:]]*[^[:space:]\$<{\"'#]"
 HARMLESS="^\\+[[:space:]]*(export[[:space:]]+)?${NAME}[[:space:]]*[=:][[:space:]]*([Rr][Ee][Aa][Dd]|[Ww][Rr][Ii][Tt][Ee]|[Nn][Oo][Nn][Ee]|[Tt][Rr][Uu][Ee]|[Ff][Aa][Ll][Ss][Ee]|[^[:space:]#]{1,7})[[:space:]]*(#.*)?$"
 added_lines() { grep -E '^\+' | grep -vE '^\+\+\+ ' | grep -v 'gw-allow-secret' || true; }
@@ -93,11 +94,8 @@ examples=(':!*.env.example' ':!*.env.sample' ':!*.env.template')
 PATHCODE='"\/[^"]*"[[:space:]]*:[[:space:]]*"[A-Z]{1,4}[-_]?[0-9]{1,6}"'
 literal="$(diff_of -U0 --no-renames --diff-filter=ACMR -- . "${examples[@]}" ':(exclude,icase)*.md' ':(exclude,icase)*.markdown' ':(exclude,icase)*.mdx' | added_lines | sed -E "s/$PATHCODE//g" | grep -E "$QUOTED" | head -n 5 || true)"
 md_prose_dropped() { # lines of stdin that still match QUOTED once the prose assignments (and PATHCODE pairs) are removed
-  local line stripped
-  while IFS= read -r line; do
-    stripped="$(printf '%s\n' "$line" | sed -E "s/$PATHCODE//g; s/([\"'])Bearer /\10earer /g; s/$PROSE_ASSIGN//g")"
-    if printf '%s\n' "$stripped" | grep -qE "$QUOTED"; then printf '%s\n' "$line"; fi
-  done
+  # One sed for all lines (E38): keep the line in the hold space, strip the copy, and print the line when the copy matches.
+  sed -nE "h; s/$PATHCODE//g; s/([\"'])Bearer /\10earer /g; s/$PROSE_ASSIGN//g; /$QUOTED/{x;p;}"
 }
 md_literal="$(diff_of -U0 --no-renames --diff-filter=ACMR -- ':(icase)*.md' ':(icase)*.markdown' ':(icase)*.mdx' "${examples[@]}" | added_lines | md_prose_dropped | head -n 5 || true)"
 literal="$literal$(printf '\n%s' "$md_literal")"

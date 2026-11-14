@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.5.1
+# galivelop-workflow v0.6.0
 # Runs the project's `check` (every command of .claude/gw.json, prefixed by `checkWrapper` exactly as the pre-push
 # does) at the repo root with GW_PUSH_PROTECTED=false, stopping at the first failure, then prints a summary (each
 # command, ok/FAILED, seconds) and ends with one line `CHECK <ok|FAILED>: <what failed>`.
+# E44: on a branch that matches a `releaseCheckBranches` pattern (shell glob, `*` crosses `/`; default version/*) it
+# runs with GW_PUSH_PROTECTED=true instead, so what only goes before the protected branch (version.py --release in
+# the workflow repo) fails on the version branch, not at the push to main. A detached HEAD matches nothing.
 # The output of every command always goes to a log: <git common dir>/gw/check-<sha>.log (<sha> = HEAD, plus -dirty
 # when the work tree has changes; GW_CHECK_LOG overrides the path, a relative one is taken from the current
-# directory), also shown live unless --quiet (-q, or GW_CHECK_QUIET=1/true/yes): then only the last GW_CHECK_TAIL
-# lines (default 40) of the command that fails are shown, with the log path. The log of a run is never deleted by
-# the scripts. A lock <git common dir>/gw/check.lock (the pid and sha of the run) keeps two checks from running at
+# directory), also shown live (with a terminal, the command keeps it: it runs in a pty through script(1) when there is
+# one, E39) unless --quiet (-q, or GW_CHECK_QUIET=1/true/yes): then only the last GW_CHECK_TAIL (else checkTailLines)
+# lines (default 40) of the command that fails are shown, with the log path. The log of a run is only deleted by the
+# pruning of the oldest ones (`checkLogKeep`, check-green.sh lock-acquire). A lock <git common dir>/gw/check.lock (the pid and sha of the run) keeps two checks from running at
 # once (check-green.sh lock-acquire; the pre-push takes the same one): a second one waits up to `checkLockWait`
 # seconds (.claude/gw.json, default 0 = no wait) and then exits 3 saying which pid/sha runs; a lock whose process is
 # gone (or whose pid is now another process) is discarded; Ctrl-C or a kill releases it. The failed line names the
@@ -24,8 +28,8 @@ case "${1:-}" in
   --quiet|-q) quiet=1; shift ;;
 esac
 [ "$#" -eq 0 ] || { echo "check: unexpected argument '$1'; usage: bash $0 [--quiet|-q]" >&2; exit 2; }
-tail_lines="${GW_CHECK_TAIL:-40}"
-case "$tail_lines" in ''|*[!0-9]*) tail_lines=40 ;; esac
+tail_lines="${GW_CHECK_TAIL:-}"  # else the checkTailLines key (read below, once the config is known to be usable)
+case "$tail_lines" in *[!0-9]*) tail_lines="" ;; esac
 here="$(cd "$(dirname "$0")" && pwd)"
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE  # git exports GIT_DIR to hooks, also in a linked worktree
 root="$(unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; git -C "$here" rev-parse --show-toplevel 2>/dev/null)" || {
@@ -41,6 +45,28 @@ fail() {  # fail <message>: the message ends with the command that fixes it
 [ -f "$config" ] || fail "the workflow scripts are missing ($config); reinstall them: /gw-update"
 checks="$(python3 "$config" --root "$root" get check)" || fail "cannot read 'check' from .claude/gw.json; fix the config: python3 $config --root $root validate"
 wrapper="$(python3 "$config" --root "$root" get checkWrapper)" || fail "cannot read 'checkWrapper' from .claude/gw.json; fix the config: python3 $config --root $root validate"
+# A number from the config, else the schema default (config.py is the only place a default lives).
+num() { # num <key>
+  local v
+  v="$(python3 "$config" --root "$root" get "$1" 2>/dev/null)" || v=""
+  case "$v" in ''|*[!0-9]*) v="$(python3 "$config" default "$1" 2>/dev/null)" ;; esac
+  case "$v" in ''|*[!0-9]*) fail "cannot read '$1' or its default; fix the config: python3 $config --root $root validate" ;; esac
+  printf '%s' "$v"
+}
+[ -n "$tail_lines" ] || tail_lines="$(num checkTailLines)" || exit 1
+# E44: the branch decides GW_PUSH_PROTECTED; an unreadable releaseCheckBranches fails (closed), [] matches nothing.
+release_pats="$(python3 "$config" --root "$root" get releaseCheckBranches 2>/dev/null)" ||
+  release_pats="$(python3 "$config" default releaseCheckBranches 2>/dev/null)" ||
+  fail "cannot read 'releaseCheckBranches' or its default; fix the config: python3 $config --root $root validate"
+protected=false
+branch="$(git symbolic-ref --short -q HEAD 2>/dev/null)" || branch=""
+if [ -n "$branch" ]; then
+  while IFS= read -r pat; do
+    [ -n "$pat" ] || continue
+    # shellcheck disable=SC2254  # the pattern is a glob on purpose
+    case "$branch" in $pat) protected=true; break ;; esac
+  done <<<"$release_pats"
+fi
 
 key=""
 inputs=""
@@ -76,11 +102,14 @@ case "$log" in
       fail "the log $log is inside the work tree and would change it; set GW_CHECK_LOG to a path outside the work tree or git-ignored, e.g. GW_CHECK_LOG=$gwdir/check.log" ;;
 esac
 
-lock_wait="$(python3 "$config" --root "$root" get checkLockWait 2>/dev/null)" || lock_wait=0
-case "$lock_wait" in ''|*[!0-9]*) lock_wait=0 ;; esac
-grace="$(python3 "$config" --root "$root" get checkOutputGrace 2>/dev/null)" || grace=5
-case "$grace" in ''|*[!0-9]*) grace=5 ;; esac
+lock_wait="$(num checkLockWait)" || exit 1
+grace="$(num checkOutputGrace)" || exit 1
 [ -f "$helper" ] || fail "$helper is missing, so the check cannot take its lock; reinstall the workflow: /gw-update"
+script_flavor() {  # prints linux (util-linux script -qefc) or bsd (Darwin/*BSD script -q file cmd); nothing otherwise (busybox...)
+  command -v script > /dev/null 2>&1 || return 0
+  if script --version 2>&1 | grep -qi util-linux; then echo linux; return 0; fi
+  case "$(uname -s 2>/dev/null)" in Darwin|*BSD) echo bsd ;; esac
+}
 have_lock=""
 fifos=""
 tee_out=""
@@ -106,9 +135,16 @@ have_lock=1
 
 : > "$log" 2>/dev/null || fail "cannot write the log $log; set GW_CHECK_LOG to a writable file"
 echo "check: log: $log"
+[ "$protected" = false ] || echo "check: branch $branch matches releaseCheckBranches: running with GW_PUSH_PROTECTED=true"
 summary=""
 failed_cmd=""
 failed_section=""
+in_background() {  # true when the check has a controlling terminal whose foreground process group is not its own
+  # shellcheck disable=SC2046  # word splitting wanted: "pgid tpgid"
+  set -- $(ps -o pgid= -o tpgid= -p $$ 2>/dev/null)
+  [ -n "${2:-}" ] && [ "$2" -gt 0 ] 2>/dev/null && [ "$1" != "$2" ]
+}
+exec 3<&0  # the check's own stdin: inside the loop, stdin is the list of commands
 while IFS= read -r cmd; do
   [ -n "$cmd" ] || continue
   [ -z "$wrapper" ] || cmd="$wrapper bash -c '$(printf '%s' "$cmd" | sed "s/'/'\\\\''/g")'"
@@ -117,8 +153,34 @@ while IFS= read -r cmd; do
   printf '== %s\n' "$cmd" >> "$log"
   offset="$(wc -c < "$log" | tr -d ' ')"
   if [ -n "$quiet" ]; then
-    GW_PUSH_PROTECTED=false bash -c "$cmd" < /dev/null >> "$log" 2>&1
+    GW_PUSH_PROTECTED="$protected" bash -c "$cmd" < /dev/null 3<&- >> "$log" 2>&1
     rc=$?
+  elif [ -t 1 ] && pty_flavor="$(script_flavor)" && [ -n "$pty_flavor" ]; then
+    # E39: on a terminal the command keeps one (isatty, colours, progress bars): it runs inside a pty made by script(1),
+    # which also copies the output into a temporary file that goes to the log without the carriage returns.
+    ptylog="$(mktemp "${TMPDIR:-/tmp}/gw-check-pty.XXXXXX")" || fail "cannot create a file in ${TMPDIR:-/tmp}; free space or set TMPDIR to a writable folder"
+    if [ "$pty_flavor" = linux ]; then
+      # SHELL=bash: script runs it with $SHELL -c; stdin from /dev/null, or script feeds the rest of the check list to the pty
+      GW_PUSH_PROTECTED="$protected" SHELL=bash script -qefc "$cmd" "$ptylog" < /dev/null 3<&-
+      rc=$?
+    else
+      # BSD script turns EOF on its stdin into a ^D written to the pty (echoed as "^D" before the output) and refuses a
+      # fifo (tcgetattr fails): its stdin is a terminal, which sends nothing until someone types (keys reach the
+      # command): the check's own stdin (fd 3, saved before the loop) if it is one, else the terminal of stdout. A
+      # check in the background of its terminal gets /dev/null (and the ^D): script would set that terminal raw and be
+      # stopped by SIGTTOU.
+      if in_background; then
+        GW_PUSH_PROTECTED="$protected" script -q "$ptylog" bash -c "$cmd" < /dev/null 3<&-
+      elif [ -t 3 ]; then
+        GW_PUSH_PROTECTED="$protected" script -q "$ptylog" bash -c "$cmd" <&3 3<&-
+      else
+        GW_PUSH_PROTECTED="$protected" script -q "$ptylog" bash -c "$cmd" <&1 3<&-
+      fi
+      rc=$?
+    fi
+    # util-linux writes its own "Script started/done on ..." lines into the typescript even with -q: not part of the output
+    tr -d '\r' < "$ptylog" | sed -e '/^Script started on /d' -e '/^Script done on /d' >> "$log"
+    rm -f "$ptylog"
   else
     # live output, also into the log; stdout and stderr stay on their own streams (two fifos, two tees)
     { fifos="$(mktemp -d "${TMPDIR:-/tmp}/gw-check-fifo.XXXXXX")" && mkfifo "$fifos/out" "$fifos/err"; } || fail "cannot create a fifo in ${TMPDIR:-/tmp}; free space or set TMPDIR to a writable folder"
@@ -126,7 +188,7 @@ while IFS= read -r cmd; do
     tee_out=$!
     tee -a "$log" >&2 < "$fifos/err" &
     tee_err=$!
-    GW_PUSH_PROTECTED=false bash -c "$cmd" < /dev/null > "$fifos/out" 2> "$fifos/err"
+    GW_PUSH_PROTECTED="$protected" bash -c "$cmd" < /dev/null 3<&- > "$fifos/out" 2> "$fifos/err"
     rc=$?
     # A background child of the command that kept the output open would hold the tees forever: wait for them at most
     # `checkOutputGrace` seconds, then stop them.

@@ -5,7 +5,7 @@ disable-model-invocation: true
 license: MIT
 compatibility: Projects with local or self-hosted AI models; python3 (standard library) for scripts/measure.py
 metadata:
-  version: "0.5.1"
+  version: "0.6.0"
   source: "Galivelop workshop; generalised from the Tarkor and installer gw-opt-ai"
 ---
 
@@ -42,6 +42,8 @@ create it from the shape below with the user before measuring. Shape:
   file lives, and where the round's findings (wrong, invented or contradicting answers) are listed.
 - **Acceptable times**: per task, once measured. Until set, step 4 reports figures and proposes the thresholds;
   it marks no task "too slow" on its own.
+- **Stop script**: the project's command that stops what a round started (servers, local models, sleep
+  inhibitors). The closing step of every round calls it.
 - **Already in place**: every tool or setting approved before, one line each, so it is not proposed again.
 
 ## Steps
@@ -100,6 +102,13 @@ create it from the shape below with the user before measuring. Shape:
    there**. When the user approves one, record it under "Already in place" in `.claude/gw/gw-opt-ai.md`, and run a
    `/code-review low` on its diff before the commit and the after-benchmark: the benchmark measures time, not
    faults.
+
+## Closing a round
+
+The last step of every testing round, whether or not this skill measured it: call the project's stop script (see
+"Stop script" in the project notes) and check that nothing it started is left running (servers, models, sleep
+inhibitors). *Done when* the script exited 0 and the processes it names are gone; no script yet: ask the user for it
+and note it in `.claude/gw/gw-opt-ai.md`.
 
 ## Reference
 

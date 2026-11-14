@@ -418,6 +418,25 @@ class Figures(unittest.TestCase):
         self.assertEqual(b["value"], "docs/handoff.md")
         self.assertEqual(b["source"], "python3 .claude/gw/scripts/config.py get log")
 
+    def subjects_with(self, extra):
+        if not (self.repo / ".claude/gw/scripts").is_dir():
+            for i in range(3):
+                self.commit(f"f{i}.txt", "x\n", f"cambio {i}", f"2026-10-0{i + 2}T10:00:00")
+            self.test_log_path_through_the_config_reader_when_the_project_has_one()
+        self.commit(".claude/gw.json", json.dumps(dict(CONFIG, **extra)) + "\n" * (1 + len(str(extra))), "cfg nueva")
+        return self.figures()["figures"]["commit_subjects"]
+
+    def test_a13_max_subjects_default_set_value_and_bad_value(self):
+        default = self.subjects_with({})
+        self.assertEqual(len(default["value"]), 6)  # 1 + 3 + the config commits: under the default 20
+        self.assertIn("--max-count=20", default["source"])
+        two = self.subjects_with({"mediaContent": {"maxSubjects": 2}})
+        self.assertEqual(len(two["value"]), 2)
+        self.assertIn("--max-count=2 ", two["source"])
+        self.assertIn("the newest 2 at most", two["note"])
+        bad = self.subjects_with({"mediaContent": {"maxSubjects": 0}})  # the config fails closed: the literal 20
+        self.assertIn("--max-count=20", bad["source"])
+
     def test_invalid_config_is_reported_not_hidden(self):
         self.test_log_path_through_the_config_reader_when_the_project_has_one()
         self.commit(".claude/gw.json", '{"version": "0.4.0"}', "cfg roto")

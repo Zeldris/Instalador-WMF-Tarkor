@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.5.1
+# galivelop-workflow v0.6.0
 """Nothing private reaches the public repo (plan §10, E2): key formats, e-mail addresses and private names.
 
   python3 private-check.py --range A..B   # what the commits of A..B add, one commit at a time
@@ -51,7 +51,6 @@ else:
 PROG = "private-check"
 ALLOW_MARK = "gw-allow-private"
 SECRET_MARK = "gw-allow-secret"
-MAX_HITS = 10
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 EMAIL = re.compile(r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}(?![A-Za-z0-9-])")
 PUBLIC_DOMAINS = ("example.com", "example.org", "example.net")
@@ -110,7 +109,8 @@ def name_regex(names):
 
 
 class Scanner:
-    def __init__(self, keys, emails, allowed, names):
+    def __init__(self, keys, emails, allowed, names, max_hits):
+        self.max_hits = max_hits  # privateCheck.maxHits: findings printed before "... and N more"
         self.keys, self.emails, self.allowed, self.names = keys, emails, {a.lower() for a in allowed}, names
         self.hits = []
         self.total = 0
@@ -133,7 +133,7 @@ class Scanner:
             self.bad.append(self.current)
         for kind, value in found:
             self.total += 1
-            if len(self.hits) < MAX_HITS:
+            if len(self.hits) < self.max_hits:
                 self.hits.append(f"{where}: {kind} {value}")
 
 
@@ -204,7 +204,13 @@ def scan_tree(root, scanner):
             scanner.line(f"{path}:{n}", text)
 
 
-def amend_advice(root, cfg, args, shas, bad):
+def is_branch(ref):
+    """False for HEAD and for a full ref (the pre-push passes a pushed branch without its `refs/heads/`, so what still
+    starts with `refs/`, e.g. `refs/tags/v1`, is a tag or another ref); true for a branch name."""
+    return ref != "HEAD" and not ref.startswith("refs/")
+
+
+def amend_advice(root, args, shas, bad):
     """The lines that say the offending commits are NOT pushed yet and how to fix only them (D47). Only for the
     pre-push (--commits with --remote); a manual --range cannot tell what is published. `git commit --amend` when only
     the checked-out last commit is at fault; else `git rebase -i <parent of the first offending commit>` (a commit the
@@ -219,11 +225,12 @@ def amend_advice(root, cfg, args, shas, bad):
     out = [f"{PROG}: the commit(s) with the finding ({listed}) are NOT pushed yet, so they can be fixed safely; "
            f"never rewrite what is already on the remote"]
     if bad == [tip] and tip == head:
-        out.append(f"{PROG}: it is only the last commit; fix the files and run: git add -A && git commit --amend")
+        out.append(f"{PROG}: it is only the last commit; fix the files, stage them (git add <the fixed files>) and run: git commit --amend")
         return out
     merges = any(len(git(root, "rev-list", "--parents", "-n", "1", sha).split()) > 2 for sha in shas)
     opts = " --rebase-merges" if merges else ""
-    branch = f" {args.ref}" if args.ref and tip != head else ""
+    # A tag or HEAD is not a branch: `git rebase -i <base> <tag>` would detach HEAD and leave the tag where it was.
+    branch = f" {args.ref}" if args.ref and tip != head and is_branch(args.ref) else ""
 
     def parent(sha):
         parents = git(root, "rev-list", "--parents", "-n", "1", sha).split()[1:]
@@ -294,7 +301,8 @@ def main(argv=None):
                 names = name_regex(local["privateNames"])
         local_allow = (config.load_local(root) or {}).get("allowEmails", [])
         shas = []
-        scanner = Scanner(key_formats(root), settings["emails"], settings["allowEmails"] + local_allow, names)
+        scanner = Scanner(key_formats(root), settings["emails"], settings["allowEmails"] + local_allow, names,
+                          settings["maxHits"])
         if args.all:
             scan_tree(root, scanner)
         else:
@@ -318,7 +326,7 @@ def main(argv=None):
     else:
         print(f"{PROG}: remove it from the commits that add it, not in a new one ({allow})", file=sys.stderr)
         try:
-            lines = amend_advice(root, cfg, args, shas, scanner.bad) if shas and scanner.bad else []
+            lines = amend_advice(root, args, shas, scanner.bad) if shas and scanner.bad else []
         except CheckError:
             lines = []
         if not lines:

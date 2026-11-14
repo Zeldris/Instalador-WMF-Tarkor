@@ -217,6 +217,38 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(list(d['calls']), ['small/chat/-'])
         self.assertEqual(d['difference_calls']['small/chat/-']['p50_ms'], 500)
 
+    def test_a13_cold_ms_from_the_measure_key_arguments_and_notes_win(self):
+        import shutil
+        here = os.path.dirname(os.path.abspath(__file__))
+        top = os.path.join(here, '..', '..', '..')  # the workflow repo root, or .claude/ in an installed project
+        for where in (os.path.join(top, 'gw'), top):
+            config_src = os.path.join(where, 'scripts', 'config.py')
+            schema_src = os.path.join(where, 'schema', 'gw.schema.json')
+            if os.path.isfile(config_src) and os.path.isfile(schema_src):
+                break
+        else:
+            self.skipTest('config.py and gw.schema.json not found in .claude/gw/ nor at the workflow root')
+        self.assertEqual(measure.configured_cold_ms(self.root), measure.COLD_MS, 'no config')
+        for rel, src in (('scripts/config.py', config_src), ('schema/gw.schema.json', schema_src)):
+            os.makedirs(os.path.dirname(os.path.join(self.root, rel)), exist_ok=True)
+            shutil.copy(src, os.path.join(self.root, rel))
+        base = ('{"version": "0.1.0", "language": "en", "log": "docs/log.md", "protectedBranch": "main", '
+                '"pushToProtected": "pr", "check": ["make check"], "reviewMark": "docs/reviewed.txt", '
+                '"content": ["^docs/"]%s}')
+        self.write('.claude/gw.json', base % '')
+        self.assertEqual(measure.configured_cold_ms(self.root), 100, 'valid config without the key: the default')
+        self.write('.claude/gw.json', base % ', "measure": {"coldMs": 250}')
+        self.assertEqual(measure.configured_cold_ms(self.root), 250)
+        self.write('runs-now.jsonl', json.dumps(call(2000, **{'app.load_ms': 150})) + '\n')
+        self.write('.claude/gw/gw-opt-ai.md', '```gw-opt-ai\nlog: runs-now.jsonl\n```\n')
+        self.assertEqual(json.loads(self.run_main(['--json']))['calls']['small/chat/-']['cold_pct'], 0)  # 150 < 250
+        self.write('.claude/gw.json', base % '')
+        self.assertEqual(json.loads(self.run_main(['--json']))['calls']['small/chat/-']['cold_pct'], 100)  # 150 > 100
+        self.write('.claude/gw.json', base % ', "measure": {"coldMs": 0}')  # invalid: the config fails closed
+        self.assertEqual(measure.configured_cold_ms(self.root), 100)
+        self.write('.claude/gw.json', '{not json')
+        self.assertEqual(measure.configured_cold_ms(self.root), 100)
+
     def test_pre_rename_note_and_block_label_still_work(self):
         # A8: `.claude/gw/opt-ai.md` with a ```opt-ai block is read in 0.x when the gw- note is absent
         self.write('runs-now.jsonl', json.dumps(call(2000)) + '\n')

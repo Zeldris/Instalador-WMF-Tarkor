@@ -5,7 +5,7 @@ disable-model-invocation: true
 license: MIT
 compatibility: Claude Code or any Agent Skills agent; git, bash and python3 3.8+; the Galivelop-workflow repo cloned or added to the session
 metadata:
-  version: "0.5.1"
+  version: "0.6.0"
   source: "Galivelop workshop"
 ---
 
@@ -68,7 +68,7 @@ Done when every fact has an answer the user confirmed.
    Repeat `--install`, `--check-command` and `--content` once per value. Add `--with gw-opt-ai` or
    `--with gw-scout-updates` when chosen. Existing projects: read "Existing projects" in the guide first (hook
    managers, existing `CLAUDE.md`, red check, existing log).
-2. Auto mode may ask permission to edit `.claude/settings.json`, `.claude/gw/scripts/` and `.githooks/`. Tell the user before running, and
+2. The run also installs the light subagent type `.claude/agents/gw-worker.md` (the dealer's briefs name it with `subagent_type: gw-worker`); tell the user it exists. Auto mode may ask permission to edit `.claude/settings.json`, `.claude/gw/scripts/`, `.claude/agents/` and `.githooks/`. Tell the user before running, and
    after a refused call run `git status` and `git diff` before repeating it.
 3. Review every `*.gw-new` with the user (guide, step 3). Merge `AGENTS.md` and `CLAUDE.md` blocks by hand; keep
    the `galivelop-workflow` marker line. Delete each `.gw-new` once merged.

@@ -1,9 +1,9 @@
-<!-- galivelop-workflow v0.5.1 -->
+<!-- galivelop-workflow v0.6.0 -->
 # Instalador-WMF-Tarkor — instrucciones para agentes
 
 Este proyecto se trabaja por relevos: una sesión puede acabarse en cualquier momento (tokens, contenedor, cambio de
 cuenta) y la siguiente tiene que seguir **sin perder nada y sin preguntar por dónde iba**. Todo lo de este archivo
-existe para eso. El flujo es Galivelop-workflow v0.5.1; sus scripts están en `.claude/gw/scripts/`, sus skills
+existe para eso. El flujo es Galivelop-workflow v0.6.0; sus scripts están en `.claude/gw/scripts/`, sus skills
 en `.claude/skills/` y su configuración en `.claude/gw.json` (solo la lee `.claude/gw/scripts/config.py`).
 
 ## Al empezar cualquier sesión
@@ -50,11 +50,13 @@ Cada sesión puede correr en un contenedor temporal: **lo que no está subido no
 
 ## Comprobar
 
-- **El check del proyecto:** las órdenes de `check` en `.claude/gw.json`. `.githooks/pre-push` lo corre sobre el commit que se sube, y el CI
-  (`.github/workflows/check.yml`) en cada push fuera de `main` y en cada pull request; las pruebas propias del
+- **El check del proyecto:** las órdenes de `check` en `.claude/gw.json`. `.githooks/pre-push` lo corre sobre el commit que se sube a
+  `main` o que cambia el entorno; a otra rama, solo los tests relacionados (`branchCheck`). El CI
+  (`.github/workflows/check.yml`) lo corre entero en cada pull request y, salvo con `ciOnPush: false`, en cada
+  push fuera de `main`; las pruebas propias del
   instalador (`npm test`, el build, `cargo test` en Linux y Windows) van en `.github/workflows/app.yml`.
-- **Antes de subir, pásalo con `bash .claude/gw/scripts/check.sh`**: corre el check y, si sale en verde, lo apunta; el
-  `pre-push` no lo repite sobre el mismo árbol (`GW_CHECK_CACHE=0` lo desactiva).
+- **Antes de subir a `main`, pásalo con `bash .claude/gw/scripts/check.sh`**: corre el check y, si sale
+  en verde, lo apunta; el `pre-push` no lo repite sobre el mismo árbol (`GW_CHECK_CACHE=0` lo desactiva).
 - **Lo comprobable lo hace un script**, no un agente: las skills y guías solo deciden lo que exige criterio. Si una
   regla se sigue rompiendo, se convierte en una comprobación.
 - **Lo que depende de una máquina concreta no se da por probado con tests** (otro sistema operativo, un dispositivo,
@@ -72,6 +74,8 @@ Cada sesión puede correr en un contenedor temporal: **lo que no está subido no
   `commitRefs: true`, un trailer `Refs: <id>` en el último párrafo, antes de `Siguiente:`; lo comprueba `commit-msg`.
 - Cuerpo: qué se hizo, qué queda de esa tarea si no está cerrada, y estado del check.
 - **Última línea: `Siguiente: <próximo paso concreto>`**, en el mismo bloque final que las líneas de atribución, si las hay.
+- El commit con los arreglos de una revisión lleva `Findings: <n hallazgos aceptados>` y el de un trabajo que tuvo
+  que subir de peldaño, `Retries: <n>` (los lee `metrics.py quality`).
 - Con `agentSignatures: false` en `.claude/gw.json`, el commit **no lleva firmas del agente** (ni `Co-Authored-By` de
   Claude, ni `Claude-Session`, ni «Generated with Claude Code», ni enlaces de sesión) y el gancho `commit-msg` rechaza
   el mensaje que las traiga.
@@ -83,6 +87,9 @@ Cada sesión puede correr en un contenedor temporal: **lo que no está subido no
 - **Cada sesión, su propia rama**: dos sesiones a la vez nunca suben a la misma rama. Si la rama de la bitácora ya la
   usa otra sesión, crea `claude/<tema>` desde ella y escribe solo en tu parte de la bitácora. Lo tuyo vuelve por
   `git merge` antes de ir a `main`.
+- **Con `logRows: true`**, tu fila de la bitácora se reescribe con `python3 .claude/gw/scripts/handoff.py set-row
+  "texto"` a mitad de tarea y se cierra con `python3 .claude/gw/scripts/handoff.py close-row <rama>` en el último
+  commit antes de su PR; no edites a mano la de otra rama.
 - Merge, nunca rebase: las ramas están subidas.
 - **A `main` solo con confirmación de la usuaria**, y se apunta en la bitácora. Según `pushToProtected`
   de `.claude/gw.json`, se sube directo (`direct`: `.githooks/pre-push` pide la marca de revisión) o por pull request
@@ -92,8 +99,8 @@ Cada sesión puede correr en un contenedor temporal: **lo que no está subido no
   «Relevos» con la confirmación de la usuaria: se sube directo (el `pre-push` corre el check) o, para un pull
   request, `python3 .claude/gw/scripts/ci-local.py --record` corre el CI en local y lo apunta; con esa línea verde
   subida, el gancho deja fusionar.
-- La rama de un subagente vuelve con `bash .claude/gw/scripts/merge-branch.sh <rama> "<mensaje>"`, que corre el check
-  y los tests relacionados, y limpia su worktree.
+- La rama de un subagente vuelve con `bash .claude/gw/scripts/merge-branch.sh <rama> $'<mensaje>\n\nSiguiente: <próximo paso>'`
+  (el mensaje acaba con el trailer que exige el `commit-msg`), que corre el check y los tests relacionados, y limpia su worktree.
 
 ## Antes de ir a `main`: tres fases
 
@@ -103,8 +110,15 @@ Nunca sobre trabajo ya fusionado.
    todos los hallazgos (en Claude Code, `/code-review --max-findings all`), con el criterio de `REVIEW.md`. Arreglos
    con commit y subidos: lo grave o medio y lo que el propio arreglo rompe; lo leve se apunta como pendiente en la
    bitácora y no vuelve a revisarse en ese PR. Solo el código necesita revisión: lo que casa con `content` de `.claude/gw.json` es
-   contenido.
-2. **Entorno:** la skill `gw-opt-tokens` y luego `retro` (más `gw-opt-ai` si hubo medidas con un modelo de IA local). Sus
+   contenido. Tampoco se revisa lo copiado tal cual del flujo (`vendored`;
+   `python3 .claude/gw/scripts/review-scope.py --workflow <repo del flujo>` lista lo que sí: uno editado en el
+   proyecto entra). Un diff trivial (`review-scope.py --trivial` sale en 0: sin código o de `reviewTrivialLines` líneas o menos) se
+   revisa en la sesión, sin subagente; los arreglos de la revisión van a un subagente `sonnet`, salvo ganchos, guardas, seguridad y los
+   scripts que llaman (`opus`, como en `gw-orchestrate-dealer`).
+   **En una rama larga, esta fase se adelanta a cada bloque cerrado:** revisión solo del diff desde la
+   última revisión de bloque (el último commit con el trailer `Findings:`; el `commit-msg` avisa cuando el bloque pasa
+   de `changeSize.block` líneas), para que una sola revisión de muchos commits no deje módulos sin mirar; antes de `main`, solo lo que quede desde entonces.
+2. **Entorno:** la skill `gw-opt-tokens` y luego `retro` (más `/gw-opt-ai` si hubo medidas con un modelo de IA local: la lanza la usuaria, el agente se lo pide). Sus
    propuestas se **presentan a la usuaria**; lo que confirme se aplica en la rama. Una retro escrita sin presentarla no
    vale. Si la usuaria pidió ir a `main` y no está para decidir la retro, se deja todo listo (retro con
    `**Estado:** pendiente`, check en verde sobre la fusión con `main`, descripción del pull request) y

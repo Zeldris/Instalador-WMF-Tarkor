@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.5.1
+# galivelop-workflow v0.6.0
 # Checks that a new test FAILS without the fix it covers (a test that passes either way proves nothing).
 # With the fix still uncommitted: it stashes the fix files, runs the test command (it must fail), restores them and
 # runs it again (it must pass).
@@ -22,7 +22,8 @@
 #   "could not compile"...), with the line(s) that matched. By default a compile/load red is only REPORTED (the exit
 #   status is the one of an assertion red): it is the usual red when the fix adds the very symbol the test imports.
 #   --reject-compile-red  a compile/load red exits 1 (unless --fails-with is given, whose regex then decides).
-#   --compile-re REGEX    replaces the built-in list of load-failure messages (for a runner it does not know).
+#   --compile-re REGEX    replaces the list of load-failure messages (redWithoutFix.compileRegex of .claude/gw.json, else the
+#                         built-in one; for a runner it does not know). redWithoutFix.testRegex does the same for test code.
 # Make the command run exactly the new test (by its exact name): a filter that matches nothing may "pass" without
 # running it. Without --fix-at every fix file must have uncommitted changes (a new, untracked file counts).
 # The test must NOT be uncommitted in a fix file: stashing the fix would take the test with it and the check could not
@@ -37,7 +38,7 @@ pattern=""
 one=""
 fixat=""
 reject_compile=""
-compile_re='SyntaxError|IndentationError|ModuleNotFoundError|ImportError|ERROR collecting|error: could not compile|error\[E[0-9]+\]|error TS[0-9]+|Cannot find module|cannot find symbol|undefined reference|build failed|Failed to compile'
+compile_re=""  # --compile-re, else redWithoutFix.compileRegex of .claude/gw.json
 usage="usage: bash $0 [--fix-at COMMIT] [--fails-with REGEX] [--reject-compile-red] [--compile-re REGEX] [--ran-one REGEX] \"<test command>\" <fix-file>..."
 while :; do
   case "${1:-}" in
@@ -58,16 +59,22 @@ if [ $# -lt 2 ]; then
   echo "red-without-fix: $usage" >&2; exit 2
 fi
 cmd="$1"; shift
-for re in "$pattern" "$one" "$compile_re"; do  # an invalid regex would make grep print nothing and the check pass: refuse it now
-  [ -n "$re" ] || continue
-  printf '\n' | grep -Eq -- "$re" 2>/dev/null
-  [ $? -ne 2 ] || { echo "red-without-fix: /$re/ is not a valid extended regex (grep -E); fix it and rerun: $usage" >&2; exit 2; }
-done
 # Git exports GIT_DIR (and friends) to hooks, also in a linked worktree; with GIT_DIR set `rev-parse --show-toplevel`
 # answers $here, not the repo root.
 root="$(unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; git -C "$here" rev-parse --show-toplevel 2>/dev/null)" || {
   echo "red-without-fix: $here is not inside a git repository; reinstall the workflow: /gw-update" >&2; exit 2; }
 cd "$root" || exit 2
+if [ -z "$compile_re" ]; then
+  compile_re="$(python3 "$here/config.py" --root "$root" get redWithoutFix.compileRegex)" || {
+    echo "red-without-fix: cannot read redWithoutFix.compileRegex; fix .claude/gw.json: python3 $here/config.py --root $root validate" >&2; exit 2; }
+fi
+test_re="$(python3 "$here/config.py" --root "$root" get redWithoutFix.testRegex)" || {
+  echo "red-without-fix: cannot read redWithoutFix.testRegex; fix .claude/gw.json: python3 $here/config.py --root $root validate" >&2; exit 2; }
+for re in "$pattern" "$one" "$compile_re" "$test_re"; do  # an invalid regex would make grep print nothing and the check pass: refuse it now
+  [ -n "$re" ] || continue
+  printf '\n' | grep -Eq -- "$re" 2>/dev/null
+  [ $? -ne 2 ] || { echo "red-without-fix: /$re/ is not a valid extended regex (grep -E); fix it (a regex of redWithoutFix in .claude/gw.json, or the flag) and rerun: $usage" >&2; exit 2; }
+done
 if [ -n "$fixat" ]; then
   fixc="$(git rev-parse --verify --quiet "$fixat^{commit}")" || {
     echo "red-without-fix: --fix-at $fixat is not a commit; check: git log --oneline" >&2; exit 2; }
@@ -92,7 +99,6 @@ fi
 # Test code in the uncommitted changes of a fix file: the changed lines (-U0, with the hunk header) and the lines that
 # enclose each one (walking up, each line less indented than the last), so an edit deep inside an indented test method
 # still shows its `def test_` line, while an edit in a flat file (a shell script, a config) adds nothing around it.
-test_re='(def|fn|func|function)[[:space:]]+_?[Tt]est|(^|[^[:alnum:]_.])(it|test|describe)[[:space:]]*\(|#\[test\]|@Test|unittest\.TestCase|^[+@ -]*test_[A-Za-z0-9_]*[[:space:]]*\(\)'
 changed_lines() {  # `git diff -U0` on stdin -> the new file's line numbers it changes (a deletion: the lines around it)
   awk '/^@@ /{ split($3, a, ","); s = substr(a[1], 2) + 0; c = (a[2] == "") ? 1 : a[2] + 0
                if (c == 0) { print s; print s + 1 } else for (i = 0; i < c; i++) print s + i }'

@@ -4,7 +4,7 @@ description: "Turn the current conversation into a spec: no interview, just synt
 disable-model-invocation: true
 license: MIT (see LICENSE-mattpocock-skills)
 metadata:
-  version: "0.5.1"
+  version: "0.6.0"
   source: "mattpocock/skills@5beb35b"
 ---
 

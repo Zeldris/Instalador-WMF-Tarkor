@@ -10,11 +10,11 @@ cada commit.**
 
 | | |
 |---|---|
-| **Actualizado** | 2026-11-12 |
+| **Actualizado** | 2026-11-14 |
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #16 (2026-11-12, `5d3fcf3`): `INS-44`, `INS-45` e `INS-57` (borrar datos al desinstalar en Windows y Linux, hoja de estilos), con la confirmación de la usuaria y el CI de GitHub en verde. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-12: `INS-47` hecho y con el CI en verde en ed51538 (Check y App, también el build de Windows tras pasar cargo-about a `-o`). Presupuesto de compactaciones: 1. Siguiente: el siguiente paso de la bitácora (`INS-46` lleva el THIRD-PARTY-NOTICES.txt); ir a `main` pide la confirmación de la usuaria y las tres fases. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-14: `FLU-9` (/gw-update a v0.6.0) aplicado encima de `INS-47`, con el check en verde en local y un parche al test de gw-opt-tokens (punto 21). Siguiente: CI en verde de esta subida; luego las tres fases antes de `main` (INS-47 + FLU-9), con la confirmación de la usuaria. |
 | **Tests** | 2026-11-12: núcleo `cargo test -p tarkor-nucleo` 149 y el check del proyecto en verde. Asistente `vitest` y E2E con el Ollama falso: último verde el 2026-10-25 (`vitest` 27 entonces). |
 
 ## Dónde está todo (para saber qué sigue)
@@ -129,6 +129,11 @@ cada commit.**
     `desinstalar.rs` copia la numeración de pasos de `App.tsx` sin test que los ate; la regla general iría al
     arrancar (asistente completado pero sin motor ni modelos → asistente), que cubriría también la IA borrada a mano;
     `borrarDatos` de `ejemplo.ts` no imita el cambio, así que ni vitest ni el E2E prueban «borrar la IA y reabrir».
+21. Para proponer en Galivelop-workflow (`FLU-9`, 2026-11-14): en la 0.6.0, `skills/gw-opt-tokens/scripts/test_measure.py`
+    copia `scripts/config.py` y `schema/gw.schema.json` con la estructura del repo del flujo y en un proyecto falla
+    (5 errores, `FileNotFoundError`); aquí lleva un parche local (`workflow_file()` mira también `.claude/gw/`, como
+    hace `measure.py`). El aviso de `apply.py` sobre `docs/propuestas` en `docs/13:14` es un falso positivo: es una
+    ruta del repo GVIG, no de este. La mayoría de los hallazgos del punto 16 llegaron arreglados en la 0.5.2.
 
 ## Decisiones de la usuaria que bloquean algo
 

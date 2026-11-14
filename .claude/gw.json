@@ -1,6 +1,6 @@
 {
   "$schema": "gw/schema/gw.schema.json",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "schemaVersion": 1,
   "language": "es",
   "visibleLanguages": [],
