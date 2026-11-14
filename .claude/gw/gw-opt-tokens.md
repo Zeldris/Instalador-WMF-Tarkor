@@ -43,8 +43,15 @@ antes de la `/retro`; todo en español, y solo lo que confirme la usuaria entra 
 - **Revisión de un `/gw-update`** (retro de `FLU-8`): la fase 1 revisa solo lo propio y las adaptaciones del flujo
   (`REVIEW.md`); los 68 archivos copiados de v0.5.1 costaron 1,5 M sin nada arreglable aquí.
 
+- **Logs del CI cortos** (opt-tokens de `FLU-9`): `get_job_logs` con `tail_lines: 60`; más líneas solo si el error
+  no sale. Un log de fallo entero (4,2k) arrastró ~100k.
+- **Un archivo ya leído, por tramos** (opt-tokens de `FLU-9`): la segunda vez, `grep -n` o `sed -n` del tramo, no el
+  archivo entero; `instalar-entorno.sh` leído 5 veces arrastró ~63k.
+
 ## Costes conocidos
 
+- **Conectores MCP** (opt-tokens de `FLU-9`): de los ~86k de arranque, ~74k son sistema y herramientas MCP. La
+  usuaria desactiva los que el proyecto no usa (p. ej. Claude_Docs); `/context` dice cuánto pesa cada uno.
 - **Compilar Rust en frío**: el primer `cargo build`/`clippy` de una sesión tarda minutos y su salida es larga. Se
   filtra (`-q`, `grep -E "^(warning|error)"`) y se lanza en segundo plano si no bloquea.
 - **Las e2e** (`app/e2e`, tauri-driver con xvfb): compilan la app entera; solo al tocar pantallas o el arranque de
