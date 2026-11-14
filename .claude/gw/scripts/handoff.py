@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.5.1
+# galivelop-workflow v0.6.0
 """Hand-off log rules. The branch-row rules need `"logRows": true` in .claude/gw.json (a no-op otherwise); the
 size and "Done" rules of `check`, and the `done` subcommand, work on any log.
 
@@ -15,12 +15,24 @@ contradicting "Next" lines, so each branch writes only in its own row and the ro
                                                  "Estado actual" / "Current state" section) <= 800 characters, and
                                                  the "Hecho (5 últimas)" / "Done (last 5)" section has <= 5 items,
                                                  numbered 1..n, each on its own line ("N. "). These last rules only
-                                                 print `WARNING: ...` and exit 0; with --strict they fail (exit 1)
+                                                 print `WARNING: ...` and exit 0; with --strict they fail (exit 1).
+                                                 A log over `logSize` characters (config; 0 = no cap) also only warns,
+                                                 even with --strict
   handoff.py done TEXT [FILE] [--date YYYY-MM-DD]
                                                  insert "1. <date> — TEXT" at the top of the Done section (date
                                                  default: today), renumber, drop items beyond 5 (a multi-line item
                                                  moves whole), leave the rest of the file byte for byte; exit 1 if
                                                  the section is missing
+  handoff.py archive [FILE] [--dry-run] [--date YYYY-MM-DD]
+                                                 move the "Pendiente" / "Pending" items (top-level "- " bullets with
+                                                 their continuation lines) whose first line names versions X.Y or
+                                                 X.Y.Z, all <= the published one (`version` in .claude-plugin/
+                                                 plugin.json; without it, the highest vX.Y.Z tag), to the archive file (config `logArchive`, not read at
+                                                 session start) under a dated section, and leave one summary line
+                                                 with the link where the first one was; an item with no version, or
+                                                 "no archivar" / "do not archive" in its first line, stays. --dry-run
+                                                 only prints what it would move. `check` warns when the log passes
+                                                 `logSize` characters and names this command
   handoff.py own-row COMMIT BRANCH [--shared]   fail if COMMIT changes another branch's row or a shared row of the
                                                  state table ("Updated" and "Tests" are free); --shared, or
                                                  BITACORA_COMPARTIDA=1 / GW_SHARED_LOG=1, allows it
@@ -39,7 +51,7 @@ contradicting "Next" lines, so each branch writes only in its own row and the ro
                                                  rebase is being closed (the pre-push checks those)
   handoff.py in-progress BASE SHA               WARNING only: a task marked 🚧 that the commits name, whose plan
                                                  entry did not change (it may still say "Next: X" with X done)
-  handoff.py close-row BRANCH [--text TEXT]     rewrite BRANCH's row as "merged, branch finished" (last commit
+  handoff.py close-row [BRANCH] [--text TEXT]   rewrite BRANCH's row (or --branch; default: the current one) as "merged, branch finished" (last commit
                                                  before the PR, so main does not inherit a stale "Next")
   handoff.py clash REV OTHER... [--warn]        fail if REV and an OTHER both open a plan entry (an unindented
                                                  "- …ID" / "| ID", done or not) for an id their merge base does not
@@ -52,6 +64,12 @@ contradicting "Next" lines, so each branch writes only in its own row and the ro
                                                  parents and T (default M) still has both titles under that id
   handoff.py clash --merging                    the same for the merge being concluded (HEAD, MERGE_HEAD and the
                                                  index; the pre-commit hook); passes when no merge is in progress
+  handoff.py next-id PREFIX [--fetch]           print the next free task id with PREFIX ("D" -> "D49", "QA-" or
+                                                 "QA" -> "QA-8"): one past the highest that the plan opens in the work
+                                                 tree, the index or any local or remote-tracking branch, so a new task
+                                                 does not take an id another branch already took (`clash` finds that
+                                                 only at the push). --fetch runs `git fetch --all` first and fails if
+                                                 it fails. Works without logRows; needs a plan
 
 Common options: --root PATH (default: from this script's folder, via config.py), --plan PATH (repeatable; a file or a
 folder with the plan/roadmap; env GW_PLAN, ':'-separated; config `plan`), --id-regex REGEX (task ids; env GW_TASK_ID;
@@ -62,6 +80,7 @@ Python 3.8+, stdlib only.
 """
 import argparse
 import datetime
+import json
 import os
 import re
 import subprocess
@@ -73,15 +92,16 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import config as gwconfig  # noqa: E402
 
-LIMIT = 600
-CELL_LIMIT = 800  # a value cell of the state table (any log, not only logRows)
-DONE_ITEMS = 5  # items kept in the Done section
+# The size limits (a branch row, a state-table cell, the Done items) are the config key `handoff` (config.handoff).
 INDEX = ""  # a "rev" for show()/plan_files(): the staged version
 FREE_ROWS = {"Actualizado", "Tests", "Updated"}  # shared rows every commit may touch
-DEFAULT_ID = r"[A-Z]{2,5}-\d+[a-z]?"
 ROW = re.compile(r"^\|\s*\*\*(?P<label>.+?) · `(?P<branch>[^`]+)`\*\*\s*\|(?P<text>.*)\|\s*$")
 STATE_HEADING = re.compile(r"^##\s+(Estado actual|Current state|Status)\b.*$", re.M | re.I)
 DONE_HEADING = re.compile(r"^##\s+(Hecho|Done)\b.*$", re.M | re.I)
+PENDING_HEADING = re.compile(r"^##\s+(Pendiente|Pending)\b.*$", re.I)
+VERSION_IN_TEXT = re.compile(r"(?<![\w.])(\d+)\.(\d+)(?:\.(\d+))?(?!\w)(?!\.\d)")
+KEEP_MARK = re.compile(r"no archivar|do not archive", re.I)
+ARCHIVED_LINE = re.compile(r"^- \*\*(Archivado|Archived) \((\d{4}-\d{2}-\d{2})\):\*\* (\d+) ")
 # The task's compaction budget, as the gw-selector skill has the log carry it (read by recover.py --state):
 # "Compaction budget: 2" (English) or "Presupuesto de compactaciones: 2" (Spanish), anywhere in the branch's row
 # (logRows) or in the log's state section. Text after the number ("(superado: 6)") is free.
@@ -104,9 +124,9 @@ class Usage(Exception):
 
 
 def task_id_pattern(config, explicit=None):
-    """The task id pattern: `explicit` (--id-regex), else $GW_TASK_ID, else the config's `taskId`, else DEFAULT_ID.
+    """The task id pattern: `explicit` (--id-regex), else $GW_TASK_ID, else the config's `taskId` (its schema default when the config is a bare dict).
     Shared with commit-message.py so both read the ids the same way."""
-    return explicit or os.environ.get("GW_TASK_ID") or config.get("taskId") or DEFAULT_ID
+    return explicit or os.environ.get("GW_TASK_ID") or config.get("taskId") or gwconfig.schema_default("taskId")
 
 
 def entry_regex(id_src):
@@ -263,8 +283,8 @@ def section_lines(text, heading):
     return text[m.end():].split("\n## ", 1)[0].split("\n")[1:] if m else None
 
 
-def long_cells(text):
-    """(label, size) of each value cell of the state table with more than CELL_LIMIT characters."""
+def long_cells(text, limit):
+    """(label, size) of each value cell of the state table with more than `limit` characters."""
     found = []
     for line in section_lines(text, STATE_HEADING) or []:
         if not line.lstrip().startswith("|"):
@@ -273,12 +293,12 @@ def long_cells(text):
         if len(cells) < 2 or all(re.fullmatch(r":?-+:?", c) for c in cells):
             continue
         label = cells[0].replace("*", "").replace("`", "").strip()
-        found += [(label, len(c)) for c in cells[1:] if len(c) > CELL_LIMIT]
+        found += [(label, len(c)) for c in cells[1:] if len(c) > limit]
     return found
 
 
-def done_problems(text, add, recheck):
-    """Messages about the Done section: items not on their own line, numbering not 1..n, more than DONE_ITEMS.
+def done_problems(text, add, recheck, limit):
+    """Messages about the Done section: items not on their own line, numbering not 1..n, more than `limit`.
     `add` is the command that adds an entry (and renumbers), `recheck` the one that checks the log again."""
     lines = section_lines(text, DONE_HEADING)
     if lines is None:
@@ -295,8 +315,8 @@ def done_problems(text, add, recheck):
     if numbers and numbers != list(range(1, len(numbers) + 1)):
         out.append("the Done items are numbered " + ", ".join(map(str, numbers)) + "; number them 1..n in order "
                    f"(the next entry renumbers them: {add})")
-    if len(numbers) > DONE_ITEMS:
-        out.append(f"the Done section has {len(numbers)} items (limit {DONE_ITEMS}); delete the oldest ones, the history "
+    if len(numbers) > limit:
+        out.append(f"the Done section has {len(numbers)} items (limit {limit}); delete the oldest ones, the history "
                    f"is in git (the next entry drops them: {add})")
     return out
 
@@ -312,9 +332,14 @@ def cmd_check(ctx, args):
             raise Usage(message)
         print(f"WARNING: handoff: {message}")  # the module is off: an unreadable log must not block the commit
         return 0
-    soft = [f"a cell of the state table (\"{label}\") has {size} characters (limit {CELL_LIMIT}); shorten it and move what "
-            f"is done to the Done section: {me} done \"<text>\"" for label, size in long_cells(text)]
-    soft += done_problems(text, f"{me} done \"<text>\"", f"{me} check {path} --strict")
+    sizes = gwconfig.handoff(ctx.config)
+    soft = [f"a cell of the state table (\"{label}\") has {size} characters (limit {sizes['cellLimit']}); shorten it and move what "
+            f"is done to the Done section: {me} done \"<text>\"" for label, size in long_cells(text, sizes["cellLimit"])]
+    soft += done_problems(text, f"{me} done \"<text>\"", f"{me} check {path} --strict", sizes["doneItems"])
+    cap = gwconfig.log_size(ctx.config)
+    if cap > 0 and len(text) > cap:  # a warning only: it never fails the commit, not even with --strict
+        print(f"WARNING: handoff: the log has {len(text)} characters (cap logSize = {cap}); archive the items of published "
+              f"versions: {me} archive")
     problems = rows_problems(ctx, args, text.splitlines()) if ctx.config.get("logRows") else []
     if args.strict:
         problems += soft
@@ -328,6 +353,7 @@ def cmd_check(ctx, args):
 
 def rows_problems(ctx, args, lines):
     problems = []
+    limit = gwconfig.handoff(ctx.config)["rowLimit"]
     if args.date:
         found = next((m.group(1) for m in (re.match(r"\|\s*\*\*(?:Actualizado|Updated)\*\*\s*\|\s*[`*]*(\d{4}-\d{2}-\d{2})", l)
                                            for l in lines) if m), None)
@@ -350,8 +376,8 @@ def rows_problems(ctx, args, lines):
             continue
         branches.append(m.group("branch"))
         size = len(m.group("text").strip())
-        if size > LIMIT:
-            problems.append(f"row of {m.group('branch')} has {size} characters (limit {LIMIT}); "
+        if size > limit:
+            problems.append(f"row of {m.group('branch')} has {size} characters (limit {limit}); "
                             "move what is done to the Done section and shorten the row")
     for b in sorted({b for b in branches if branches.count(b) > 1}):
         problems.append(f"two rows for {b}; keep one per branch")
@@ -462,6 +488,7 @@ def cmd_closed(ctx, args):
     missing = sorted(new - listed)
     for t in missing:
         print(f"handoff: {t} is closed in the plan; list it in the \"Done\" section of {ctx.log}")
+        print(f"handoff: fix: python3 {HERE / 'handoff.py'} done '{t}: <what was done>'")
     if missing and args.staged:
         print(f"handoff: fix: edit {ctx.log}, stage it (git add {ctx.log}) and commit again")
     elif missing:
@@ -486,17 +513,27 @@ def clashes(ctx, a, b):
     return {i: (ta[i], tb[i]) for i in sorted(ta.keys() & tb.keys()) if i not in t0 and ta[i] != tb[i]}
 
 
-def free_id(ctx, revs, taken):
-    """The next id after the highest one with `taken`'s prefix that any of `revs` opens."""
-    prefix = taken.rsplit("-", 1)[0]
+ID_NUMBER = re.compile(r"(?P<sep>-?)(?P<num>\d+)[a-z]?")
+
+
+def id_prefix(taken):
+    """The prefix of a task id, without its separator: "INS-3" -> "INS", "D12" -> "D", "QA-7b" -> "QA"."""
+    m = re.match(r"(.*?)-?\d+[a-z]?$", taken)
+    return m.group(1) if m else taken
+
+
+def free_id(ctx, revs, taken, ids=(), sep=None):
+    """The next id after the highest one with `taken`'s prefix that any of `revs` (or `ids`) opens, with the separator
+    those ids use ("INS-4", "D49"); with none of them, `sep` (default: the one `taken` has)."""
+    prefix = taken[:-1] if taken.endswith("-") else id_prefix(taken)
     top = 0
-    for rev in revs:
-        for i in ctx.titles(rev):
-            head, _, num = i.rpartition("-")
-            m = re.match(r"\d+", num)
-            if head == prefix and m:
-                top = max(top, int(m.group(0)))
-    return f"{prefix}-{top + 1}"
+    if sep is None:
+        sep = "-" if taken[len(prefix):].startswith("-") else ""
+    for i in [i for rev in revs for i in ctx.titles(rev)] + list(ids):
+        m = ID_NUMBER.fullmatch(i[len(prefix):]) if i.startswith(prefix) else None
+        if m and int(m.group("num")) >= top:
+            top, sep = int(m.group("num")), m.group("sep")
+    return f"{prefix}{sep}{top + 1}"
 
 
 def quote(titles):
@@ -550,6 +587,42 @@ def cmd_clash(ctx, args):
     return 1 if bad and not args.warn else 0
 
 
+def worktree_ids(ctx):
+    """Ids the plan files in the work tree open (saved, not yet staged or committed)."""
+    found = set()
+    for p in ctx.plans:
+        path = ctx.root / p
+        files = sorted(path.rglob("*.md")) if path.is_dir() else [path] if path.is_file() else []
+        for f in files:
+            for line in f.read_text(encoding="utf-8", errors="replace").splitlines():
+                m = ctx.entry.match(line)
+                if m:
+                    found.add(m.group("id"))
+    return found
+
+
+def cmd_next_id(ctx, args):
+    if not ctx.plans:
+        raise Usage("no plan to read task ids from; set `plan` in .claude/gw.json or pass --plan PATH")
+    if args.fetch:
+        r = ctx.git("fetch", "-q", "--all", "--prune")
+        if r.returncode:
+            print(f"handoff: git fetch failed, so the remote branches may be stale ({r.stderr.strip()}); fix the "
+                  "network or the remote and rerun, or run without --fetch to use the branches already fetched")
+            return 1
+    refs = [r for r in ctx.git("for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes").stdout.split()
+            if not r.endswith("/HEAD")]
+    revs = refs + ([INDEX] if ctx.git("rev-parse", "-q", "--verify", "HEAD").stdout.strip() else [])
+    prefix = args.prefix
+    sep = "-" if prefix.endswith("-") or (ctx.id.fullmatch(f"{prefix}-1") and not ctx.id.fullmatch(f"{prefix}1")) else ""
+    nxt = free_id(ctx, revs, prefix, worktree_ids(ctx), sep)
+    if not ctx.id.fullmatch(nxt):
+        raise Usage(f"{nxt} does not match the task id pattern ({ctx.id.pattern}); pass the prefix the plan uses, "
+                    "for example: handoff.py next-id D")
+    print(nxt)
+    return 0
+
+
 def cmd_in_progress(ctx, args):
     if not ctx.plans:
         return 0
@@ -579,6 +652,8 @@ def split_blank(block):
 def cmd_done(ctx, args):
     path = Path(args.file) if args.file else ctx.root / ctx.log
     text = " ".join(args.text.split())
+    text = re.sub(r"^\d{4}-\d{2}-\d{2}\s*[—–-]\s*", "", text)  # the entry gets its date below: never twice
+    done_items = gwconfig.handoff(ctx.config)["doneItems"]
     if not text:
         raise Usage("TEXT is empty; give the entry: handoff.py done \"what was closed\"")
     try:
@@ -588,7 +663,7 @@ def cmd_done(ctx, args):
     lines = re.findall(r"[^\n]*\n|[^\n]+", raw)  # keeps each line ending: the rest of the file stays byte for byte
     head = next((i for i, l in enumerate(lines) if DONE_HEADING.match(l.rstrip("\r\n"))), None)
     if head is None:
-        print(f"handoff: {path} has no \"## Hecho\" / \"## Done\" section; add the line \"## Done (last {DONE_ITEMS})\" "
+        print(f"handoff: {path} has no \"## Hecho\" / \"## Done\" section; add the line \"## Done (last {done_items})\" "
               f"to it and rerun: python3 {HERE / 'handoff.py'} done \"{text}\" {path}")
         return 1
     eol = "\r\n" if lines[head].endswith("\r\n") else "\n"
@@ -615,14 +690,14 @@ def cmd_done(ctx, args):
     if parts:
         gap = parts[0][1] if len(parts) > 1 else []  # blank lines the log keeps between items
         tail = closing
-        kept = [[entry]] + [p[0] for p in parts[:DONE_ITEMS - 1]]
+        kept = [[entry]] + [p[0] for p in parts[:done_items - 1]]
         body = list(pre)
         for n, block in enumerate(kept):
             if n:
                 body += gap
             body += [re.sub(r"^\d+\.", f"{n + 1}.", block[0], count=1)] + block[1:]
         body += tail
-        dropped = max(len(parts) + 1 - DONE_ITEMS, 0)
+        dropped = max(len(parts) + 1 - done_items, 0)
     else:
         content, tail = split_blank(pre)
         tail = closing or tail
@@ -634,6 +709,129 @@ def cmd_done(ctx, args):
     path.write_bytes("".join(lines).encode("utf-8"))
     print(f"handoff: entry added to the Done section of {path}" + (f" ({dropped} oldest dropped)" if dropped else "")
           + "; commit it with the rest of the work")
+    return 0
+
+
+def published_version(ctx):
+    """The published version as (text, (major, minor, patch)): the highest `vX.Y.Z` tag of the repo or, without one,
+    `version` of .claude-plugin/plugin.json at the root (the workflow repo). The tag goes first because the workflow
+    repo bumps plugin.json before the release is published (D89)."""
+    path = ctx.root / ".claude-plugin" / "plugin.json"
+    fix = (f"archive needs the published version: tag the last release (git tag vX.Y.Z; git fetch --tags if it is "
+           f"only on the remote) or create {path} with a \"version\" key, then rerun: "
+           f"python3 {HERE / 'handoff.py'} archive")
+    tags = ctx.git("tag", "--list", "v[0-9]*")
+    found = [(tuple(int(g or 0) for g in m.groups()), m.group(0)) for m in
+             (VERSION_IN_TEXT.fullmatch(t.strip()[1:]) for t in (tags.stdout if tags.returncode == 0 else "")
+              .splitlines()) if m]
+    if found:
+        best = max(found)
+        return best[1], best[0]
+    if not path.exists():
+        raise Usage(f"no vX.Y.Z tag in the repo and no {path}; {fix}")
+    try:
+        version = json.loads(path.read_text(encoding="utf-8")).get("version")
+    except (OSError, ValueError, AttributeError) as exc:
+        raise Usage(f"cannot read the version from {path} ({exc}); {fix}")
+    m = VERSION_IN_TEXT.fullmatch(version.strip()) if isinstance(version, str) else None
+    if not m:
+        raise Usage(f"{path} has no valid \"version\" (X.Y.Z); {fix}")
+    return version, (int(m.group(1)), int(m.group(2)), int(m.group(3) or 0))
+
+
+def archivable(first_line, published):
+    """True when the item's first line names at least one version and every one is <= published (X.Y counts as X.Y.0)."""
+    if KEEP_MARK.search(first_line) or ARCHIVED_LINE.match(first_line):
+        return False
+    found = [(int(a), int(b), int(c or 0)) for a, b, c in VERSION_IN_TEXT.findall(first_line)]
+    return bool(found) and all(v <= published for v in found)
+
+
+def cmd_archive(ctx, args):
+    path = Path(args.file) if args.file else ctx.root / ctx.log
+    log_name = args.file if args.file else ctx.log
+    archive = ctx.root / gwconfig.log_archive(ctx.config)
+    cap = gwconfig.log_size(ctx.config)
+    try:
+        raw = path.read_bytes().decode("utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise Usage(f"cannot read {path} ({exc}); create the log or fix `log` in .claude/gw.json")
+    version, published = published_version(ctx)
+    lines = re.findall(r"[^\n]*\n|[^\n]+", raw)
+    head = next((i for i, l in enumerate(lines) if PENDING_HEADING.match(l.rstrip("\r\n"))), None)
+    if head is None:
+        print(f"handoff: {path} has no \"## Pendiente\" / \"## Pending\" section; add the line \"## Pending\" to it "
+              f"and rerun: python3 {HERE / 'handoff.py'} archive {path}")
+        return 1
+    english = lines[head].split()[1].lower().startswith("pending")
+    eol = "\r\n" if lines[head].endswith("\r\n") else "\n"
+    end = next((i for i in range(head + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+    pre, items = [], []  # lines before the first bullet; each item = [its lines, the blank lines after it]
+    for line in lines[head + 1:end]:
+        bare = line.rstrip("\r\n")
+        if bare.startswith("- "):
+            items.append([[line], []])
+        elif not items:
+            pre.append(line)
+        elif not bare.strip():
+            items[-1][1].append(line)
+        else:
+            items[-1][0] += items[-1][1] + [line]
+            items[-1][1] = []
+    moved = [i for i, (body, _) in enumerate(items) if archivable(body[0].rstrip("\r\n"), published)]
+
+    def shown(size):
+        return f"{size} characters (cap {cap if cap else 'none'})"
+
+    if not moved:
+        print(f"handoff: nothing to archive in {path}: no Pending item names only versions <= {version}; "
+              f"the log has {shown(len(raw.replace(chr(13) + chr(10), chr(10))))}")
+        return 0
+    prior = next((i for i, (body, _) in enumerate(items) if ARCHIVED_LINE.match(body[0])), None)
+    count = len(moved) + (int(ARCHIVED_LINE.match(items[prior][0][0]).group(3)) if prior is not None else 0)
+    try:
+        link = Path(os.path.relpath(archive, path.resolve().parent)).as_posix()
+    except ValueError:  # another drive on Windows: no relative path
+        link = archive.as_posix()
+    if english:
+        summary = (f"- **Archived ({args.date}):** {count} item(s) of versions already published (≤ {version}) in "
+                   f"[{archive.name}]({link})")
+    else:
+        summary = (f"- **Archivado ({args.date}):** {count} elemento(s) de versiones ya publicadas (≤ {version}) en "
+                   f"[{archive.name}]({link})")
+    kept, placed = [], prior is not None
+    for i, (body, blanks) in enumerate(items):
+        if i in moved:
+            if not placed:
+                kept.append([[summary + eol], blanks])
+                placed = True
+            elif i == len(items) - 1 and kept:
+                kept[-1][1] = blanks  # the section's closing blank lines survive
+            continue
+        if i == prior:
+            body = [summary + eol] + body[1:]
+        kept.append([body, blanks])
+    new = "".join(lines[:head + 1] + pre + [l for body, blanks in kept for l in body + blanks] + lines[end:])
+    size = len(new.replace("\r\n", "\n"))
+    if args.dry_run:
+        print(f"handoff: would archive {len(moved)} item(s) of {log_name} to {archive}:")
+        for i in moved:
+            first = items[i][0][0].rstrip("\r\n")
+            print("  " + (first if len(first) <= 100 else first[:99] + "…"))
+        print(f"handoff: the log would have {shown(size)}; nothing was written (rerun without --dry-run)")
+        return 0
+    block = [f"## {args.date} — from {log_name}", ""] + [l.rstrip("\r\n") for i in moved for l in items[i][0]]
+    try:
+        archive.parent.mkdir(parents=True, exist_ok=True)
+        old = archive.read_text(encoding="utf-8") if archive.exists() else (
+            "# Hand-off archive\n\nItems moved out of the hand-off log by `handoff.py archive`; this file is not read at "
+            "session start.\n")
+        archive.write_text(old.rstrip("\n") + "\n\n" + "\n".join(block) + "\n", encoding="utf-8")
+        path.write_bytes(new.encode("utf-8"))
+    except (OSError, UnicodeDecodeError) as exc:
+        raise Usage(f"cannot write the archive or the log ({exc}); check the permissions of {archive.parent} and {path}, "
+                    "then rerun: handoff.py archive")
+    print(f"handoff: archived {len(moved)} item(s) to {archive}; log now {shown(size)}; commit both files with the work")
     return 0
 
 
@@ -659,26 +857,38 @@ def rewrite_row(ctx, branch, text):
     return hit
 
 
+def row_branch(ctx, args):
+    """The branch whose row set-row / close-row touch: --branch on both (close-row also takes it positional), else the
+    current branch (D71)."""
+    given = [b for b in (getattr(args, "branch", None), args.branch_opt) if b]
+    if len(set(given)) > 1:
+        raise Usage(f"two different branches ({given[0]} and {given[1]}); name one: handoff.py {args.cmd} --branch <branch>")
+    branch = given[0] if given else current_branch(ctx)
+    if not branch:
+        raise Usage(f"detached HEAD, so there is no branch whose row to write; name it: handoff.py {args.cmd} --branch <branch>")
+    return branch
+
+
 def cmd_close_row(ctx, args):
     text = args.text or CLOSED_TEXT.get(ctx.config["language"], CLOSED_TEXT["en"])
-    hit = rewrite_row(ctx, args.branch, text)
+    branch = row_branch(ctx, args)
+    hit = rewrite_row(ctx, branch, text)
     if hit != 1:
-        print(f"handoff: found {hit} rows for {args.branch}, expected 1; add the row first: edit {ctx.log}")
+        print(f"handoff: found {hit} rows for {branch}, expected 1; add the row first: edit {ctx.log}")
         return 1
-    print(f"handoff: row of {args.branch} closed in {ctx.log}; commit it: git commit -am 'Close the log row of {args.branch}'")
+    print(f"handoff: row of {branch} closed in {ctx.log}; commit it: git commit -am 'Close the log row of {branch}'")
     return 0
 
 
 def cmd_set_row(ctx, args):
-    branch = args.branch or current_branch(ctx)
-    if not branch:
-        raise Usage("detached HEAD, so there is no branch whose row to write; name it: handoff.py set-row TEXT --branch <branch>")
+    branch = row_branch(ctx, args)
     text = args.text.strip()
     if not text or "\n" in text or "\r" in text:
         raise Usage("TEXT must be one non-empty line (a table cell); write the row text on a single line")
     text = re.sub(r"(?<!\\)\|", r"\\|", text)
-    if len(text) > LIMIT:
-        print(f"handoff: the text has {len(text)} characters (limit {LIMIT}); shorten it, or move what is done to the Done "
+    limit = gwconfig.handoff(ctx.config)["rowLimit"]
+    if len(text) > limit:
+        print(f"handoff: the text has {len(text)} characters (limit {limit}); shorten it, or move what is done to the Done "
               f"section: python3 {HERE / 'handoff.py'} done \"<text>\"")
         return 1
     hit = rewrite_row(ctx, branch, text)
@@ -705,6 +915,10 @@ def main(argv=None):
     d.add_argument("text")
     d.add_argument("file", nargs="?")
     d.add_argument("--date")
+    a = sub.add_parser("archive")
+    a.add_argument("file", nargs="?")
+    a.add_argument("--date")
+    a.add_argument("--dry-run", action="store_true")
     o = sub.add_parser("own-row")
     o.add_argument("commit", nargs="?")
     o.add_argument("branch", nargs="?")
@@ -724,11 +938,15 @@ def main(argv=None):
     k.add_argument("--tip")
     k.add_argument("--merging", action="store_true")
     r = sub.add_parser("close-row")
-    r.add_argument("branch")
+    r.add_argument("branch", nargs="?")
+    r.add_argument("--branch", dest="branch_opt")
     r.add_argument("--text")
+    n = sub.add_parser("next-id")
+    n.add_argument("prefix")
+    n.add_argument("--fetch", action="store_true")
     w = sub.add_parser("set-row")
     w.add_argument("text")
-    w.add_argument("--branch")
+    w.add_argument("--branch", dest="branch_opt")
     args = p.parse_args(argv)
     if args.cmd == "own-row" and (args.staged == (args.commit is not None) or (args.commit is None) != (args.branch is None)):
         print("handoff: own-row takes COMMIT BRANCH, or --staged alone; run: handoff.py own-row --staged", file=sys.stderr)
@@ -760,16 +978,19 @@ def main(argv=None):
             what = {"closed": "\"Done\"", "own-row": "own-row"}.get(args.cmd, "task-id clash")
             print(f"handoff: WARNING: skipping the {what} check of this commit: {exc}", file=sys.stderr)
             return 0
-        if args.cmd == "done":
+        if args.cmd == "archive":
+            args.date = args.date or datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+        elif args.cmd == "done":
             args.date = args.date or datetime.date.today().isoformat()
-        elif not ctx.config.get("logRows") and args.cmd != "check":
-            if args.cmd == "set-row":
+        elif not ctx.config.get("logRows") and args.cmd not in ("check", "archive", "next-id"):
+            if args.cmd in ("set-row", "close-row"):
                 print("handoff: logRows is off in .claude/gw.json, so there are no branch rows and nothing was written; "
-                      "enable it: set \"logRows\": true in .claude/gw.json, then rerun set-row")
+                      f"enable it: set \"logRows\": true in .claude/gw.json, then rerun {args.cmd}")
                 return 1
             return 0  # the branch-row module is off: nothing to check (`check` still reads the size and Done rules)
         return {"check": cmd_check, "done": cmd_done, "own-row": cmd_own_row, "closed": cmd_closed,
-                "in-progress": cmd_in_progress, "close-row": cmd_close_row, "set-row": cmd_set_row, "clash": cmd_clash}[args.cmd](ctx, args)
+                "in-progress": cmd_in_progress, "close-row": cmd_close_row, "set-row": cmd_set_row, "clash": cmd_clash,
+                "archive": cmd_archive, "next-id": cmd_next_id}[args.cmd](ctx, args)
     except Usage as exc:
         print(f"handoff: {exc}", file=sys.stderr)
         return 2

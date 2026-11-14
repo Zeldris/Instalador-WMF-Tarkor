@@ -4,11 +4,23 @@
 import { useEffect, useState } from 'react'
 import { api } from './api'
 import { Pagina } from './componentes'
-import type { Catalogo, Perfil } from './tipos'
+import type { Catalogo, GrupoLicencias, LicenciasTerceros, Perfil } from './tipos'
 import * as tx from './textos'
 import apache from './licencias/Apache-2.0.txt?raw'
 import llama from './licencias/Llama-3.1-Community.txt?raw'
 import ollama from './licencias/ollama-MIT.txt?raw'
+
+// Las licencias de terceros las genera el build (INS-47) y no se versionan: con `glob` el archivo es opcional y
+// `tsc`, vitest y `npm run dev` funcionan sin generarlo. Sin `eager`, el JSON (cientos de KB) va a su propio
+// fragmento y solo se baja al montar la sección; el build de producción exige que exista (vite.config.ts).
+const generadas = import.meta.glob<LicenciasTerceros>('./licencias/generadas/terceros.json', { import: 'default' })
+
+/** Carga perezosa de `terceros.json`; null si no se generó. */
+export async function cargarTerceros(): Promise<LicenciasTerceros | null> {
+  const cargar = Object.values(generadas)[0]
+  if (!cargar) return null
+  try { return await cargar() } catch { return null }
+}
 
 /** Id de la licencia de Llama en el catálogo (pide «Built with Llama» y su aviso). */
 export const LICENCIA_LLAMA = 'Llama-3.1-Community'
@@ -42,6 +54,53 @@ function TextoCompleto({ licencia }: { licencia: string }) {
   )
 }
 
+function GrupoTerceros({ grupo }: { grupo: GrupoLicencias }) {
+  const t = tx.licencias
+  // El contenido (hasta cientos de textos) solo se pinta al abrir el grupo.
+  const [abierto, setAbierto] = useState(false)
+  return (
+    <details className="grupo-licencia" onToggle={(e) => setAbierto(e.currentTarget.open)}>
+      <summary><b>{grupo.licencia}</b> · <span>{t.tercerosResumen(grupo.paquetes.length)}</span></summary>
+      {abierto && <>
+        <ul className="peq">
+          {grupo.paquetes.map((p) => <li key={`${p.ecosistema}/${p.nombre}@${p.version}`}><span className="mono">{p.nombre} {p.version}</span> <span className="tenue">({t.tercerosEcosistema[p.ecosistema] ?? p.ecosistema})</span></li>)}
+        </ul>
+        {grupo.textos.map((x, i) => (
+          <div key={i}>
+            <p className="peq tenue">{t.tercerosUsadoPor(x.paquetes.length)}: {x.paquetes.map((n) => grupo.paquetes[n].nombre).join(', ')}</p>
+            <pre className="licencia">{x.texto}</pre>
+          </div>
+        ))}
+      </>}
+    </details>
+  )
+}
+
+/** «Licencias de terceros», como chrome://credits: un grupo desplegable por licencia. Sin datos, una línea discreta. */
+export function LicenciasDeTerceros({ datos: dados, cargar = cargarTerceros }: { datos?: LicenciasTerceros | null; cargar?: () => Promise<LicenciasTerceros | null> }) {
+  const t = tx.licencias
+  // `undefined` = todavía cargando (no se pinta nada bajo el título); `null` = no se generó.
+  const [cargados, setCargados] = useState<LicenciasTerceros | null | undefined>(dados)
+  useEffect(() => {
+    if (dados !== undefined) return
+    let vivo = true
+    cargar().then((d) => { if (vivo) setCargados(d) }, () => { if (vivo) setCargados(null) })
+    return () => { vivo = false }
+  }, [dados, cargar])
+  const datos = dados !== undefined ? dados : cargados
+  return (
+    <div className="caja">
+      <h2>{t.terceros}</h2>
+      {datos === undefined ? null : datos && datos.grupos.length > 0
+        ? <>
+          <p className="peq">{t.tercerosLead}</p>
+          {datos.grupos.map((g) => <GrupoTerceros key={g.licencia} grupo={g} />)}
+        </>
+        : <p className="peq tenue">{t.tercerosSin}</p>}
+    </div>
+  )
+}
+
 function CopiarEnlace({ url }: { url: string }) {
   const t = tx.licencias
   const [estado, setEstado] = useState<'copiado' | 'error' | null>(null)
@@ -65,7 +124,7 @@ function CopiarEnlace({ url }: { url: string }) {
   )
 }
 
-export function Licencias({ volver }: { volver: () => void }) {
+export function Licencias({ volver, cargarTerceros: cargar }: { volver: () => void; cargarTerceros?: () => Promise<LicenciasTerceros | null> }) {
   const t = tx.licencias
   // El catálogo que cargó el núcleo (puede ser el externo), no el incrustado; mientras llega se pinta el resto.
   const [catalogo, setCatalogo] = useState<Catalogo | null>(null)
@@ -106,6 +165,7 @@ export function Licencias({ volver }: { volver: () => void }) {
           ))}
         </div>
         <p className="peq tenue">{t.fuentes}</p>
+        <LicenciasDeTerceros cargar={cargar} />
       </Pagina>
     </div>
   )

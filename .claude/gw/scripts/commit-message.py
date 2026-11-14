@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.5.1
+# galivelop-workflow v0.6.0
 """The commit message rules of the commit-msg hook that need more than grep (D11, D12, D15).
 
   python3 commit-message.py [--root PATH] MSGFILE
@@ -7,8 +7,9 @@
 Reads the message the way git will keep it (comment lines and what follows the --verbose scissors line are dropped)
 and applies, from .claude/gw.json (read through config.py):
 
-  commitFormat "conventional"  the first line is `type(scope)!: text` (scope and ! optional; types feat, fix, docs,
-                               style, refactor, perf, test, build, ci, chore, revert). A leading `WIP: ` and the lines
+  commitFormat "conventional"  the first line is `type(scope)!: text` (scope and ! optional; types feat, fix, hotfix,
+                               docs, style, refactor, perf, test, build, ci, chore, revert, or the commitTypes list).
+                               A leading `WIP: ` (commitWipPrefix; "" = none) and the lines
                                git writes itself (`fixup! `, `squash! `, `amend! `, `Revert "`, `Reapply "`, `Merge `) pass.
   commitRefs true              the trailer block (git interpret-trailers --parse) has at least one `Refs:` line, with
                                one or several ids separated by commas (`Refs: D11, D12`; the line may repeat), and each
@@ -24,7 +25,8 @@ and applies, from .claude/gw.json (read through config.py):
                                not name a model or provider: the value is split at anything that is not a letter or digit
                                and a piece fails if it is claude, anthropic, opus, sonnet, haiku, fable, gpt,
                                chatgpt, openai, gemini, llama, mistral, qwen or deepseek, or matches gpt<digit>..., o<digits>
-                               or <digits>o (Claudette passes, haiku-writer and 4o do not). Without that, any
+                               or <digits>o, plus the pieces of agentModelNames and the regexes of agentModelShapes, which only add to
+                               these (Claudette passes, haiku-writer and 4o do not). Without that, any
                                `Agent:` value passes. Trailers are read with --no-divider (a `---` line is body).
 
 The review-mark commit of reviewed.sh (subject exactly `Revisado: <sha>` or `Reviewed: <sha>`) is exempt from
@@ -46,8 +48,9 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import config as gwconfig  # noqa: E402
 
-TYPES = ("feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert")
-CONVENTIONAL = re.compile(rf"(?:{'|'.join(TYPES)})(?:\([^()\s][^()]*\))?!?: \S")
+# The types and the WIP prefix are the commitTypes and commitWipPrefix keys (defaults: these); read in types_of, wip_of.
+TYPES = ("feat", "fix", "hotfix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert")
+WIP_PREFIX = "WIP: "
 GIT_LINES = ("fixup! ", "squash! ", "amend! ", 'Revert "', 'Reapply "', "Merge ")
 # As of 2026-11-02, from the D15 rule in docs/design/D-git.md (models and providers; the list goes stale: extend it).
 # An Agent value is split into pieces at anything that is not a letter or digit; a piece in this set, or one that
@@ -121,13 +124,55 @@ def trailers(root, message, msgfile):
     return found
 
 
-def names_a_model(value):
-    return any(t in MODEL_NAMES or MODEL_SHAPES.fullmatch(t) for t in re.split(r"[^a-z0-9]+", value.lower()) if t)
+def types_of(config):
+    """The accepted Conventional Commits types (commitTypes); the built-in ones when the key is not a list."""
+    given = config.get("commitTypes")
+    return tuple(given) if isinstance(given, list) and given else TYPES
 
 
-def check_agent(found, msgfile):
+def wip_of(config):
+    """The prefix of a commit made in red (commitWipPrefix); "" means no exemption."""
+    given = config.get("commitWipPrefix")
+    return given if isinstance(given, str) else WIP_PREFIX
+
+
+def without_wip(subject, wip):
+    return subject[len(wip):] if wip and subject.startswith(wip) else subject
+
+
+def model_rules(config):
+    """(names, shapes): the built-in ones plus what agentModelNames and agentModelShapes add. A project can only add:
+    the built-in entries are always there, whatever the config says."""
+    names, shapes = set(MODEL_NAMES), [MODEL_SHAPES]
+    for key, target in (("agentModelNames", names), ("agentModelShapes", shapes)):
+        given = config.get(key)
+        for item in given if isinstance(given, list) else []:
+            if not isinstance(item, str) or not item:
+                raise Reject(f"{key} in .claude/gw.json has an entry that is not a non-empty string ({item!r}); "
+                             f"fix it: python3 {HERE / 'config.py'} validate")
+            if key == "agentModelNames":
+                target.add("-".join(t for t in re.split(r"[^a-z0-9]+", item.lower()) if t))
+            else:
+                try:
+                    target.append(re.compile(item, re.I))
+                except re.error as exc:
+                    raise Reject(f"agentModelShapes in .claude/gw.json has an invalid regex {item!r} ({exc}); "
+                                 f"fix it: python3 {HERE / 'config.py'} validate")
+    return names, shapes
+
+
+def names_a_model(value, rules=None):
+    names, shapes = rules or (MODEL_NAMES, [MODEL_SHAPES])
+    pieces = [t for t in re.split(r"[^a-z0-9]+", value.lower()) if t]
+    joined = "-" + "-".join(pieces) + "-"
+    # a configured name is split the same way, so `my-model` matches the pieces my, model in a row
+    return (any(any(sh.fullmatch(t) for sh in shapes) for t in pieces)
+            or any(n and (n in pieces or f"-{n}-" in joined) for n in names))
+
+
+def check_agent(found, msgfile, rules=None):
     for key, value in found:
-        if key.lower() == "agent" and names_a_model(value):
+        if key.lower() == "agent" and names_a_model(value, rules):
             raise Reject(f"the Agent trailer names a model or provider, which this project forbids "
                          f"(agentSignatures: false in .claude/gw.json): {key}: {value}\n"
                          f"commit-msg: name the skill or role instead (Agent: gw-orchestrate-dealer) and commit "
@@ -135,9 +180,10 @@ def check_agent(found, msgfile):
 
 
 def check_next(config, message, found, msgfile):
+    wip = wip_of(config)
     word = NEXT_TRAILERS.get(config.get("language"), NEXT_TRAILERS["en"])
     subject = next((line for line in message.splitlines() if line.strip()), "")
-    rest = subject[5:] if subject.startswith("WIP: ") else subject
+    rest = without_wip(subject, wip)
     # "Merge " is not exempt here: a real merge is skipped by its MERGE_HEAD, and a plain commit titled "Merge ..." is not one.
     if not subject or rest.startswith(tuple(l for l in GIT_LINES if l != "Merge ")):
         return
@@ -149,15 +195,17 @@ def check_next(config, message, found, msgfile):
                  f"GW_NO_NEXT=1 git commit -e -F {msgfile}")
 
 
-def check_format(message, msgfile):
+def check_format(config, message, msgfile):
+    types, wip = types_of(config), wip_of(config)
     subject = next((line for line in message.splitlines() if line.strip()), "")
     if not subject:
         return  # git itself refuses an empty message
-    rest = subject[5:] if subject.startswith("WIP: ") else subject
-    if rest.startswith(GIT_LINES) or CONVENTIONAL.match(rest):
+    rest = without_wip(subject, wip)
+    conventional = re.compile(rf"(?:{'|'.join(re.escape(t) for t in types)})(?:\([^()\s][^()]*\))?!?: \S")
+    if rest.startswith(GIT_LINES) or conventional.match(rest):
         return
     raise Reject(f"the first line is not in the conventional form (commitFormat: conventional in .claude/gw.json): "
-                 f"{subject!r}\ncommit-msg: write `type(scope)!: text` with type one of {', '.join(TYPES)} "
+                 f"{subject!r}\ncommit-msg: write `type(scope)!: text` with type one of {', '.join(types)} "
                  f"(scope and ! optional, a space after the colon) and commit again: git commit -e -F {msgfile}")
 
 
@@ -252,12 +300,12 @@ def run(root, msgfile):
     if REVIEW_MARK.fullmatch(subject):
         fmt = refs = False
     if not merging and fmt:
-        check_format(message, msgfile)
+        check_format(config, message, msgfile)
     found = []
     if agent or (not merging and (refs or nxt)):
         found = trailers(root, message, msgfile)
     if agent:
-        check_agent(found, msgfile)
+        check_agent(found, msgfile, model_rules(config))
     if not merging and refs:
         check_refs(root, config, found, msgfile)
     if not merging and nxt:

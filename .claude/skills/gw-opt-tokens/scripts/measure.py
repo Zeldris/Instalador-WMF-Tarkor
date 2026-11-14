@@ -15,12 +15,16 @@ Reads the session log (`~/.claude/projects/<folder>/<session>.jsonl`) and report
 
 Session lookup: the project root comes from `git rev-parse --show-toplevel`. The log is searched in the folder of
 the root and in the folders of its parent directories (a session opened in a folder that contains the repo stores
-its log there), never in sibling repos; the newest log wins. If it is not the root's own folder, a warning goes to
+its log there), never in sibling repos; the newest log wins (with a period, the one with most calls in it). If it is not the root's own folder, a warning goes to
 stderr: that session may belong to another project, and it did not load the repo's `.claude/settings.json`; in a
 cloud session (`CLAUDE_CODE_REMOTE=true`) the start folder `-home-user` is the normal one and gives no warning. Last
 resort: the log folder of the home directory's cloud start (`-home-user`). Pass `--session` to skip the search.
 
-Tokens of a result are estimated from its size (characters / 3.5; an image counts ~1,600). API usage is exact.
+Short current session (B29): without `--session`, if the session found has fewer than `measure.minCalls` calls in the
+period (default 5, config `measure.minCalls`, 0 = off; e.g. right after a `/clear`), the newest previous session of the
+same git branch (log lines carry `gitBranch`) with calls in the period is measured instead, and the output says so.
+
+Tokens of a result are estimated from its size (characters / contextGuard.charsPerToken, 3.5 by default; an image counts ~1,600). API usage is exact.
 """
 import argparse
 import collections
@@ -32,8 +36,8 @@ import re
 import subprocess
 import sys
 
-IMAGE_TOKENS = 1600
-CHARS_PER_TOKEN = 3.5
+IMAGE_TOKENS = 1600  # the defaults of measure.imageTokens, measure.mixedRatio and measure.minOutput; main() takes the project's
+CHARS_PER_TOKEN = 3.5  # the default of contextGuard.charsPerToken; main() takes the project's value
 MIXED_RATIO = 1.5  # peaks of closed stretches whose max/min exceeds this: the session mixes compaction windows
 MIN_OUTPUT = 100  # output tokens per call below which a subagent log's output is not trustworthy
 
@@ -70,9 +74,8 @@ def folder_of(path):
     return re.sub(r'[^A-Za-z0-9]', '-', path)
 
 
-def default_session(root):
-    """Newest `.jsonl` of the root's log folder or of a parent folder's; exits if there is none."""
-    root = os.path.abspath(root)
+def session_logs(root):
+    """Every `.jsonl` session log of the root's log folder, of its parents' and of the cloud start folder."""
     folders, current = [], root
     while True:
         folders.append(folder_of(current))
@@ -81,11 +84,129 @@ def default_session(root):
             break
         current = parent
     folders.append('-home-user')  # cloud sessions start in /home/user whatever repo they work on
-    candidates = [p for f in dict.fromkeys(folders)
-                  for p in glob.glob(os.path.expanduser(f'~/.claude/projects/{f}/*.jsonl'))]
+    return [p for f in dict.fromkeys(folders) for p in glob.glob(os.path.expanduser(f'~/.claude/projects/{f}/*.jsonl'))]
+
+
+def default_min_calls(root):
+    """The schema default of `measure.minCalls` (one datum, one place): from the workflow's schema next to this
+    script (the repo's `schema/` or an installed `.claude/gw/schema/`) or the project's own; 0 (off) if none is found."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    for path in (os.path.join(here, '..', '..', '..', 'schema', 'gw.schema.json'),
+                 os.path.join(here, '..', '..', '..', 'gw', 'schema', 'gw.schema.json'),
+                 os.path.join(root, '.claude', 'gw', 'schema', 'gw.schema.json')):
+        try:
+            with open(path, encoding='utf-8') as f:
+                return int(json.load(f)['properties']['measure']['properties']['minCalls']['default'])
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+    return 0
+
+
+def min_calls(root):
+    """`measure.minCalls` from the project's config reader (installed copy first, then this repo's own); the schema
+    default when there is no config, no reader, the config is malformed or the answer is not a non-negative integer."""
+    default = default_min_calls(root)
+    if not os.path.isfile(os.path.join(root, '.claude', 'gw.json')):
+        return default
+    for rel in ('.claude/gw/scripts/config.py', 'scripts/config.py'):
+        reader = os.path.join(root, rel)
+        if os.path.isfile(reader):
+            try:
+                r = subprocess.run([sys.executable, reader, '--root', root, 'get', 'measure.minCalls'],
+                                   capture_output=True, text=True)
+            except OSError:
+                return default
+            value = r.stdout.strip()
+            return int(value) if r.returncode == 0 and value.isdigit() else default
+    return default
+
+
+def measure_value(root, name, default, integer):
+    """`measure.<name>` from the project's config reader (installed copy first, then this repo's own); `default` when
+    there is no config, no reader, the config is malformed or the answer is not a number of at least 1."""
+    if not os.path.isfile(os.path.join(root, '.claude', 'gw.json')):
+        return default
+    for rel in ('.claude/gw/scripts/config.py', 'scripts/config.py'):
+        reader = os.path.join(root, rel)
+        if os.path.isfile(reader):
+            try:
+                r = subprocess.run([sys.executable, reader, '--root', root, 'get', 'measure.' + name],
+                                   capture_output=True, text=True)
+                value = (int(r.stdout.strip()) if integer else float(r.stdout.strip())) if r.returncode == 0 else 0
+            except (OSError, ValueError):
+                return default
+            return value if 1 <= value < float('inf') else default
+    return default
+
+
+def chars_per_token(root):
+    """`contextGuard.charsPerToken` from the project's config reader (installed copy first, then this repo's own); the
+    built-in 3.5 when there is no config, no reader, the config is malformed or the answer is not a positive number."""
+    if not os.path.isfile(os.path.join(root, '.claude', 'gw.json')):
+        return CHARS_PER_TOKEN
+    for rel in ('.claude/gw/scripts/config.py', 'scripts/config.py'):
+        reader = os.path.join(root, rel)
+        if os.path.isfile(reader):
+            try:
+                r = subprocess.run([sys.executable, reader, '--root', root, 'get', 'contextGuard.charsPerToken'],
+                                   capture_output=True, text=True)
+                value = float(r.stdout.strip()) if r.returncode == 0 else 0
+            except (OSError, ValueError):
+                return CHARS_PER_TOKEN
+            return value if 0 < value < float('inf') else CHARS_PER_TOKEN
+    return CHARS_PER_TOKEN
+
+
+def branch_of(path):
+    """The LAST `gitBranch` a log has (a session may switch branch: its branch is the one it ends on), or None."""
+    branch = None
+    try:
+        with open(path, encoding='utf-8') as log:
+            for line in log:
+                try:
+                    d = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(d, dict) and d.get('gitBranch'):
+                    branch = d['gitBranch']
+    except OSError:
+        pass
+    return branch
+
+
+def newest_session(root):
+    """The current session: the newest log (mtime, then name) of the project, whatever the period; None if none."""
+    logs = session_logs(os.path.abspath(root))
+    return max(logs, key=lambda p: (os.path.getmtime(p), p)) if logs else None
+
+
+def previous_session(path, root, since):
+    """The newest other log of the project whose branch is the one of `path` and that has calls in the period
+    (ties in mtime: the greater file name); (that log or None, the branch or None)."""
+    branch = branch_of(path)
+    if not branch:
+        return None, None
+    others = sorted((p for p in session_logs(os.path.abspath(root)) if os.path.abspath(p) != os.path.abspath(path)),
+                    key=lambda p: (os.path.getmtime(p), p), reverse=True)
+    for p in others:
+        if branch_of(p) == branch and responses_of(p, since):
+            return p, branch
+    return None, branch
+
+
+def default_session(root, since=None):
+    """Newest `.jsonl` of the root's log folder or of a parent folder's; exits if there is none.
+    With `since`, the one with most responses from that moment on (the newest file may be a later session that
+    does not cover the period); the newest if none has any."""
+    root = os.path.abspath(root)
+    candidates = session_logs(root)
     if not candidates:
         sys.exit(f'No sessions in ~/.claude/projects/{folder_of(root)}/ or its parent folders (use --session)')
     path = max(candidates, key=os.path.getmtime)
+    if since:
+        covered = {p: len(responses_of(p, since)) for p in candidates}
+        if max(covered.values()) > 0:
+            path = max(candidates, key=lambda p: (covered[p], os.path.getmtime(p)))
     folder = os.path.basename(os.path.dirname(path))
     cloud_start = os.environ.get('CLAUDE_CODE_REMOTE') == 'true' and folder == '-home-user'  # where the cloud starts
     if folder != folder_of(root) and not cloud_start:
@@ -108,7 +229,10 @@ def tokens_of(content):
     return total, images
 
 
-def input_summary(entry):
+def input_summary(entry, name=None):
+    if name == 'Artifact':  # `quickstart`, `publish`, `read`...: the action says which call weighs
+        action = entry.get('action') or 'publish'  # no action = publish
+        return f'action={action} ' + input_summary({k: v for k, v in entry.items() if k != 'action'})
     for key in ('command', 'file_path', 'pattern', 'url', 'query', 'skill', 'description'):
         if key in entry:
             return f'{key}={str(entry[key])[:110]}'
@@ -180,6 +304,24 @@ def responses_of(path, since):
     return list(by_id.values())
 
 
+def is_subagent_log(path):
+    """True if every line of the log that carries `isSidechain` has it set: a subagent's own log
+    (`<session>/subagents/agent-*.jsonl`). A main session log has lines without it, so it stays False."""
+    seen = False
+    with open(path, encoding='utf-8') as log:
+        for line in log:
+            try:
+                d = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(d, dict) or 'isSidechain' not in d:
+                continue
+            if not d['isSidechain']:
+                return False
+            seen = True
+    return seen
+
+
 def add_model_usage(path, since, per_model, who):
     """Add a subagent log's calls, input and output to `per_model[(who, model)]`; return its responses."""
     responses = responses_of(path, since)
@@ -203,12 +345,33 @@ def main():
     ap.add_argument('--top', type=int, default=12, help='rows per list (default 12)')
     a = ap.parse_args()
     root = project_root()
-    path = a.session or default_session(root)
+    global CHARS_PER_TOKEN, IMAGE_TOKENS, MIXED_RATIO, MIN_OUTPUT
+    CHARS_PER_TOKEN = chars_per_token(root)
+    IMAGE_TOKENS = measure_value(root, 'imageTokens', IMAGE_TOKENS, True)
+    MIXED_RATIO = measure_value(root, 'mixedRatio', MIXED_RATIO, False)
+    MIN_OUTPUT = measure_value(root, 'minOutput', MIN_OUTPUT, True)
     since = None
     if a.since:
         since = since_moment(a.since)
     elif a.hours > 0:
         since = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=a.hours)
+    path = a.session or default_session(root, since)
+    note = None
+    threshold = 0 if a.session else min_calls(root)
+    current = newest_session(root) if threshold else None  # the session in progress, not the one with most calls
+    if current:
+        have = len(responses_of(current, since))
+        if have < threshold:
+            before, branch = previous_session(current, root, since)
+            if before:
+                note = (f'Note: the current session has {have} calls (under measure.minCalls = {threshold}); '
+                        f'measuring the previous session of branch {branch}: {os.path.basename(before)}')
+                path = before
+            else:
+                path = current if have and branch else path  # no branch to compare: keep the usual choice
+                note = (f'Note: the current session has {have} calls (under measure.minCalls = {threshold}) and '
+                        f'there is no previous session of {"branch " + branch if branch else "its branch"}: '
+                        f'measuring {os.path.basename(path)}')
 
     usage = collections.Counter()
     api_calls = 0
@@ -222,6 +385,7 @@ def main():
     call_models = []  # model of each call (or None)
     per_model = collections.defaultdict(lambda: [0, 0, 0])  # (who, model) -> calls, input, output
     clipped = False  # with --hours/--since: the session started before the period
+    own_log = is_subagent_log(path)  # a subagent's log is measured like a main one: its lines are all sidechain
     with open(path, encoding='utf-8') as log:
         for line in log:
             try:
@@ -232,7 +396,7 @@ def main():
             if since and stamp and parse_time(stamp) < since:
                 clipped = True
                 continue
-            if d.get('isSidechain'):
+            if d.get('isSidechain') and not own_log:
                 continue
             if d.get('type') == 'system' and d.get('subtype') == 'compact_boundary':
                 cuts.append(api_calls)
@@ -257,7 +421,7 @@ def main():
                 for b in m.get('content') or []:
                     if isinstance(b, dict) and b.get('type') == 'tool_use':
                         entry = b.get('input') or {}
-                        tool_uses[b['id']] = (b.get('name', '?'), input_summary(entry), json.dumps(entry, sort_keys=True))
+                        tool_uses[b['id']] = (b.get('name', '?'), input_summary(entry, b.get('name')), json.dumps(entry, sort_keys=True))
                         tool_files[b['id']] = files_read(b.get('name'), entry, root)
             elif d.get('type') == 'user':
                 for b in m.get('content') or [] if isinstance(m.get('content'), list) else []:
@@ -307,6 +471,8 @@ def main():
     period = ('whole session' if not since else f'since {since:%Y-%m-%d %H:%M} UTC' if a.since
               else f'last {a.hours:g} h')
     print(f'Session: {os.path.basename(path)}  |  period: {period}')
+    if note:
+        print(note)
     print(f'API calls: {api_calls}  |  compactions: {len(cuts)}')
     print(f'Input {total_in:,.0f} tokens (cache read {usage["cache_read_input_tokens"]:,.0f} = '
           f'{100 * usage["cache_read_input_tokens"] / max(total_in, 1):.0f} %, written '

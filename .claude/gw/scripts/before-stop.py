@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.5.1
+# galivelop-workflow v0.6.0
 """Stop hook: do not let Claude finish with commits that are not pushed, or with changes the log does not mention.
 
 "What is not pushed does not exist" (AGENTS.md) is the workflow's most important rule and, until this hook, only the
@@ -21,8 +21,14 @@ agent remembered it. It blocks the stop when:
      check ends by itself and a push now would race it, so it is a one-line notice with the check's log. Only a lock whose sha is this
      worktree's HEAD (12 hex, with or without -dirty) silences it; one of another commit or worktree adds a note and blocks.
      A lock that is dead, reused by another process, malformed or missing counts as absent and blocks as before;
+     D88: while background subagents of this session still run (read from the transcript the hook's stdin names in
+     `transcript_path`, see running_subagents) it does not block either: it is a one-line notice to wait for them and
+     push after (format of that transcript: observed 2026-11-11 in real Claude Code 2.1.322 transcripts, undocumented).
+     A start older than `stopSubagentMaxAge` seconds is ignored. Background Bash commands are not counted (a dev server could silence the reminder for good). Any
+     trouble reading the transcript means "none running", so the block stays;
   b. the working tree has changes (`git status`, untracked files included, but not untracked paths under
-     `.claude/worktrees/`, where Claude Code keeps its isolated worktrees) and the log (`log` in .claude/gw.json) is
+     `.claude/worktrees/`, where Claude Code keeps its isolated worktrees, nor the token ledger `metrics.ledger`,
+     which the metrics.py Stop hook rewrites on every stop) and the log (`log` in .claude/gw.json) is
      not among them. The reason says to commit the log, updated, in the same commit as the work.
 
 Output format (https://code.claude.com/docs/en/hooks.md, "Stop decision control"): a block is a JSON object on stdout
@@ -41,10 +47,12 @@ The same for a repository with no remote (there is nothing to push to).
 Project root: config.find_root (the script's own repo when it holds .claude/gw.json, else the project the hook runs
 in), so it works from the plugin's scripts/ and from a project's .claude/gw/scripts/. Python 3.8+ standard library only.
 """
+import datetime
 import glob
 import json
 import os
 import posixpath
+import re
 import select
 import subprocess
 import sys
@@ -55,11 +63,10 @@ sys.dont_write_bytecode = True  # no __pycache__ in the project's .claude/gw/scr
 sys.path.insert(0, HERE)
 import config  # noqa: E402
 
-STDIN_WAIT = 3.0
-GIT_TIMEOUT = 30
+GIT_TIMEOUT = None  # main() sets the config values (stopGitTimeout, stopPushMarkerMaxAge); None: the schema default
 PUSH_MARKER = "gw-push-in-progress"  # written by templates/githooks/pre-push while it runs
 CHECK_LOCK = os.path.join("gw", "check.lock")  # under the git common dir; written by check-green.sh lock-acquire
-PUSH_MARKER_MAX_AGE = 3600  # seconds: an older marker is a push that died without cleaning up
+PUSH_MARKER_MAX_AGE = None  # seconds: an older marker is a push that died without cleaning up
 WORKTREES_PREFIX = ".claude/worktrees/"
 
 
@@ -70,7 +77,7 @@ class GitError(Exception):
 def git(root, *args, check=True):
     """(returncode, stdout) of `git -C root ...`; with check, a failure raises GitError naming the command."""
     try:
-        r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, timeout=GIT_TIMEOUT)
+        r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, timeout=GIT_TIMEOUT or config.schema_default("stopGitTimeout"))
     except (OSError, subprocess.SubprocessError) as exc:
         raise GitError(f"git {args[0]} could not run ({exc})")
     if check and r.returncode != 0:
@@ -83,7 +90,7 @@ def read_event():
     if sys.stdin is None or sys.stdin.isatty():
         return None
     try:
-        ready, _, _ = select.select([sys.stdin], [], [], STDIN_WAIT)
+        ready, _, _ = select.select([sys.stdin], [], [], config.hook_stdin_wait())
         if not ready:
             return None
         data = json.loads(sys.stdin.read())
@@ -178,13 +185,131 @@ def check_in_progress(root):
     return pid, log, sha
 
 
-def _same_tree_head(root, lock_sha):
-    """True when the lock's sha (`<12 hex>` or `<12 hex>-dirty`, check.sh's name for a run) is this worktree's HEAD."""
+def running_subagents(path, tail_bytes, max_age=0, now=None):
+    """The ids of the background subagents of this session that have not reported back yet (D88), as a sorted list.
+
+    The transcript format below is internal to Claude Code and undocumented: observed 2026-11-11 in real session
+    transcripts (Claude Code 2.1.322). `path` is the hook's `transcript_path` (JSONL). Only its last `tail_bytes`
+    bytes are read (a long session's transcript is huge; 0 turns the look off), and a first line the tail cut in the
+    middle is dropped. In file order:
+      - start: the tool_result of an `Agent` tool_use with `input.run_in_background: true` whose text STARTS with
+        "Async agent launched successfully." gives the id in its first `agentId: <id>` line;
+      - end: a `<task-notification>` with `<task-id>` and any `<status>` but `running`. It arrives as a `user` entry
+        (`origin.kind` "task-notification", or no origin) or, when the main agent is mid-turn, as an `attachment`
+        entry whose `attachment.type` is `queued_command` and whose `prompt` starts with it; a user entry with another
+        `origin.kind` (pasted text) does not count;
+      - restart: a `SendMessage` tool_use whose `input.to` is an id already seen, unless its tool_result says
+        `is_error` (the agent was not resumable).
+    With `max_age` > 0 a start older than that many seconds (the entry's `timestamp`; `now` is for tests) is ignored:
+    an agent that died without notifying (container restart, resumed in another session) must not silence the push
+    reminder for good. On any trouble (no path, unreadable, bad size, odd lines) the answer is [], that is, none
+    running: the caller then keeps blocking on unpushed commits (the hook fails closed); it never raises."""
+    if not path or not isinstance(path, str) or not isinstance(tail_bytes, int) or tail_bytes <= 0:
+        return []
     try:
-        head = git(root, "rev-parse", "--short=12", "HEAD")[1].strip()
+        with open(path, "rb") as f:
+            size = f.seek(0, os.SEEK_END)
+            start = max(0, size - tail_bytes)
+            f.seek(max(0, start - 1))  # one byte before: tells whether the tail begins at a line start
+            data = f.read(size - max(0, start - 1))
+    except (OSError, ValueError, OverflowError, MemoryError):
+        return []
+    lines = data.split(b"\n")
+    if start > 0:
+        lines = lines[1:]  # data[0] is the byte before the tail: either "\n" (empty first piece) or a cut line
+    now = time.time() if now is None else now
+    state = {}  # id -> epoch of its last start/restart (None: unknown), or False once it ended
+    background, pending = set(), {}  # Agent tool_use ids in background; SendMessage tool_use id -> (target, before)
+    for raw in lines:
+        if b"agentId" not in raw and b"task-notification" not in raw and b"SendMessage" not in raw \
+                and b"run_in_background" not in raw and b"is_error" not in raw:
+            continue  # cheap filter: most lines are none of these
+        try:
+            entry = json.loads(raw)
+        except ValueError:
+            continue
+        if not isinstance(entry, dict):
+            continue
+        stamp = _epoch(entry.get("timestamp"))
+        att = entry.get("attachment")
+        if entry.get("type") == "attachment" and isinstance(att, dict) and att.get("type") == "queued_command":
+            _notified(att.get("prompt"), state)
+            continue
+        message = entry.get("message")
+        content = message.get("content") if isinstance(message, dict) else None
+        if isinstance(content, str):
+            content = [{"type": "text", "text": content}]
+        if not isinstance(content, list):
+            continue
+        origin = entry.get("origin")
+        for item in content:
+            if not isinstance(item, dict):
+                continue
+            kind, inp = item.get("type"), item.get("input")
+            if kind == "tool_use" and isinstance(inp, dict):
+                if item.get("name") == "Agent" and inp.get("run_in_background") is True:
+                    background.add(item.get("id"))
+                elif item.get("name") == "SendMessage" and isinstance(inp.get("to"), str) and inp["to"] in state:
+                    pending[item.get("id")] = (inp["to"], state[inp["to"]])
+                    state[inp["to"]] = stamp
+            elif kind == "tool_result":
+                ident = item.get("tool_use_id")
+                if ident in pending:
+                    if item.get("is_error") is True:  # the agent could not be resumed: back to what it was
+                        state[pending[ident][0]] = pending[ident][1]
+                elif ident in background:
+                    text = _text_of(item.get("content"))
+                    found = re.match(r"Async agent launched successfully\.[^\n]*\nagentId:\s*([A-Za-z0-9_-]+)", text)
+                    if found:
+                        state[found.group(1)] = stamp
+            elif kind == "text" and entry.get("type") == "user":
+                if not isinstance(origin, dict) or origin.get("kind") == "task-notification":
+                    _notified(item.get("text"), state)
+    return sorted(i for i, at in state.items()
+                  if at is not False and not (max_age > 0 and at is not None and now - at > max_age))
+
+
+def _notified(text, state):
+    """Mark ended in `state` the id of a `<task-notification>` text whose status is not `running`."""
+    if isinstance(text, str) and text.lstrip().startswith("<task-notification>"):
+        ident = re.search(r"<task-id>\s*([A-Za-z0-9_-]+)\s*</task-id>", text)
+        status = re.search(r"<status>\s*(\w+)\s*</status>", text)
+        if ident and status and status.group(1) != "running":
+            state[ident.group(1)] = False
+
+
+def _epoch(stamp):
+    """Seconds since the epoch of an ISO-8601 `timestamp` ("2026-11-03T23:09:25.870Z"), or None."""
+    if not isinstance(stamp, str):
+        return None
+    try:
+        return datetime.datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def _text_of(content):
+    """The text of a tool_result's content (a string, or a list of {"type": "text", "text": ...})."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(c.get("text", "") for c in content if isinstance(c, dict) and isinstance(c.get("text"), str))
+    return ""
+
+
+def _same_tree_head(root, lock_sha):
+    """True when the lock's sha (`<hex>` or `<hex>-dirty`, check.sh's name for a run: HEAD abbreviated, which may be
+    longer than 12 in a big repository) names this worktree's HEAD. D76: the full shas are compared, so an
+    abbreviation that matches two commits cannot pass for HEAD."""
+    sha = lock_sha[:-6] if lock_sha.endswith("-dirty") else lock_sha
+    if len(sha) < 7 or any(c not in "0123456789abcdef" for c in sha):
+        return False
+    try:
+        head = git(root, "rev-parse", "--verify", "-q", "HEAD")[1].strip()
+        named = git(root, "rev-parse", "--verify", "-q", sha + "^{commit}")[1].strip()
     except GitError:
         return False
-    return bool(head) and (lock_sha[:-6] if lock_sha.endswith("-dirty") else lock_sha) == head
+    return bool(head) and named == head
 
 
 def _marker_branch(marker, head):
@@ -194,7 +319,7 @@ def _marker_branch(marker, head):
         with open(marker, encoding="utf-8") as f:
             lines = f.read(4096).splitlines()
         pid_text = lines[0].strip() if lines else ""
-        if not pid_text.isdigit() or not (-300 < age < PUSH_MARKER_MAX_AGE):
+        if not pid_text.isdigit() or not (-300 < age < (PUSH_MARKER_MAX_AGE or config.schema_default("stopPushMarkerMaxAge"))):
             return None
         pid = int(pid_text)
         if pid < 1:
@@ -214,9 +339,11 @@ def _marker_branch(marker, head):
         return None
 
 
-def changed_paths(root):
+def changed_paths(root, ignore=()):
     """The set of paths `git status` lists (untracked files included; both sides of a rename). Raises GitError.
-    Untracked paths under `.claude/worktrees/` (Claude Code's isolated worktrees live there) do not count."""
+    Untracked paths under `.claude/worktrees/` (Claude Code's isolated worktrees live there) do not count, nor
+    does any path in `ignore` (normalized repo-relative paths: the token ledger, which metrics.py rewrites on every
+    stop)."""
     out = git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all")[1]
     entries = out.split("\0")
     paths, i = set(), 0
@@ -227,7 +354,8 @@ def changed_paths(root):
             continue
         if entry.startswith("?? ") and posixpath.normpath(entry[3:]).startswith(WORKTREES_PREFIX):
             continue
-        paths.add(posixpath.normpath(entry[3:]))
+        if posixpath.normpath(entry[3:]) not in ignore:
+            paths.add(posixpath.normpath(entry[3:]))
         if entry[0] in "RC" or entry[1] in "RC":  # `-z` puts the origin of a rename in the next entry
             if i < len(entries) and entries[i]:
                 paths.add(posixpath.normpath(entries[i]))
@@ -236,6 +364,7 @@ def changed_paths(root):
 
 
 def main():
+    global GIT_TIMEOUT, PUSH_MARKER_MAX_AGE
     doctor = f"python3 {os.path.join(HERE, 'doctor.py')}"
     warns, blocks, notes = [], [], []
 
@@ -255,6 +384,12 @@ def main():
     if cfg is not None:
         root = cfg["_root"]
         log = posixpath.normpath(cfg["log"])
+        GIT_TIMEOUT = cfg["stopGitTimeout"]
+        PUSH_MARKER_MAX_AGE = cfg["stopPushMarkerMaxAge"]
+        severity = config.stop_severity(cfg)
+        # stopSeverity: "block" stops the session, "warn" only says it in the closing message
+        unpushed_to = blocks if severity["unpushed"] == "block" else notes
+        log_to = blocks if severity["logRequired"] == "block" else notes
         try:
             found = unpushed(root)
             if found:
@@ -272,8 +407,20 @@ def main():
                                      f"branch '{branch}' has {plural(count, 'commit')} not pushed ({where}) until it "
                                      f"ends. Do not push meanwhile: wait for CHECK ok, then push: git push -u origin "
                                      f"{branch}")
+                    elif pushing is None and (agents := running_subagents(
+                            event.get("transcript_path"), cfg["stopTranscriptBytes"],
+                            cfg["stopSubagentMaxAge"])):
+                        notes.append(f"{plural(len(agents), 'background subagent')} of this session "
+                                     f"{'is' if len(agents) == 1 else 'are'} still running ({', '.join(agents)}); "
+                                     f"branch '{branch}' has {plural(count, 'commit')} not pushed ({where}). Wait for "
+                                     f"the subagent{'' if len(agents) == 1 else 's'} to report and push after: git "
+                                     f"push -u origin {branch}")
+                        if checking is not None:
+                            notes.append(f"A check of another commit or worktree is running (pid {checking[0]}, log "
+                                         f"{checking[1] or '-'}, sha {checking[2] or '-'}); it does not cover this "
+                                         f"HEAD.")
                     elif pushing is None:
-                        blocks.append(f"Branch '{branch}' has {plural(count, 'commit')} not pushed ({where}). What is "
+                        unpushed_to.append(f"Branch '{branch}' has {plural(count, 'commit')} not pushed ({where}). What is "
                                       f"not pushed does not exist for the next session; push it now: git push -u "
                                       f"origin {branch}")
                         if checking is not None:  # a check of another commit or worktree: it does not push this one
@@ -288,9 +435,9 @@ def main():
         except GitError as exc:
             warns.append(str(exc))
         try:
-            paths = changed_paths(root)
+            paths = changed_paths(root, {posixpath.normpath(config.metrics(cfg)["ledger"])})
             if paths and log not in paths:
-                blocks.append(f"The working tree has {plural(len(paths), 'uncommitted change')} and the log ({log}) "
+                log_to.append(f"The working tree has {plural(len(paths), 'uncommitted change')} and the log ({log}) "
                               f"is not among them. Update the log (what is done, what is left, the next step) and "
                               f"commit it in the same commit as the work: git add {log} <files> && git commit")
         except GitError as exc:

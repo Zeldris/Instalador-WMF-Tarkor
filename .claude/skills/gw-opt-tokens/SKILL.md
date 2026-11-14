@@ -4,7 +4,7 @@ description: Token-spend retrospective: measures where a session's tokens went a
 license: MIT
 compatibility: Claude Code or any Agent Skills agent; git; python3 for scripts/measure.py (standard library only)
 metadata:
-  version: "0.5.1"
+  version: "0.6.0"
   source: "Galivelop workshop; generalised from the Tarkor, installer, portal and private-project-1 gw-opt-tokens"
 ---
 
@@ -22,7 +22,7 @@ retries and redone work.
 
 ## Steps
 
-1. **Measure, do not remember.** Run `python3 <skill folder>/scripts/measure.py` (newest session, last 24 h). Options:
+1. **Measure, do not remember.** Run `python3 <skill folder>/scripts/measure.py` (newest session, last 24 h; if it has fewer than `measure.minCalls` calls, e.g. after a `/clear`, the previous session of the same branch, and it says so). Options:
    `--hours N` (`0` = whole session), `--since <ISO|sha>` (from a date or a commit), `--session <path>`, `--top N`;
    `--help` lists them. The script finds the project root with `git rev-parse --show-toplevel` and the session log in
    the repo's folder or a parent folder, warning on stderr if the session was opened outside the repo. Read only its
@@ -32,7 +32,8 @@ retries and redone work.
      on every call until the next compaction);
    - per file reads, repeats, per-model split, and `BY SUBAGENT`: one row per subagent with calls, average context,
      startup (the context of its first call, what launching it costs), input and output. The top totals are the main
-     session only.
+     session only. To measure one subagent on its own, pass its log (`<session>/subagents/agent-*.jsonl`) to
+     `--session`: it is read like a main log.
 
    **The curve first** (`Average context`, `Stretches between compactions`): average context × calls is almost all
    of the spend, and a ceiling far above the floor says compaction comes late. That is the first proposal when it
@@ -58,7 +59,8 @@ retries and redone work.
      the summary.
    - **Files re-read** (`BY FILE`): a big file read many times wants a pointer in a map or a tool that returns the
      part needed. Subagents reading the whole log is the usual case: their brief should point to
-     `recover.py --state` (their row), not to the log file.
+     `recover.py --state` (their row), not to the log file; seeing or marking a roadmap row, to
+     `roadmap.py show|done <id>` or `list <version>` (`roadmapFiles`), not to the roadmap.
    - **Images.** A screenshot costs what hundreds of text lines do. If one served a non-visual purpose, improve the
      text tool so it gives that next time.
    - **Rediscovering the known.** Exploring what a document, a skill or a saved scenario already says: write it once

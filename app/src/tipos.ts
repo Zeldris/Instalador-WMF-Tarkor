@@ -197,3 +197,14 @@ export function aErrorIa(e: unknown): ErrorIa {
   }
   return new ErrorIa(String(e))
 }
+
+/** Licencias de terceros que genera el build (`herramientas/licencias-terceros.mjs`, INS-47): `terceros.json`. */
+export interface PaqueteTercero { nombre: string; version: string; ecosistema: 'rust' | 'npm' }
+export interface GrupoLicencias {
+  /** Id SPDX o expresión (`MIT OR Apache-2.0`). */
+  licencia: string
+  paquetes: PaqueteTercero[]
+  /** Cada texto distinto, con los índices (de `paquetes`) de los paquetes que lo usan. */
+  textos: { texto: string; paquetes: number[] }[]
+}
+export interface LicenciasTerceros { grupos: GrupoLicencias[] }

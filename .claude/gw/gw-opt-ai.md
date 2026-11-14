@@ -1,4 +1,4 @@
-<!-- galivelop-workflow v0.5.1 -->
+<!-- galivelop-workflow v0.6.0 -->
 # gw-opt-ai — notas del proyecto
 
 Las lee primero la skill `gw-opt-ai`; aquí vive todo lo propio de los modelos de IA local de este proyecto. El flujo
@@ -60,6 +60,11 @@ No aplica en el instalador (sin RAG).
 
 Se fijan con la primera medición en la Deck (`INS-8`). Hasta entonces, ningún perfil se marca como «demasiado
 lento» por su cuenta: se informa de las cifras y se propone el umbral a la usuaria.
+
+## Script de parada
+
+<!-- La orden que para lo que levantó una ronda (servidores, modelos locales, inhibidores de suspensión); es el paso
+     de cierre de cada ronda. -->
 
 ## Ya en marcha
 

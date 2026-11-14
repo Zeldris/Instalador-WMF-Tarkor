@@ -30,11 +30,12 @@ import argparse
 import datetime as dt
 import json
 import math
+import os
 import re
 import subprocess
 import sys
 
-COLD_MS = 100
+COLD_MS = 100  # the default of measure.coldMs
 NO_PROFILE = 'unknown'
 NO_MODEL = '-'
 DEFAULT_EXCLUDED = ('warmup',)
@@ -259,6 +260,24 @@ def read_settings(root):
     return out
 
 
+def configured_cold_ms(root):
+    """`measure.coldMs` from the project's config reader (installed copy first, then this repo's own); COLD_MS when
+    there is no config, no reader, the config is malformed or the answer is not a number of at least 1."""
+    if not root or not os.path.isfile(f'{root}/.claude/gw.json'):
+        return COLD_MS
+    for rel in ('.claude/gw/scripts/config.py', 'scripts/config.py'):
+        reader = f'{root}/{rel}'
+        if os.path.isfile(reader):
+            try:
+                r = subprocess.run([sys.executable, reader, '--root', root, 'get', 'measure.coldMs'],
+                                   capture_output=True, text=True)
+                value = float(r.stdout.strip()) if r.returncode == 0 else 0
+            except (OSError, ValueError):
+                return COLD_MS
+            return value if 1 <= value < float('inf') else COLD_MS
+    return COLD_MS
+
+
 def resolve(path, root):
     if not path or path.startswith('/') or not root:
         return path
@@ -291,7 +310,7 @@ def main(argv=None):
     else:
         excluded = DEFAULT_EXCLUDED
     try:
-        cold = a.cold_ms if a.cold_ms is not None else float(cfg.get('cold_ms', COLD_MS))
+        cold = a.cold_ms if a.cold_ms is not None else float(cfg.get('cold_ms', configured_cold_ms(root)))
     except ValueError:
         sys.exit('`cold_ms` must be a number')
     warnings = []

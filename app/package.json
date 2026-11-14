@@ -7,7 +7,7 @@
   "description": "Envoltorio de escritorio de Tarkor: asistente de primer arranque y gestión de procesos.",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "node herramientas/licencias-terceros.mjs && tsc -b && vite build",
     "test": "vitest run",
     "tauri": "tauri"
   },

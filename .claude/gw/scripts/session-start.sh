@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.5.1
+# galivelop-workflow v0.6.0
 # Claude Code SessionStart hook (startup|resume|clear): leaves the project ready to work. Idempotent.
 #   - git hooks: sets core.hooksPath to .githooks when it is unset and .githooks exists; when another hook manager
 #     owns the hooks (core.hooksPath elsewhere, or hooks installed in .git/hooks), it says how to chain the
@@ -14,6 +14,8 @@
 #     (the `# galivelop-workflow vX.Y.Z` header of this script), and when the session was started outside the repo
 #     root (its .claude/settings.json may not have loaded; private-project-1 P3), and when agentSignatures is false
 #     while git user.email is noreply@anthropic.com (D21).
+#   - spend alert (B6): with a valid config, prints the lines of `metrics.py alert` (a model whose spend today or
+#     yesterday passes metrics.alert.factor x its daily mean); its errors are dropped.
 # Fails open: always exits 0 (a SessionStart hook cannot block); warnings go to stdout, which enters the agent's
 # context, each ending with the command that fixes it.
 # Project root: the git top level of this script's folder when it holds .claude/gw.json (the copy in
@@ -120,10 +122,14 @@ else
   if [ -n "$own_version" ] && [ -n "$project_version" ] && version_lt "$project_version" "$own_version"; then
     warn ".claude/gw.json says version $project_version but the workflow copy is $own_version; bring the project up to date: /gw-update"
   fi
+  if [ -f "$here/metrics.py" ]; then
+    python3 "$here/metrics.py" alert --root "$root" 2>/dev/null | while IFS= read -r line; do warn "$line"; done
+  fi
 fi
 
 # run_limited <seconds> <command> <log>: runs the command with bash in its own process group (set -m), output to the
-# log. A watchdog sleeps <seconds> and then marks the run as timed out, sends TERM to the group and, 5 s later, KILL.
+# log. A watchdog sleeps <seconds> and then marks the run as timed out, sends TERM to the group and, $kill_grace s
+# later (commandKillGrace, default 5), KILL.
 # Sets `timed_out` only when the watchdog fired (a command that exits 124 by itself is a plain failure). Returns the
 # command's exit status.
 run_limited() {
@@ -134,7 +140,7 @@ run_limited() {
   bash -c "$cmd" > "$log" 2>&1 < /dev/null &
   pid=$!
   ( sleep "$limit"; : > "$flag"; kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null
-    sleep 5; kill -KILL -- "-$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null ) > /dev/null 2>&1 < /dev/null &
+    sleep "$kill_grace"; kill -KILL -- "-$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null ) > /dev/null 2>&1 < /dev/null &
   wd=$!
   set +m
   wait "$pid" 2>/dev/null; status=$?
@@ -150,16 +156,23 @@ run_limited() {
 
 # --- Cloud dependencies and setup -------------------------------------------------------------------------------
 # `install` commands, then `setup` commands, one after another in this one hook (separate SessionStart hooks run in
-# parallel, so ordering has to live here). A command that fails or runs past GW_COMMAND_TIMEOUT seconds (default 900)
-# is reported and stops the sequence; the stamp is not written, so the next session tries again.
-if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ] && [ -n "$config_ok" ]; then
+# parallel, so ordering has to live here). A command that fails or runs past GW_COMMAND_TIMEOUT seconds (else the
+# commandTimeout key, default 900) is reported and stops the sequence; the stamp is not written, so the next session
+# tries again. Only in cloud sessions (CLAUDE_CODE_REMOTE=true) unless installLocal is true.
+install_here=""
+if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then install_here=1; fi
+if [ -z "$install_here" ] && [ -n "$config_ok" ] && [ "$(python3 "$config" --root "$root" get installLocal 2>/dev/null)" = "true" ]; then
+  install_here=1
+fi
+kill_grace=5
+if [ -n "$install_here" ] && [ -n "$config_ok" ]; then
   installs="$(python3 "$config" --root "$root" get install 2>/dev/null)"
   setups="$(python3 "$config" --root "$root" get setup 2>/dev/null)"
   if [ -n "$installs" ] || [ -n "$setups" ]; then
-    locks="$(git ls-files -- 'package-lock.json' '*/package-lock.json' 'npm-shrinkwrap.json' 'yarn.lock' '*/yarn.lock' \
-      'pnpm-lock.yaml' '*/pnpm-lock.yaml' 'bun.lock' 'bun.lockb' '*/bun.lock' 'Cargo.lock' '*/Cargo.lock' \
-      'poetry.lock' '*/poetry.lock' 'uv.lock' '*/uv.lock' 'Pipfile.lock' 'requirements*.txt' '*/requirements*.txt' \
-      'Gemfile.lock' 'go.sum' '*/go.sum' 'composer.lock' 'pom.xml' '*/pom.xml' 2>/dev/null)"
+    lockspecs=()
+    while IFS= read -r spec; do [ -n "$spec" ] && lockspecs+=("$spec"); done <<<"$(python3 "$config" --root "$root" get installLockfiles 2>/dev/null)"
+    locks=""
+    if [ "${#lockspecs[@]}" -gt 0 ]; then locks="$(git ls-files -- "${lockspecs[@]}" 2>/dev/null)"; fi
     sum="$( { printf '%s\n' "$installs"
               if [ -n "$setups" ]; then printf 'setup:\n%s\n' "$setups"; fi
               printf '%s\n' "$locks" | while IFS= read -r f; do
@@ -171,9 +184,13 @@ if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ] && [ -n "$config_ok" ]; then
       :
     else
       failed=""
-      limit="${GW_COMMAND_TIMEOUT:-900}"
-      case "$limit" in ''|*[!0-9]*) limit=900 ;; esac
-      [ "$((10#$limit))" -gt 0 ] || limit=900   # 0 would kill every command at once
+      default_limit="$(python3 "$config" --root "$root" get commandTimeout 2>/dev/null)"
+      case "$default_limit" in ''|*[!0-9]*) default_limit="$(python3 "$config" default commandTimeout 2>/dev/null)" ;; esac
+      kill_grace="$(python3 "$config" --root "$root" get commandKillGrace 2>/dev/null)"
+      case "$kill_grace" in ''|*[!0-9]*) kill_grace="$(python3 "$config" default commandKillGrace 2>/dev/null)" ;; esac
+      limit="${GW_COMMAND_TIMEOUT:-$default_limit}"
+      case "$limit" in ''|*[!0-9]*) limit="$default_limit" ;; esac
+      [ "$((10#$limit))" -gt 0 ] || limit="$default_limit"   # 0 would kill every command at once
       while IFS= read -r entry; do
         [ -n "$entry" ] || continue
         kind="${entry%%:*}"; cmd="${entry#*:}"

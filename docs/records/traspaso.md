@@ -10,11 +10,11 @@ cada commit.**
 
 | | |
 |---|---|
-| **Actualizado** | 2026-11-12 |
+| **Actualizado** | 2026-11-14 |
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #16 (2026-11-12, `5d3fcf3`): `INS-44`, `INS-45` e `INS-57` (borrar datos al desinstalar en Windows y Linux, hoja de estilos), con la confirmación de la usuaria y el CI de GitHub en verde. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-12: PR #17 de `INS-59` a `main` abierto con las tres fases hechas (marca `71f3e8d`); espera el CI en verde y la confirmación de la usuaria para fusionar. Presupuesto de compactaciones: 0. Siguiente: fusionar #17 con CI verde y confirmación. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-14: INS-47 + FLU-9 en PR a main: fases 1-3 hechas (retro-2026-11-14-ins-47-flu-9.md), Check y App en verde. Leves pendientes: 5 referencias de diseño, versiones en «Texto usado por», normalizarExpresion, flex en details; instalar-entorno.sh: fallo de apt-get update sin aviso propio y logs mktemp sin borrar. |
 | **Tests** | 2026-11-12: núcleo `cargo test -p tarkor-nucleo` 149 y el check del proyecto en verde. Asistente `vitest` y E2E con el Ollama falso: último verde el 2026-10-25 (`vitest` 27 entonces). |
 
 ## Dónde está todo (para saber qué sigue)
@@ -129,6 +129,11 @@ cada commit.**
     `desinstalar.rs` copia la numeración de pasos de `App.tsx` sin test que los ate; la regla general iría al
     arrancar (asistente completado pero sin motor ni modelos → asistente), que cubriría también la IA borrada a mano;
     `borrarDatos` de `ejemplo.ts` no imita el cambio, así que ni vitest ni el E2E prueban «borrar la IA y reabrir».
+21. Para proponer en Galivelop-workflow (`FLU-9`, 2026-11-14): en la 0.6.0, `skills/gw-opt-tokens/scripts/test_measure.py`
+    copia `scripts/config.py` y `schema/gw.schema.json` con la estructura del repo del flujo y en un proyecto falla
+    (5 errores, `FileNotFoundError`); aquí lleva un parche local (`workflow_file()` mira también `.claude/gw/`, como
+    hace `measure.py`). El aviso de `apply.py` sobre `docs/propuestas` en `docs/13:14` es un falso positivo: es una
+    ruta del repo GVIG, no de este. La mayoría de los hallazgos del punto 16 llegaron arreglados en la 0.5.2.
 
 ## Decisiones de la usuaria que bloquean algo
 
@@ -152,6 +157,8 @@ python3 .claude/gw/scripts/doctor.py                   # el flujo (Galivelop-wor
 
 Dos líneas cada una como mucho; el detalle está en el commit y la más antigua sale cuando hay más de 5.
 
+- ~~`INS-47` · Licencias de terceros generadas en el build~~ (2026-11-12, en la rama): cargo-about + npm, sección en
+  la página de licencias y `THIRD-PARTY-NOTICES.txt` para `INS-46`.
 - ~~`INS-59` · Borrar solo la IA vuelve al asistente~~ (2026-11-12, en la rama): `desinstalar::borrar` deja `config.json`
   en «Elige perfil» sin modelos; pendiente de `INS-8`.
 - ~~`INS-57` · Hoja de estilos del instalador y peticiones de imágenes~~ (2026-11-11, PR #16):
@@ -160,8 +167,6 @@ Dos líneas cada una como mucho; el detalle está en el commit y la más antigua
   los paquetes; diálogo en Ajustes (solo Linux) que para el motor, borra y cierra; pendiente de `INS-8` en la Deck.
 - ~~`INS-44` · Instalador NSIS con las dos casillas~~ (2026-11-11, PR #16): plantilla propia, `tarkor.exe --desinstalar`
   y CI de Windows que instala y desinstala; pendiente de `INS-8` verlo en pantalla.
-- `INS-15` · Licencias en el instalador (2026-11-11, PR #15): pantalla «Licencias y avisos» y narrador `llama3.1:8b` en
-  Equilibrado y Máximo; falta la pantalla del juego y las imágenes.
 
 1. 2026-11-11 — Encargo de `INS-35` e `INS-36` lanzado en el juego (issue #93): `TARKOR_NARRADOR_BASE`, `TARKOR_NUM_THREAD`/`NUM_BATCH`/`NUM_CTX_NARRADOR`, escucha en 127.0.0.1, CORS de Tauri, `TARKOR_IMAGENES_DIR` y versión en build; `TARKOR_MODELOS_SIN_PENSAR` fuera porque el juego ya manda `think: false`.
 2. 2026-11-11 — 2026-11-11: `FLU-8` (flujo v0.5.1) fusionado en `main` por el PR #13, con la confirmación de la usuaria y el CI en verde; retro con P1 a P3 aplicadas; los 14 hallazgos del flujo, en el punto 16.

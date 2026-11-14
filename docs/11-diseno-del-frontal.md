@@ -227,6 +227,12 @@ esta sesión. Ninguno distribuye un modelo Llama, así que imitarlos no basta: l
 «Built with Llama» visible y una copia de la licencia, y por eso esta página. Las dependencias de Rust y npm
 llegan a la misma página con `INS-47`, y la licencia del juego con `INS-12`.
 
+Licencias de terceros (`INS-47`, decidido el 2026-11-12): una sección al final de la misma página, como
+`chrome://credits` de Chrome (VS Code, en cambio, solo deja un `ThirdPartyNotices.txt` junto al programa). Agrupada
+por licencia; cada grupo dice cuántos paquetes la usan y se despliega en la lista de paquetes con su versión y el
+texto de la licencia, sin repetir textos idénticos. Se genera en el build (`cargo-about` para Rust, un script para
+npm).
+
 ### Error: el motor se ha detenido
 
 Un hilo de Rust vigila los procesos cada 2 s, cargue lo que cargue la ventana, y avisa al frontal con un evento; la

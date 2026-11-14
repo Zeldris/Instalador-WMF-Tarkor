@@ -2,7 +2,8 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { catalogo } from './catalogo'
 import { ejemplo, fijarErrorCopiar, textoCopiado } from './ejemplo'
-import { LICENCIA_LLAMA, Licencias, modelosPorLicencia, textosLicencia } from './pantallaLicencias'
+import { LICENCIA_LLAMA, Licencias, LicenciasDeTerceros, modelosPorLicencia, textosLicencia } from './pantallaLicencias'
+import type { LicenciasTerceros } from './tipos'
 import { licencias as t } from './textos'
 
 afterEach(() => {
@@ -67,5 +68,73 @@ describe('Licencias y avisos', () => {
     for (const nombre of ['Licencia MIT', 'Llama 3.1 Community License', 'Apache License 2.0']) {
       expect(screen.getByText(`Texto completo de la ${nombre}`)).toBeTruthy()
     }
+  })
+})
+
+describe('Licencias de terceros', () => {
+  const datos: LicenciasTerceros = {
+    grupos: [
+      {
+        licencia: 'MIT',
+        paquetes: [
+          { nombre: 'react', version: '19.3.0', ecosistema: 'npm' },
+          { nombre: 'serde', version: '1.0.0', ecosistema: 'rust' },
+          { nombre: 'tokio', version: '1.2.3', ecosistema: 'rust' },
+        ],
+        textos: [
+          { texto: 'MIT Copyright (c) Meta', paquetes: [0] },
+          { texto: 'MIT Copyright (c) Serde y Tokio', paquetes: [1, 2] },
+        ],
+      },
+      { licencia: 'Zlib', paquetes: [{ nombre: 'adler32', version: '1.0.0', ecosistema: 'rust' }], textos: [{ texto: 'Texto Zlib', paquetes: [0] }] },
+    ],
+  }
+
+  it('agrupa por licencia y dice cuántos paquetes usa cada una', () => {
+    render(<LicenciasDeTerceros datos={datos} />)
+    expect(screen.getByRole('heading', { name: t.terceros })).toBeTruthy()
+    expect(screen.getByText(t.tercerosResumen(3))).toBeTruthy()
+    expect(screen.getByText(t.tercerosResumen(1))).toBeTruthy()
+    expect(screen.getByText('MIT')).toBeTruthy()
+    expect(screen.getByText('Zlib')).toBeTruthy()
+    // Cerrados, no pintan sus paquetes ni sus textos.
+    expect(screen.queryByText('react 19.3.0')).toBeNull()
+  })
+
+  it('al desplegar un grupo enseña sus paquetes con versión y cada texto una vez, con quién lo usa', () => {
+    render(<LicenciasDeTerceros datos={datos} />)
+    const grupo = screen.getByText('MIT').closest('details') as HTMLDetailsElement
+    grupo.open = true
+    fireEvent(grupo, new Event('toggle'))
+    expect(screen.getByText('react 19.3.0')).toBeTruthy()
+    expect(screen.getByText('serde 1.0.0')).toBeTruthy()
+    expect(screen.getByText('tokio 1.2.3')).toBeTruthy()
+    expect(screen.getByText('MIT Copyright (c) Meta')).toBeTruthy()
+    expect(screen.getByText('MIT Copyright (c) Serde y Tokio').tagName).toBe('PRE')
+    expect(screen.getByText(`${t.tercerosUsadoPor(2)}: serde, tokio`)).toBeTruthy()
+    // El otro grupo sigue cerrado.
+    expect(screen.queryByText('Texto Zlib')).toBeNull()
+  })
+
+  it('sin datos dice en una línea que no se generaron, y no enseña grupos', () => {
+    render(<LicenciasDeTerceros datos={null} />)
+    expect(screen.getByText(t.tercerosSin)).toBeTruthy()
+    expect(document.querySelector('details')).toBeNull()
+  })
+
+  it('carga los datos al montar la sección (perezosa) y mientras llegan no dice nada', async () => {
+    const cargar = vi.fn().mockResolvedValue(datos)
+    render(<LicenciasDeTerceros cargar={cargar} />)
+    expect(screen.queryByText(t.tercerosSin)).toBeNull()
+    expect(await screen.findByText(t.tercerosResumen(3))).toBeTruthy()
+    expect(cargar).toHaveBeenCalledOnce()
+  })
+
+  it('la página de licencias carga la sección; sin el archivo generado (cargador que devuelve null), la línea «no se generaron»', async () => {
+    // Hermético: no depende de si existe src/licencias/generadas/terceros.json.
+    render(<Licencias volver={() => {}} cargarTerceros={() => Promise.resolve(null)} />)
+    expect(await screen.findByRole('heading', { name: t.terceros })).toBeTruthy()
+    expect(await screen.findByText(t.tercerosSin)).toBeTruthy()
+    expect(t.tercerosSin).toContain('no se generaron')
   })
 })

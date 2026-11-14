@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.5.1
+# galivelop-workflow v0.6.0
 # After /code-review of the diff against the protected branch, with its fixes pushed: records HEAD's sha in the
 # config's `reviewMark` and commits it ("Revisado: <sha>" / "Reviewed: <sha>" by `language`). The mark travels with
 # the repo, so other accounts and scheduled tasks see it; .githooks/pre-push and the PR hook accept code up to it.
@@ -43,6 +43,10 @@ mark="$(cfg reviewMark)" || exit 1
 language="$(cfg language)" || exit 1
 retro="$(cfg requireRetro)" || exit 1
 commit_next="$(cfg commitNext)" || exit 1
+retro_file_re="$(cfg retro.filePattern)" || exit 1
+retro_marker="$(cfg retro.statusMarker)" || exit 1
+retro_decided="$(cfg retro.decidedWords)" || exit 1
+retro_pending="$(cfg retro.pendingWords)" || exit 1
 
 branch="$(git rev-parse --abbrev-ref HEAD)"
 if [ "$branch" = "HEAD" ]; then
@@ -68,15 +72,15 @@ if [ "$retro" = "true" ]; then
   base="$(git merge-base HEAD "refs/remotes/origin/$protected")" || {
     echo "reviewed: no common history with origin/$protected; fetch more: git fetch --deepen=200 origin $protected" >&2; exit 1; }
   decided=""
-  added="$(git diff --no-renames --name-only --diff-filter=A "$base" HEAD | grep -E '(^|/)retro-[^/]*\.md$' || true)"
+  added="$(git diff --no-renames --name-only --diff-filter=A "$base" HEAD | grep -E -- "$retro_file_re" || true)"
   while IFS= read -r file; do
     [ -n "$file" ] || continue
     # The whole paragraph of the Estado/Status line (up to the next blank line), not only its first line.
-    status="$(git show "HEAD:$file" | awk '/^\*\*(Estado|Status)/ { on = 1 } on && /^[[:space:]]*$/ { exit } on { print }' || true)"
+    status="$(git show "HEAD:$file" | RETRO_MARKER="$retro_marker" awk '$0 ~ "^\\*\\*" ENVIRON["RETRO_MARKER"] { on = 1 } on && /^[[:space:]]*$/ { exit } on { print }' || true)"
     # Whole words only ("undecided" is not "decided"; "spending" or "dependiente" is not "pending"), and a paragraph
     # that also says it is still pending is not a decision.
-    if printf '%s\n' "$status" | grep -qiwE '(aplicad[ao]s?|rechazad[ao]s?|aplazad[ao]s?|decidid[ao]s?|aprobad[ao]s?|applied|rejected|deferred|decided|approved)' \
-      && ! printf '%s\n' "$status" | grep -qiE '(^|[^[:alpha:]])(pendientes?|pending|undecided|sin decidir|aún no|not yet)([^[:alpha:]]|$)'; then
+    if printf '%s\n' "$status" | grep -qiwE -- "($retro_decided)" \
+      && ! printf '%s\n' "$status" | grep -qiE -- "(^|[^[:alpha:]])($retro_pending)([^[:alpha:]]|\$)"; then
       decided="$file"
     fi
   done <<<"$added"
@@ -85,6 +89,7 @@ if [ "$retro" = "true" ]; then
     echo "the user's decision. Valid whole words: aplicad*, rechazad*, aplazad*, decidid*, aprobad* (applied, rejected," >&2
     echo "deferred, decided, approved); 'done' alone is not enough, and pendiente/pending/undecided/sin decidir/aún no/" >&2
     echo "not yet as whole words anywhere in that paragraph (up to the next blank line) cancels it." >&2
+    echo "(Those are the defaults of retro.decidedWords / retro.pendingWords in .claude/gw.json; retro.filePattern and retro.statusMarker say where.)" >&2
     echo "Run /retro, present it, apply what the user approves, record it in the Status line, push and mark again: bash $0" >&2
     exit 1
   fi

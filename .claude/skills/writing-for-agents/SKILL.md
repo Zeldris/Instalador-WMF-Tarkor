@@ -3,7 +3,7 @@ name: writing-for-agents
 description: Writing documents for agents. Use when creating or editing skills, or modifying AGENTS.md or CLAUDE.md.
 license: MIT (see LICENSE-mattpocock-skills)
 metadata:
-  version: "0.5.1"
+  version: "0.6.0"
   source: "mattpocock/skills@5beb35b"
 ---
 

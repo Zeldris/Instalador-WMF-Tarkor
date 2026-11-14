@@ -283,6 +283,12 @@ export const licencias = {
   errorCopiar: 'No se pudo copiar. Selecciona el enlace y cópialo a mano.',
   textoCompleto: (licencia: string) => `Texto completo de la ${licencia}`,
   fuentes: 'Los modelos y el motor se descargan de sus fuentes oficiales; sus licencias pueden cambiar entre versiones.',
+  terceros: 'Licencias de terceros',
+  tercerosLead: 'Las bibliotecas de Rust y de npm que lleva esta aplicación, agrupadas por licencia.',
+  tercerosSin: 'Las licencias de terceros no se generaron en este build.',
+  tercerosResumen: (n: number) => `${n} ${n === 1 ? 'paquete' : 'paquetes'}`,
+  tercerosUsadoPor: (n: number) => `Texto usado por ${n} ${n === 1 ? 'paquete' : 'paquetes'}`,
+  tercerosEcosistema: { rust: 'Rust', npm: 'npm' } as Record<string, string>,
 }
 
 export const errores = {

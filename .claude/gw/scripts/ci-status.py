@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.5.1
+# galivelop-workflow v0.6.0
 """Reads the GitHub Actions status of a branch or a commit through the API: "look at the CI of the last push" without
 opening the web. The same reader review-before-main.sh uses to gate a merge (one place for the token / `gh` logic).
 
-  python3 ci-status.py [--branch BRANCH | --sha SHA] [--repo OWNER/REPO] [--ignore NAME]... [--json] [--root PATH]
+  python3 ci-status.py [--branch BRANCH | --sha SHA] [--repo OWNER/REPO] [--ignore NAME]... [--failed [--lines N]]
+                       [--json] [--root PATH]
 
 Default target: the commit HEAD of the working tree. The repo is read from the `origin` remote. The API goes through
 `gh api` when gh is on PATH and can read the repo, else through curl with $GITHUB_TOKEN or $GH_TOKEN (decided once).
@@ -14,7 +15,11 @@ red or pending check of the project into green, and a commit where only ignored 
 
 Exit 0 green; 1 not green (red, pending, or no CI reported); 2 it could not be read (no token, gh missing, API error:
 fails closed). With --json, one object: {"repo", "sha", "state": green|red|pending|none|error, "problems": [...],
-"ignored": [...], "unstarted": bool, "error"}. Python 3.8+, stdlib only.
+"ignored": [...], "unstarted": bool, "error"} (and "failed": [...] with --failed). Python 3.8+, stdlib only.
+
+--failed (D56): for each finished red job, the step that failed and its error lines (the end of that step's log, at
+most `ciFailedLines` of .claude/gw.json or --lines), plus the URL of the whole log; instead of reading the full job log.
+A check that is not a GitHub Actions job (or whose log cannot be read) gives only its URL; the exit code is unchanged.
 """
 import argparse
 import json
@@ -25,7 +30,8 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-GREEN_RUNS = ("success", "neutral", "skipped")
+GREEN_RUNS = ("success", "neutral", "skipped")  # the default of ciGreenConclusions (A13); a caller passes the config's
+TIMEOUT = 0  # seconds a gh/curl call may take (ciStatusTimeout, set by main or by a caller that read the config); 0 = no limit
 NO_CI = "no CI has reported on this commit yet"
 # What GitHub writes on a check-run whose job it refused to start for lack of quota.
 NOT_STARTED = ("job was not started because recent account payments have failed", "spending limit needs to be increased")
@@ -45,7 +51,9 @@ RUN_ENV["GIT_TERMINAL_PROMPT"] = "0"
 def run(cmd, stdin=None):
     try:
         return subprocess.run(cmd, env=RUN_ENV, capture_output=True, text=True, input=stdin,
-                              stdin=None if stdin is not None else subprocess.DEVNULL)
+                              stdin=None if stdin is not None else subprocess.DEVNULL, timeout=TIMEOUT or None)
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(cmd, 124, "", f"timed out after {TIMEOUT} s (ciStatusTimeout in .claude/gw.json)")
     except OSError as exc:
         return subprocess.CompletedProcess(cmd, 127, "", str(exc))
 
@@ -73,6 +81,15 @@ def backend(path):
 
 
 def api(path):
+    text, how = fetch(path)
+    try:
+        return json.loads(text)
+    except ValueError:
+        raise ApiError(f"{how} did not return JSON: {text.strip()[:200]}")
+
+
+def fetch(path):
+    """(body, how) of a GET; raises ApiError."""
     kind, token = backend(path)
     if kind == "gh":
         r, how = run(["gh", "api", path]), "gh api " + path
@@ -85,10 +102,84 @@ def api(path):
     if r.returncode != 0:
         output = (r.stderr or r.stdout).strip()[:300]
         raise ApiError(f"{how} failed: {output}", output)
-    try:
-        return json.loads(r.stdout)
-    except ValueError:
-        raise ApiError(f"{how} did not return JSON: {r.stdout.strip()[:200]}")
+    return r.stdout, how
+
+
+# A job log line: "2026-11-10T12:00:00.1234567Z text" (a BOM on the first one).
+LOG_STAMP = re.compile(r"^\ufeff?\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z ?")
+
+
+def log_excerpt(log, cap):
+    """(lines, cut): the step of the LAST `##[error]` line (an earlier one may be a continue-on-error step or an
+    annotation), from its header (the nearest `##[group]Run ` line above, else the nearest `##[group]`) to that error
+    line, without the timestamps nor the header's folded command echo (up to its first `##[endgroup]`; nested groups
+    after it stay). Never more than `cap` lines: when longer, the header and the last cap - 1 lines, or, when cap
+    leaves no room for the header, only the last `cap` lines; `cut` counts the body lines left out."""
+    lines = [LOG_STAMP.sub("", line.rstrip("\r")) for line in log.splitlines()]
+    errors = [i for i, line in enumerate(lines) if line.startswith("##[error]")]
+    if not errors:
+        body = [line for line in lines if line.strip()]
+        keep = max(cap, 0)
+        cut = max(0, len(body) - keep)
+        return body[cut:], cut
+    last = errors[-1]
+    back = range(last, -1, -1)
+    start = next((i for i in back if lines[i].startswith("##[group]Run ")), None)
+    if start is None:
+        start = next((i for i in back if lines[i].startswith("##[group]")), None)
+    head, body, folded = [], [], False
+    for i in range(start if start is not None else 0, last + 1):
+        line = lines[i]
+        if i == start:
+            head, folded = [line[len("##[group]"):]], True
+        elif folded and not line.startswith("##[error]"):  # an error inside the echo group is still shown
+            folded = not line.startswith("##[endgroup]")
+        elif line.startswith("##[error]"):
+            body.append("error: " + line[len("##[error]"):])
+        elif line.strip():
+            body.append(line)
+    if cap <= len(head):
+        keep, head = max(cap, 0), []
+    else:
+        keep = cap - len(head)
+    cut = max(0, len(body) - keep)
+    return head + body[cut:], cut
+
+
+def failure_details(repo, report, cap):
+    """For each finished red check-run, {"name", "step", "lines", "cut", "url"}; for each red commit status,
+    {"name", "url"} (no log). The log is read only for a GitHub Actions job (a check-run's id is its job's id)."""
+    found = []
+    for run_ in report["red_runs"]:
+        item = {"name": run_.get("name", "?"), "step": None, "lines": [], "cut": 0,
+                "url": run_.get("html_url") or run_.get("details_url")}
+        try:
+            job = api(f"repos/{repo}/actions/jobs/{run_['id']}")
+            item["url"] = job.get("html_url") or item["url"]
+            item["step"] = next((s.get("name") for s in job.get("steps") or []
+                                 if s.get("conclusion") == "failure"), None)
+            log, _ = fetch(f"repos/{repo}/actions/jobs/{run_['id']}/logs")
+            item["lines"], item["cut"] = log_excerpt(log, cap)
+        except (ApiError, KeyError, TypeError, AttributeError) as exc:
+            item["error"] = str(exc).splitlines()[0][:200] if str(exc) else type(exc).__name__
+        found.append(item)
+    for status in report["red_statuses"]:
+        found.append({"name": status.get("context", "?"), "step": None, "lines": [], "cut": 0,
+                      "url": status.get("target_url")})
+    return found
+
+
+def failure_text(found):
+    out = []
+    for item in found:
+        step = f": step {item['step']!r} failed" if item["step"] else ""
+        out.append(f"\n{item['name']}{step}; whole log: {item['url'] or 'no URL'}")
+        if item.get("error"):
+            out.append(f"  (no log: {item['error']})")
+        if item["cut"]:
+            out.append(f"  ({item['cut']} earlier line(s) of the step left out: --lines N, or ciFailedLines)")
+        out += ["  " + line for line in item["lines"]]
+    return "\n".join(out)
 
 
 def ignored(name, patterns):
@@ -117,7 +208,7 @@ def not_started(repo, run_):
     return any(m in text for m in NOT_STARTED)
 
 
-def ci_report(repo, sha, ignore=()):
+def ci_report(repo, sha, ignore=(), green=GREEN_RUNS):
     """{"problems": [...], "ignored": [names left out], "unstarted": True when every problem is a check-run GitHub
     never started, "pending": True when every problem is only unfinished}. Raises ApiError (and KeyError/TypeError
     on an unexpected answer)."""
@@ -135,20 +226,23 @@ def ci_report(repo, sha, ignore=()):
     runs = [c for c in runs if not ignored(c.get("name", "?"), ignore)]
     statuses = [s for s in statuses if not ignored(s.get("context", "?"), ignore)]
     if not runs and not statuses:
-        return {"problems": [NO_CI], "ignored": left_out, "unstarted": False, "pending": False}
-    bad_runs = [c for c in runs if c.get("status") != "completed" or c.get("conclusion") not in GREEN_RUNS]
+        return {"problems": [NO_CI], "ignored": left_out, "unstarted": False, "pending": False, "red_runs": [],
+                "red_statuses": []}
+    bad_runs = [c for c in runs if c.get("status") != "completed" or c.get("conclusion") not in green]
     bad_statuses = [s for s in statuses if s.get("state") != "success"]
     bad = [f"{c.get('name', '?')}: {c.get('conclusion') or c.get('status')}" for c in bad_runs]
     bad += [f"{s.get('context', '?')}: {s.get('state')}" for s in bad_statuses]
     failed = [c for c in bad_runs if c.get("status") == "completed"] + \
         [s for s in bad_statuses if s.get("state") != "pending"]
     return {"problems": bad, "ignored": left_out, "pending": bool(bad) and not failed,
+            "red_runs": [c for c in bad_runs if c.get("status") == "completed"],
+            "red_statuses": [s for s in bad_statuses if s.get("state") != "pending"],
             "unstarted": bool(bad_runs) and not bad_statuses and all(not_started(repo, c) for c in bad_runs)}
 
 
-def ci_problems(repo, sha, ignore=()):
+def ci_problems(repo, sha, ignore=(), green=GREEN_RUNS):
     """(problems, True when every problem is a check-run GitHub never started)."""
-    report = ci_report(repo, sha, ignore)
+    report = ci_report(repo, sha, ignore, green)
     return report["problems"], report["unstarted"]
 
 
@@ -167,9 +261,15 @@ def main(argv=None):
     ap.add_argument("--repo", help="OWNER/REPO (default: the origin remote)")
     ap.add_argument("--ignore", action="append", default=[], metavar="NAME",
                     help="a foreign check that does not count, on top of ciIgnore (exact, or `*` for any text)")
+    ap.add_argument("--failed", action="store_true",
+                    help="for each red job, the step that failed, its error lines and the URL of the whole log")
+    ap.add_argument("--lines", type=int, metavar="N", help="with --failed, at most N lines per job (default: "
+                                                           "ciFailedLines of .claude/gw.json)")
     ap.add_argument("--json", action="store_true", help="one JSON object instead of text")
     ap.add_argument("--root", help="project root (default: resolved from this script)")
     args = ap.parse_args(argv)
+    if args.lines is not None and args.lines < 1:
+        ap.error("--lines must be 1 or more")
     sys.dont_write_bytecode = True
     sys.path.insert(0, HERE)
     import config
@@ -186,7 +286,11 @@ def main(argv=None):
     me = os.path.join(HERE, "ci-status.py")
     try:
         root = str(config.find_root(args.root))
-        ignore = list(config.load(root).get("ciIgnore") or []) + args.ignore
+        cfg = config.load(root)
+        ignore = list(cfg.get("ciIgnore") or []) + args.ignore
+        green = config.ci_green_conclusions(cfg)
+        global TIMEOUT
+        TIMEOUT = config.ci_status_timeout(cfg)
     except config.ConfigError as exc:
         out["error"] = str(exc)
         return finish(2, f"ci-status: {exc}\nfix the config and retry: python3 {os.path.join(HERE, 'config.py')} validate")
@@ -213,7 +317,7 @@ def main(argv=None):
                     return finish(2, f"ci-status: {out['error']}\npush first and retry: git push && python3 {me}")
                 raise
         out["sha"] = sha
-        report = ci_report(repo, sha, ignore)
+        report = ci_report(repo, sha, ignore, green)
     except (ApiError, KeyError, TypeError, ValueError) as exc:
         out["error"] = f"could not read the CI status: {exc}"
         return finish(2, f"ci-status: {out['error']}\nauthenticate (gh auth login, or export GITHUB_TOKEN) and retry: "
@@ -225,7 +329,20 @@ def main(argv=None):
     note = f" (ignored: {', '.join(report['ignored'])})" if report["ignored"] else ""
     if out["state"] == "green":
         return finish(0, f"ci-status: {repo} {sha[:12]}: green{note}")
-    return finish(1, f"ci-status: {repo} {sha[:12]}: {out['state']}: {'; '.join(problems)}{note}")
+    hint = ""
+    if out["state"] == "none" and cfg.get("ciOnPush") is False:  # D54: check.yml only runs on pull requests
+        hint = (f"\nciOnPush is false: check.yml runs only on pull requests; open one, or run the CI locally: "
+                f"python3 {os.path.join(HERE, 'ci-local.py')} --record")
+    if args.failed and out["state"] == "red":
+        if report["unstarted"]:
+            hint += "\nno log: GitHub never started these jobs (Actions quota or payments)"
+        else:
+            found = failure_details(repo, report, args.lines or int(cfg.get("ciFailedLines", 40)))
+            out["failed"] = found
+            hint += failure_text(found)
+    elif args.failed and out["state"] == "pending":
+        hint += f"\nnothing has failed yet; retry when it finishes: python3 {me} --failed"
+    return finish(1, f"ci-status: {repo} {sha[:12]}: {out['state']}: {'; '.join(problems)}{note}{hint}")
 
 
 if __name__ == "__main__":

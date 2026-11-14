@@ -59,6 +59,15 @@
             "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/gw/scripts/subagent-cap.py"
           }
         ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/gw/scripts/whole-read.py"
+          }
+        ]
       }
     ],
     "Stop": [
@@ -67,6 +76,10 @@
           {
             "type": "command",
             "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/gw/scripts/before-stop.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/gw/scripts/metrics.py record"
           }
         ]
       }

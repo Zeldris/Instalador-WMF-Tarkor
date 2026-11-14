@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.5.1
+# galivelop-workflow v0.6.0
 """Check that a project has the workflow set up (used by /gw-doctor and CI). No AI, no network.
 
   python3 doctor.py            # one line per check: OK / WARN / FAIL, each problem with the command that fixes it
@@ -17,12 +17,18 @@ environment; a skill script under .claude/skills/*/scripts/ without a test_<name
 only in a project that uses gw-media-content (its note .claude/gw/gw-media-content.md or its folder exists), node,
 Playwright and ImageMagick with WebP (WMF 2026-10-25 P1), and a leftover docs/difusion (the folder before A8; warns
 while the note names no other); and, when `origin` is on GitHub, a way to read the CI state
-(`gh` logged in, or GITHUB_TOKEN/GH_TOKEN set). The compaction check, the session one, the media tools one and the CI
+(`gh` logged in, or GITHUB_TOKEN/GH_TOKEN set); and (B11, `models.checkLevers`) no global variable that overrides the model
+or effort picked per agent (CLAUDE_CODE_EFFORT_LEVEL, CLAUDE_CODE_SUBAGENT_MODEL with _FORCE, CLAUDE_CODE_SUBAGENT_EFFORT)
+in the environment or the env block of .claude/settings.json, .claude/settings.local.json or ~/.claude/settings.json;
+and (E43) a folder holding test_*.py that no `check` command runs (`test dirs`, see check_test_dirs; the folders to skip
+are the `doctorTestDirsIgnore` key).
+The compaction check, the session one, the levers one, the media tools one and the CI
 access one read the machine running doctor, not only the project, so their lines can differ between a person's machine,
 CI and a cloud session.
 Python 3.8+ standard library only.
 """
 import argparse
+import fnmatch
 import json
 import os
 import re
@@ -47,7 +53,8 @@ SOURCES = re.compile(r"galivelop|workflow|mattpocock", re.I)
 PROPOSAL = ".gw-new"  # apply.py's proposals for files with local edits
 OLD_PROPOSAL = ".gw-nuevo"  # A8 (0.x): the suffix before the rename; still recognized, with a warning
 FLOW_HOOK_SCRIPTS = ("session-start.sh", "recover.py", "review-before-main.sh", "before-stop.py",
-                     "config-guard.py", "subagent-cap.py", "agent-signatures.py")  # the settings template's
+                     "config-guard.py", "subagent-cap.py", "agent-signatures.py", "metrics.py",
+                     "whole-read.py")  # the settings template's
 # Zero-width, bidi and BOM characters, written as escapes so the fix command can embed them. A zero width joiner (U+200D)
 # is fine only inside an emoji sequence (family, profession, flag, heart): after an emoji, a variation selector or a
 # skin tone, and before an emoji. Between letters, accents or punctuation (`и‍г`, `é‍ñ`), next to ASCII, a line edge
@@ -270,7 +277,12 @@ def check_worktrees(rep, root, cfg):
 
 
 CD_ENTER = re.compile(r"""(?:^|[;&|(])\s*cd\s+("[^"]+"|'[^']+'|[^\s;&|)"']+)\s*&&""")
-LINKABLE = ("node_modules", ".venv")  # what the pre-push worktree lacks: untracked dependency folders
+
+
+def linkable():
+    """The dependency folders the pre-push worktree lacks (untracked): the schema default of `worktreeLinks`, which
+    is the list apply.py seeds (one list, A13)."""
+    return tuple(config.schema_default("worktreeLinks"))
 
 
 def check_worktree_links(rep, root, cfg):
@@ -287,7 +299,7 @@ def check_worktree_links(rep, root, cfg):
             folder = Path(os.path.normpath(m.group(1).strip("\"'"))).as_posix()
             if os.path.isabs(folder) or folder.startswith("..") or folder == ".":
                 continue
-            for name in LINKABLE:
+            for name in linkable():
                 rel = f"{folder}/{name}"
                 covered = any(rel == l or rel.startswith(l + "/") for l in links)
                 if (root / rel).exists() and not covered:
@@ -299,7 +311,7 @@ def check_worktree_links(rep, root, cfg):
         rep.ok("worktree links", "every `cd <folder> &&` in check has its dependency folders in worktreeLinks")
 
 
-def check_githooks(rep, root, version):
+def check_githooks(rep, root, version, cfg=None):
     for name in ("pre-push", "pre-commit", "commit-msg"):
         path = root / ".githooks" / name
         check = f"githook {name}"
@@ -310,7 +322,9 @@ def check_githooks(rep, root, version):
             rep.fail(check, f".githooks/{name} is not executable", f"chmod +x .githooks/{name}")
             continue
         found = header_version(path)
-        if version and found != version:
+        if version and found != version and cfg and config.owned(cfg, f".githooks/{name}"):
+            rep.ok(check, f".githooks/{name} present and executable; owned by the project (ownedFiles)")
+        elif version and found != version:
             rep.warn(check, f".githooks/{name} is version {found or '(no header)'}, the config says {version}",
                      "/gw-update")
         else:
@@ -616,13 +630,15 @@ def skill_metadata(path):
     return meta
 
 
-def check_skills(rep, root, version, proposals=()):
+def check_skills(rep, root, version, proposals=(), cfg=None):
     base = root / ".claude" / "skills"
     if not version or not base.is_dir():
         return
     stale = []
     for skill in sorted(base.glob("*/SKILL.md")):
         meta = skill_metadata(skill)
+        if cfg and config.owned(cfg, skill.relative_to(root).as_posix()):
+            continue
         if SOURCES.search(meta.get("source", "")) and meta.get("version") != version:
             stale.append(f"{skill.parent.name} ({meta.get('version') or 'no version'})")
     cites = [s.parent.name for s in sorted(base.glob("*/SKILL.md"))
@@ -666,6 +682,55 @@ def check_compaction(rep, root):
     rep.warn("compaction", f"cloud session without {key} in its environment: .claude/settings.json may not load "
              f"(session started in /home/user or with several repos), so the context grows with no cap",
              f"add {key}={value} to the cloud environment's variables (environment menu > Edit); new sessions get it")
+
+
+EFFORT_VAR = "CLAUDE_CODE_EFFORT_LEVEL"
+SUBAGENT_MODEL_VAR = "CLAUDE_CODE_SUBAGENT_MODEL"
+FORCE_VAR = "CLAUDE_CODE_SUBAGENT_MODEL_FORCE"
+SUBAGENT_EFFORT_VAR = "CLAUDE_CODE_SUBAGENT_EFFORT"
+
+
+def lever_sources(root):
+    """[(where, env)]: the session's environment and the env blocks of the project and user settings files."""
+    sources = [("the environment", dict(os.environ))]
+    for where, path in ((".claude/settings.json", root / ".claude" / "settings.json"),
+                        (".claude/settings.local.json", root / ".claude" / "settings.local.json"),
+                        ("~/.claude/settings.json", Path.home() / ".claude" / "settings.json")):
+        try:
+            env = json.loads(path.read_text(encoding="utf-8")).get("env")
+        except (OSError, ValueError, AttributeError):
+            continue
+        if isinstance(env, dict):
+            sources.append((where, {k: str(v) for k, v in env.items()}))
+    return sources
+
+
+def check_levers(rep, root, cfg):
+    """B11: model and effort are picked per agent (gw-selector); a global variable that overrides them is warned."""
+    try:
+        if cfg is not None and not config.models(cfg)["checkLevers"]:
+            return
+    except (config.ConfigError, KeyError, OSError, ValueError):
+        pass  # the check stays on: it only warns
+    found = 0
+    for where, env in lever_sources(root):
+        effort = env.get(EFFORT_VAR, "").strip()
+        if effort and effort.lower() not in ("auto", "unset"):
+            found += 1
+            rep.warn("levers", f"{EFFORT_VAR}={effort} in {where} beats every other effort: the effort gw-selector "
+                     f"passes to each agent and the session's /effort", f"remove {EFFORT_VAR} from {where} "
+                     f"(or set models.checkLevers false in .claude/gw.json if it is on purpose)")
+        if env.get(FORCE_VAR, "").strip().lower() in ("1", "true") and env.get(SUBAGENT_MODEL_VAR, "").strip():
+            found += 1
+            rep.warn("levers", f"{SUBAGENT_MODEL_VAR}={env[SUBAGENT_MODEL_VAR].strip()} with {FORCE_VAR} in {where} "
+                     f"forces one model on every subagent, over the `model` each call passes (only for a "
+                     f"restricted-tokens mode)", f"remove {FORCE_VAR} from {where}")
+        if env.get(SUBAGENT_EFFORT_VAR, "").strip():
+            found += 1
+            rep.warn("levers", f"{SUBAGENT_EFFORT_VAR} in {where} is not a documented Claude Code variable, so it "
+                     f"may do nothing", f"remove it from {where}; pass `effort` in each Agent call (gw-selector)")
+    if not found:
+        rep.ok("levers", "no global variable overrides the model or effort picked per agent")
 
 
 def invisible_chars(text):
@@ -731,6 +796,144 @@ def check_skill_tests(rep, root):
                  f"(python3 -m unittest discover -s {folder} -p 'test_*.py' runs it)")
     if not missing:
         rep.ok("skill tests", "every skill script has its test_<name>.py")
+
+
+def test_dirs(root, ignore):
+    """Repo-relative folders (posix, "." for the root) that directly hold a test_*.py, skipping the folders the
+    `doctorTestDirsIgnore` patterns match (fnmatch on the path or on its tail, so "node_modules" also skips
+    "a/node_modules") and any folder with a pyvenv.cfg (a virtualenv)."""
+    found = []
+    for base, dirs, files in os.walk(root):
+        rel = Path(base).relative_to(root).as_posix()
+        if any(f.startswith("test_") and f.endswith(".py") for f in files):
+            found.append(rel)
+        keep = []
+        for d in sorted(dirs):
+            sub = d if rel == "." else f"{rel}/{d}"
+            if any(fnmatch.fnmatchcase(sub, pat) or fnmatch.fnmatchcase(sub, "*/" + pat) for pat in ignore) \
+                    or (Path(base) / d / "pyvenv.cfg").is_file():
+                continue
+            keep.append(d)
+        dirs[:] = keep
+    return found
+
+
+def check_run_text(root, cfg):
+    """What the `check` commands run, as text: the commands, the testMap test paths, and the content of each script or
+    Makefile a command names (one level: `bash tests/check.sh`, `make check`); only files inside the repo are read."""
+    parts = list(cfg.get("check") or [])
+    for rule in (cfg.get("testMap") or {}).get("rules") or []:
+        parts.extend(t for t in rule.get("tests") or [] if isinstance(t, str))
+    top = root.resolve()
+    for command in list(parts):
+        try:
+            words = shlex.split(command)
+        except ValueError:
+            continue
+        files = [w for w in words if "/" in w or w.endswith((".sh", ".py"))]
+        if "make" in words[:2]:
+            files.append("Makefile")
+        for name in files:
+            try:
+                path = (top / name).resolve()
+                path.relative_to(top)  # a path outside the repo (/etc/passwd, ../x) is never read
+                if path.is_file() and path.stat().st_size < config.doctor_scan_bytes(cfg):
+                    parts.append(path.read_text(encoding="utf-8", errors="replace"))
+            except (ValueError, OSError):
+                continue
+    return "\n".join(parts)
+
+
+def _norm(path):
+    path = path.strip("\"'")
+    path = path[2:] if path.startswith("./") else path
+    return path.rstrip("/") or "."
+
+
+def run_targets(root, text):
+    """(everything, patterns): what the commands in `text` run. Only these count (never a word in a comment, an `echo`
+    or `pip install pytest`): the argument of `-s`/`--start-directory` of a `python -m unittest discover` (`$var` is
+    resolved from a `for var in <paths>` line; no `-s` means "."), the paths given to `python -m unittest` or to
+    pytest (a folder is that folder, a test_*.py is its own folder), any test_*.py named in a command, and a pytest
+    command with no path (everything). A folder is run if it equals a pattern or a glob matches it."""
+    patterns, everything, loops = [], False, {}
+    for line in text.splitlines():
+        line = re.sub(r"\s#.*$", "", line.strip())
+        if not line or line.startswith("#"):
+            continue
+        m = re.match(r"for\s+(\w+)\s+in\s+([^;]+);", line)
+        if m:
+            loops[m.group(1)] = [_norm(w) for w in m.group(2).split()]
+        for cmd in re.split(r"\s*(?:;|&&|\|\||\||&)\s*", line):
+            words = cmd.split()
+            while words and (words[0] in ("do", "then", "else", "if", "while", "!", "time")
+                             or re.match(r"^[A-Za-z_]\w*=", words[0])):
+                words = words[1:]
+            if not words:
+                continue
+            py = re.match(r"python[\d.]*$", Path(words[0]).name) is not None
+            tool = None
+            if py and "-m" in words[:6] and words.index("-m") + 1 < len(words):
+                tool = words[words.index("-m") + 1]
+                rest = words[words.index("-m") + 2:]
+            elif Path(words[0]).name in ("pytest", "py.test"):
+                tool, rest = "pytest", words[1:]
+            for word in words:
+                base = word.strip("\"'").rsplit("/", 1)
+                if (base[-1].startswith("test_") and base[-1].endswith(".py")
+                        and not re.search(r"[*?]", base[-1])):
+                    patterns.append(_norm(base[0]) if len(base) == 2 else ".")
+            if tool not in ("unittest", "pytest"):
+                continue
+            paths, start, it = [], None, iter(rest)
+            for w in it:
+                if tool == "unittest" and w in ("-s", "--start-directory"):
+                    start = next(it, None)
+                elif w.startswith("-"):
+                    continue
+                else:
+                    w = w.split("::")[0]
+                    if w.strip("\"'") == "discover" or not ("/" in w or w.endswith(".py") or (root / _norm(w)).is_dir()):
+                        continue
+                    paths.append(w)
+            if start is not None:
+                paths = [start]
+            elif tool == "unittest" and "discover" in rest and not paths:
+                paths = ["."]
+            if tool == "pytest" and not paths:
+                everything = True
+            for w in paths:
+                w = _norm(w)
+                if w.startswith("$") and w.lstrip("${").rstrip("}") in loops:
+                    patterns.extend(loops[w.lstrip("${").rstrip("}")])
+                elif w.endswith(".py"):
+                    patterns.append(w.rsplit("/", 1)[0] if "/" in w else ".")
+                else:
+                    patterns.append(w)
+    return everything, patterns
+
+
+def folder_is_run(folder, targets):
+    """Whether `folder` is run by the `run_targets` result: equal to a pattern or matched by it as a glob (a parent of
+    a run folder, `tests` for `-s tests/unit`, is not run)."""
+    everything, patterns = targets
+    return everything or any(fnmatch.fnmatchcase(folder, pat) for pat in patterns)
+
+
+def check_test_dirs(rep, root, cfg):
+    """WARN with every folder holding test_*.py that no `check` command runs (E43): a test nobody runs is no test. See
+    run_targets for what counts as running a folder; nothing is said without `check` commands."""
+    if cfg is None or not cfg.get("check"):
+        return
+    import config
+    targets = run_targets(root, check_run_text(root, cfg))
+    missing = [f for f in test_dirs(root, config.doctor_test_dirs_ignore(cfg)) if not folder_is_run(f, targets)]
+    for folder in missing:
+        rep.warn("test dirs", f"{folder}/ holds test_*.py that no command of 'check' runs",
+                 f"add to 'check' in .claude/gw.json: python3 -m unittest discover -s {folder} -p 'test_*.py' "
+                 f"(or list {folder} in doctorTestDirsIgnore)")
+    if not missing:
+        rep.ok("test dirs", "every folder with test_*.py is run by 'check'")
 
 
 def media_note_folder(root):
@@ -886,7 +1089,7 @@ def run(root):
     version = cfg["version"] if cfg else None
     check_hooks_path(rep, root)
     check_ignored(rep, root)
-    check_githooks(rep, root, version)
+    check_githooks(rep, root, version, cfg)
     check_legacy_paths(rep, cfg)
     check_worktrees(rep, root, cfg)
     check_worktree_links(rep, root, cfg)
@@ -899,12 +1102,14 @@ def run(root):
     check_glossary(rep, root)
     check_instructions(rep, root, cfg)
     check_skill_tests(rep, root)
+    check_test_dirs(rep, root, cfg)
     check_media_folder(rep, root)
     check_media_tools(rep, root)
     proposals = check_proposals(rep, root)
-    check_skills(rep, root, version, proposals)
+    check_skills(rep, root, version, proposals, cfg)
     check_session(rep, root)
     check_compaction(rep, root)
+    check_levers(rep, root, cfg)
     return rep
 
 

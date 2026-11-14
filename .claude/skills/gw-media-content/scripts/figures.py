@@ -43,7 +43,7 @@ VERSION_FILES = ("package.json", ".claude-plugin/plugin.json", "pyproject.toml",
 TEST_NAME = re.compile(r"(?:^|/)(?:test_[^/]+\.(?:py|sh|mjs|js)|[^/]+_test\.(?:py|go|rb)|[^/]+\.(?:test|spec)\.(?:[cm]?[jt]sx?)"
                        r"|[^/]+Test\.java)$")
 TEST_NAME_TEXT = "test_*.py|sh|mjs|js, *_test.py|go|rb, *.test|spec.js|ts|mjs|jsx|tsx, *Test.java"
-MAX_SUBJECTS = 20
+MAX_SUBJECTS = 20  # the default of mediaContent.maxSubjects
 
 
 class Failure(Exception):
@@ -176,6 +176,15 @@ def config_value(root, reader, key):
     return proc.stdout.strip() or None, None
 
 
+def max_subjects(root, reader):
+    """`mediaContent.maxSubjects` from the config reader; MAX_SUBJECTS without a reader or when the answer is not an
+    integer of at least 1."""
+    if not reader:
+        return MAX_SUBJECTS
+    value, _ = config_value(root, reader, "mediaContent.maxSubjects")
+    return int(value) if value and value.isdigit() and int(value) >= 1 else MAX_SUBJECTS
+
+
 def changelog_headings(root):
     path = root / "CHANGELOG.md"
     if not path.is_file():
@@ -257,9 +266,10 @@ def compute(root, since, version_file):
     figures["commits_since"] = figure(n, f"git rev-list --count {rng}")
     plain = int(git(root, "rev-list", "--count", "--no-merges", rng))
     figures["commits_no_merges"] = figure(plain, f"git rev-list --count --no-merges {rng}")
-    subjects = git(root, "log", "--no-merges", f"--max-count={MAX_SUBJECTS}", "--format=%h %s", rng).splitlines()
-    figures["commit_subjects"] = figure(subjects, f"git log --no-merges --max-count={MAX_SUBJECTS} --format='%h %s' {rng}",
-                                       f"the newest {MAX_SUBJECTS} at most" if plain > MAX_SUBJECTS else None)
+    cap = max_subjects(root, reader)
+    subjects = git(root, "log", "--no-merges", f"--max-count={cap}", "--format=%h %s", rng).splitlines()
+    figures["commit_subjects"] = figure(subjects, f"git log --no-merges --max-count={cap} --format='%h %s' {rng}",
+                                       f"the newest {cap} at most" if plain > cap else None)
     dates = sorted(git(root, "log", "--format=%ad", "--date=short", rng).split())
     figures["date_range"] = figure({"first": dates[0], "last": dates[-1]} if dates else None,
                                     f"git log --format=%ad --date=short {rng}", None if dates else "no commits in the range")

@@ -1,11 +1,13 @@
-# galivelop-workflow v0.5.1
+# galivelop-workflow v0.6.0
 # The project's check in CI: each `ciInstall` command (else each `install` command), then each `check` command of
-# .claude/gw.json, on every push outside the protected branch and on every pull request. On a pull request it also
+# .claude/gw.json, on every push outside the protected branch and on every pull request (`ciOnPush`: false, only on
+# pull requests: apply.py renders the push filter as ['**'], which matches every branch). On a pull request it also
 # runs the BASE branch's copy of .githooks/pre-commit over the PR's commits, so a pull request cannot weaken the check
 # that reviews it. `checkWrapper` is not applied here (CI runners do not need it).
-# Node, Python and Java are set up when package.json, pyproject.toml / requirements*.txt or pom.xml / build.gradle*
-# exist (so this file stays the workflow's, untouched; `ciPython` makes Python a matrix); another toolchain
-# (rust-toolchain...) goes before "Install".
+# Node is set up when a directory of `ciNodeDirs` (default ["."]) has a package.json; Rust is cached
+# (Swatinem/rust-cache) for each directory of `ciRustDirs` (default []: none) that has a Cargo.toml; Python and Java
+# when pyproject.toml / requirements*.txt or pom.xml / build.gradle* exist at the root (so this file stays the
+# workflow's, untouched; `ciPython` makes Python a matrix); another toolchain (rust-toolchain...) goes before the rust-cache step, which is before "Install".
 name: Check
 
 on:
@@ -23,6 +25,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       python: ${{ steps.python.outputs.python }}
+      node: ${{ steps.dirs.outputs.node }}
+      rust: ${{ steps.dirs.outputs.rust }}
+      rust_workspaces: ${{ steps.dirs.outputs.rust_workspaces }}
     steps:
       - uses: actions/checkout@v4
       - id: python
@@ -36,6 +41,33 @@ jobs:
           else
             echo 'python=["3.x"]' >> "$GITHUB_OUTPUT"
           fi
+      - id: dirs
+        # `ciNodeDirs` / `ciRustDirs` of .claude/gw.json at run time (absent: ["."] and []); an invalid value fails the
+        # job with the config's message. Node is set up if any Node directory has a package.json; the Rust cache gets
+        # the directories that have a Cargo.toml, one workspace per line (the format of rust-cache's `workspaces`).
+        run: |
+          python3 .claude/gw/scripts/config.py validate >/dev/null
+          node=false
+          while IFS= read -r dir; do
+            [ -n "$dir" ] || continue
+            if [ -f "$dir/package.json" ]; then node=true; fi
+          done <<<"$(python3 .claude/gw/scripts/config.py get ciNodeDirs)"
+          rust=false
+          workspaces=""
+          while IFS= read -r dir; do
+            [ -n "$dir" ] || continue
+            if [ -f "$dir/Cargo.toml" ]; then
+              rust=true
+              workspaces="$workspaces$dir"$'\n'
+            fi
+          done <<<"$(python3 .claude/gw/scripts/config.py get ciRustDirs)"
+          echo "node=$node" >> "$GITHUB_OUTPUT"
+          echo "rust=$rust" >> "$GITHUB_OUTPUT"
+          {
+            echo "rust_workspaces<<GW_EOF"
+            printf '%s' "$workspaces"
+            echo "GW_EOF"
+          } >> "$GITHUB_OUTPUT"
   check:
     # `check` as ever without `ciPython`; `check (<version>)` with it (required checks and `ciIgnore` match the name).
     name: "${{ matrix.python == '3.x' && 'check' || format('check ({0})', matrix.python) }}"
@@ -50,7 +82,7 @@ jobs:
         with:
           fetch-depth: 0
       - uses: actions/setup-node@v4
-        if: hashFiles('package.json') != ''
+        if: needs.versions.outputs.node == 'true'
         with:
           node-version: lts/*
       - uses: actions/setup-python@v5
@@ -62,6 +94,14 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+      # A pinned Rust toolchain step (dtolnay/rust-toolchain, rustup...) goes HERE, before the cache: rust-cache keys on
+      # the rustc it finds, so it must come after the toolchain is installed (else it uses the runner's preinstalled one).
+      # Swatinem/rust-cache: major tag v2, as its documentation shows; NOT verified against its releases on 2026-11-11
+      # (no network access to the repo from the session that wrote this). Pin a release or a commit if you prefer.
+      - uses: Swatinem/rust-cache@v2
+        if: needs.versions.outputs.rust == 'true'
+        with:
+          workspaces: ${{ needs.versions.outputs.rust_workspaces }}
       - name: Install
         run: |
           # `ciInstall` when the config sets it (even empty); otherwise `install`. `setup` is for cloud sessions only.

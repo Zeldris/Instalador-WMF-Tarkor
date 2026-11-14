@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.5.1
+# galivelop-workflow v0.6.0
 """PreToolUse hook: with `agentSignatures: false`, block the text an agent publishes on GitHub when it carries a signature (D21).
 
 The commit-msg hook only covers commit messages; this covers the title and body of what goes to GitHub:
@@ -17,7 +17,8 @@ The commit-msg hook only covers commit messages; this covers the title and body 
 
 Signatures, as in the commit-msg hook (case-insensitive) and only at the start of a line, column 0: a `Co-Authored-By:`
 with noreply@anthropic.com or naming Claude Code/Opus/Sonnet/Haiku/Fable, a `Claude-Session:` line, a line that starts
-(after any emoji) with "Generated with/by [Claude Code", and a line that starts with a claude.ai/code/session link.
+(after any emoji) with "Generated with/by [Claude Code", and a line that starts with a claude.ai/code/session link;
+plus the regexes of `agentSignaturePatterns`, which only add to these (a project cannot remove a built-in one).
 Lines inside fenced code blocks (``` or ~~~) and indented lines are quotes, not signatures, and pass.
 
 Without `agentSignatures: false` in .claude/gw.json (absent or true) it does nothing. Output: nothing and exit 0 to
@@ -75,10 +76,25 @@ def without_fences(text):
     return "\n".join(out)
 
 
-def find_signature(text):
-    """The first line of `text` that carries a signature at column 0 outside code blocks, or None."""
+def extra_patterns(conf):
+    """The compiled agentSignaturePatterns of the config. They only ADD to SIGNATURES; an entry that is not a valid
+    regex blocks (fail closed) instead of being skipped."""
+    given = conf.get("agentSignaturePatterns")
+    out = []
+    for item in given if isinstance(given, list) else []:
+        try:
+            out.append(re.compile(item, re.I | re.M))
+        except (re.error, TypeError) as exc:
+            raise Block(f"agentSignaturePatterns in .claude/gw.json has an entry that is not a valid regex ({item!r}: {exc}), "
+                        f"so signatures cannot be checked; fix it: python3 {os.path.join(HERE, 'config.py')} validate")
+    return tuple(out)
+
+
+def find_signature(text, extra=()):
+    """The first line of `text` that carries a signature at column 0 outside code blocks, or None. `extra` are the
+    patterns the project adds to the built-in ones."""
     text = without_fences(text)
-    for pattern in SIGNATURES:
+    for pattern in SIGNATURES + tuple(extra):
         m = pattern.search(text)
         if m:
             return text[m.start():].strip().split("\n", 1)[0].strip()[:200]
@@ -168,8 +184,9 @@ def decide(event):
                     f"python3 {os.path.join(HERE, 'config.py')} validate")
     if conf.get("agentSignatures", True) is not False:
         return
+    extra = extra_patterns(conf)
     for where, text in texts:
-        line = find_signature(text)
+        line = find_signature(text, extra)
         if line:
             raise Block(f"the {where} carries an agent signature, which this project forbids "
                         f"(agentSignatures: false in .claude/gw.json): {line}\n"

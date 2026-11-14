@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.5.1
+# galivelop-workflow v0.6.0
 # Claude Code PreToolUse hook: no pull request reaches the protected branch without /code-review of the same code,
 # and none is merged with CI not green (plan §5.2). Reads the hook JSON (tool_name, tool_input) on stdin.
 #   - Create: mcp__github__create_pull_request, mcp__github__update_pull_request that sets `base` to the protected
@@ -570,7 +570,8 @@ def check_mark(cfg, root, scripts, head, refs, what, protected, tip):
         if not after:
             return
         reason, code = f"code changed after the review mark ({mark[:12]}) on the PR head {head[:12]} ({what})", after
-    listed = [f"  {path}" for path in code[:10]] + ([f"  … and {len(code) - 10} more"] if len(code) > 10 else [])
+    cap = config_at(root, policy, paths_at=head)["reviewBeforeMainListFiles"]
+    listed = [f"  {path}" for path in code[:cap]] + ([f"  … and {len(code) - cap} more"] if len(code) > cap else [])
     block(f"Blocked: {reason}; this PR brings unreviewed code to {protected}:", *listed, fix)
 
 
@@ -639,8 +640,10 @@ def handle(action, cfg, root, scripts):
         return
     try:
         policy = tip if tip and config_at(root, tip) is not None else info["sha"]
-        ignore = config_at(root, policy, paths_at=info["sha"])["ciIgnore"]  # the protected branch decides
-        bad, unstarted = ci_status.ci_problems(repo, info["sha"], ignore)
+        policy_cfg = config_at(root, policy, paths_at=info["sha"])  # the protected branch decides
+        ignore = policy_cfg["ciIgnore"]
+        ci_status.TIMEOUT = policy_cfg["ciStatusTimeout"]
+        bad, unstarted = ci_status.ci_problems(repo, info["sha"], ignore, policy_cfg["ciGreenConclusions"])
     except (ApiError, KeyError, TypeError, ValueError) as exc:
         block(f"Blocked: could not verify CI of PR #{number} ({info['sha'][:12]}): {exc}",
               f"check CI in the PR ({info['url']}); once it is all green, authenticate (gh auth login, or export "

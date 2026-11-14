@@ -1,5 +1,5 @@
 {
-  "$comment": "galivelop-workflow v0.5.1",
+  "$comment": "galivelop-workflow v0.6.0",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/zeldris/Galivelop-workflow/main/schema/gw.schema.json",
   "title": "Galivelop-workflow project config (.claude/gw.json)",
@@ -48,6 +48,31 @@
       "minLength": 1,
       "default": "docs/handoff.md",
       "description": "Hand-off log path, relative to the repo root. Absent: docs/handoff.md, or the old docs/traspaso.md when only that exists (0.x; /gw-update moves it)."
+    },
+    "logSize": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 20000,
+      "description": "Cap on the size of the whole hand-off log, in characters (0 = no cap). handoff.py check warns above it and context_guard.py names the log as the culprit; handoff.py archive moves the Pending items of published versions out."
+    },
+    "reviewTrivialLines": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 30,
+      "description": "A phase 1 review diff of this many changed lines or fewer (vendored files left out) is trivial: review-scope.py --trivial exits 0 and the session reviews it without a subagent (B27). 0 = only a diff with no code is trivial."
+    },
+    "wholeReadWarnBytes": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 20000,
+      "description": "Bytes above which whole-read.py (PreToolUse hook on Read) warns when a Read takes whole, with no offset or limit, the hand-off log, its archive or a file under recordsDir; it never blocks. 0 = do not warn."
+    },
+    "logArchive": {
+      "type": "string",
+      "minLength": 1,
+      "default": "docs/records/handoff-archive.md",
+      "pattern": "^(?!/)(?!(.*/)?\\.\\.(/|$)).+[^/]$",
+      "description": "Repo-relative path of the file handoff.py archive moves the Pending items of published versions to. It is not read at session start."
     },
     "keepLegacyPaths": {
       "type": "boolean",
@@ -116,10 +141,252 @@
       "default": 0,
       "description": "Seconds scripts/check.sh waits for another check that holds the lock (<git common dir>/gw/check.lock) before exiting 3 and naming its pid and sha; 0 = do not wait."
     },
+    "stopTranscriptBytes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 67108864,
+      "default": 4194304,
+      "description": "Bytes read from the end of the session transcript by the Stop hook (before-stop.py) to find background subagents still running; while any runs it does not block on unpushed commits but says to wait for them and push after. 0 = do not look."
+    },
+    "stopSubagentMaxAge": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 86400,
+      "description": "Seconds after which a background subagent that never reported back (no task-notification in the transcript) stops counting as running for the Stop hook, so one that died silently cannot silence the push reminder for good; 0 = never expire."
+    },
+    "stopPushMarkerMaxAge": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 3600,
+      "description": "Seconds after which the pre-push marker (gw-push-in-progress) counts as a push that died without cleaning up, so the Stop hook (before-stop.py) stops waiting for it and blocks on unpushed commits again."
+    },
+    "stopGitTimeout": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 600,
+      "default": 30,
+      "description": "Seconds each git call of the Stop hook (before-stop.py) may take before it counts as failed (a warning, never a block)."
+    },
+    "stopSeverity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "unpushed": {"type": "string", "enum": ["block", "warn"], "default": "block"},
+        "logRequired": {"type": "string", "enum": ["block", "warn"], "default": "block"}
+      },
+      "default": {"unpushed": "block", "logRequired": "block"},
+      "description": "What the Stop hook (before-stop.py) does for its two hard cases: unpushed (commits not pushed on a working branch) and logRequired (uncommitted changes while the log is not among them). block stops the session until fixed; warn only says it in the closing message."
+    },
+    "recover": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "logLines": {"type": "integer", "minimum": 5, "default": 25, "description": "Lines of the log section --state prints (the rest is cut with a pointer to the log)."},
+        "statusLines": {"type": "integer", "minimum": 1, "default": 15, "description": "Uncommitted files --state lists."},
+        "worktrees": {"type": "integer", "minimum": 1, "default": 10, "description": "Other worktrees --state lists."},
+        "otherBranches": {"type": "integer", "minimum": 1, "default": 10, "description": "Remote branches with unmerged work --state lists."},
+        "branchRow": {"type": "integer", "minimum": 20, "default": 120, "description": "Characters of another branch's log row."},
+        "worktreeRow": {"type": "integer", "minimum": 20, "default": 200, "description": "Characters of another worktree's log row."},
+        "outputCap": {"type": "integer", "minimum": 2000, "maximum": 9900, "default": 9500, "description": "Characters of the whole --state output; Claude Code replaces a hook output over 10000 with a preview, so 9900 is the top."},
+        "gitWait": {"type": "integer", "minimum": 1, "maximum": 60, "default": 5, "description": "Seconds each git call of the remote-branch lines may take (a timeout is no data)."},
+        "searchMax": {"type": "integer", "minimum": 1, "default": 10, "description": "Fragments --search returns (--max overrides it)."},
+        "searchWidth": {"type": "integer", "minimum": 40, "default": 300, "description": "Characters per fragment of --search (--width overrides it)."}
+      },
+      "default": {"logLines": 25, "statusLines": 15, "worktrees": 10, "otherBranches": 10, "branchRow": 120, "worktreeRow": 200, "outputCap": 9500, "gitWait": 5, "searchMax": 10, "searchWidth": 300},
+      "description": "Sizes of recover.py (the SessionStart state and --search): lines, rows and characters it shows. An over-low value cannot hide the state (each key has a minimum); an invalid value, or a config recover.py cannot read, gives the defaults."
+    },
+    "handoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rowLimit": {"type": "integer", "minimum": 50, "default": 600, "description": "Characters of a branch row of the log with logRows (handoff.py check fails over it)."},
+        "cellLimit": {"type": "integer", "minimum": 100, "default": 800, "description": "Characters of a value cell of the log's state table (a warning; a failure with check --strict)."},
+        "doneItems": {"type": "integer", "minimum": 1, "default": 5, "description": "Items the Done section keeps (handoff.py done drops the oldest; check warns over it)."}
+      },
+      "default": {"rowLimit": 600, "cellLimit": 800, "doneItems": 5},
+      "description": "Size rules of the log (handoff.py): rowLimit, cellLimit and doneItems."
+    },
+    "harvest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ideaChars": {"type": "integer", "minimum": 50, "default": 2000, "description": "Characters of an idea harvest.py keeps (a longer one is cut and marked as cut)."},
+        "commitsShown": {"type": "integer", "minimum": 1, "default": 30, "description": "Commits harvest.py lists per project."}
+      },
+      "default": {"ideaChars": 2000, "commitsShown": 30},
+      "description": "Sizes of the report of harvest.py (A13): ideaChars and commitsShown; an invalid value gives the defaults."
+    },
+    "applyDiffLines": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 80,
+      "description": "A13: lines of the template diff apply.py prints for a seeded file the project edited (the rest is counted)."
+    },
+    "doctorScanBytes": {
+      "type": "integer",
+      "minimum": 1000,
+      "default": 500000,
+      "description": "A13: the size in bytes under which doctor.py reads a file that a `check` command names, to find the tools the check uses; a bigger file is not read."
+    },
+    "patchCommitTypes": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9-]*$"},
+      "minItems": 1,
+      "uniqueItems": true,
+      "default": ["fix", "hotfix", "perf"],
+      "description": "A13: the commit types version.py --suggest reads as asking for a patch bump (feat asks for a minor one). Types not in commitTypes never match."
+    },
+    "ciGreenConclusions": {
+      "type": "array",
+      "items": {"type": "string", "enum": ["success", "neutral", "skipped"]},
+      "minItems": 1,
+      "uniqueItems": true,
+      "default": ["success", "neutral", "skipped"],
+      "description": "A13: the conclusions of a finished check-run that ci-status.py (and the merge guard review-before-main.sh, from the protected branch's config) counts as green. A run with any other conclusion, or not finished, is not green."
+    },
+    "ciStatusTimeout": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "A13: seconds each gh or curl call of ci-status.py may take before it counts as a failed call (the CI state is then unknown, never green); 0 = no limit."
+    },
+    "ciSystemCommands": {
+      "type": "array",
+      "items": {"type": "string", "enum": ["sudo", "apt-get", "apt", "yum", "dnf", "apk", "brew", "choco", "winget", "snap"]},
+      "uniqueItems": true,
+      "default": ["sudo", "apt-get", "apt", "yum", "dnf", "apk", "brew", "choco", "winget", "snap"],
+      "description": "A13: the commands that make ci-local.py leave a workflow step out as a system-package install (a step that has one of them as a word followed by a space, at the start of a command, is not run: the machine must have the packages already). The list replaces the default one; [] leaves no step out."
+    },
+    "ciStepTimeout": {
+      "type": "number",
+      "minimum": 0,
+      "default": 0,
+      "description": "A13: minutes a step of ci-local.py may run when the step has no `timeout-minutes` of its own (the step's own value always wins); 0 = no limit."
+    },
+    "staleRefsPaths": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1, "pattern": "^(?!/)(?!(.*/)?\\.\\.(/|$)).+$"},
+      "minItems": 1,
+      "default": ["docs/", "README*"],
+      "description": "A13: the tracked files md-links.py scans for the staleRefs patterns, as globs of the repo (`*` inside one folder, `**` across folders, a folder name or one ending in `/` is everything under it; case-insensitive). The log file and `.claude/` are never scanned."
+    },
+    "hookStdinWait": {
+      "type": "number",
+      "minimum": 0.1,
+      "maximum": 60,
+      "default": 3,
+      "description": "Seconds the hooks (before-stop.py, config-guard.py, subagent-cap.py, whole-read.py, metrics.py) wait for the event JSON on stdin before they go on without it; 0.1 to 60 (no wait at all would let a hook miss an event that is still arriving). An unreadable or invalid config gives the default."
+    },
+    "checkReuseTtl": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 86400,
+      "description": "Seconds a recorded green check (scripts/check-green.sh, the gw-check-green cache in the git dir) is reused; an older record is a miss and the check runs again; 0 = never reuse."
+    },
+    "checkReuseKeep": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 50,
+      "description": "How many lines (one per green tree) the gw-check-green cache file keeps; the oldest go when a new one is recorded."
+    },
     "checkReuseMark": {
       "type": "boolean",
       "default": true,
       "description": "The pre-push skips its check on a commit that only adds or edits the reviewMark file on top of a parent whose tree is recorded green (the commit scripts/reviewed.sh makes); false runs the check on it."
+    },
+    "branchCheck": {
+      "type": "string",
+      "enum": [
+        "related",
+        "full"
+      ],
+      "default": "related",
+      "description": "What the pre-push runs on a push to a branch other than the protected one (D49): related = only relatedTests, unless the push changes the environment (.claude/gw.json or a fullCheckPaths match) or relatedTests has no command, then the full check; full = the check commands and relatedTests, as on the protected branch. The push to the protected branch always runs the full check."
+    },
+    "fullCheckPaths": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": [
+        "^\\.githooks/",
+        "^\\.claude/gw/",
+        "^\\.claude/settings(\\.local)?\\.json$",
+        "^\\.github/workflows/"
+      ],
+      "description": "Regexes (Python syntax) searched in each repo-relative path a push changes: one match makes a branch push with branchCheck related run the full check (an environment change). .claude/gw.json always counts, except for the keys in fullCheckSkipKeys."
+    },
+    "fullCheckSkipKeys": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": [
+        "reviewTrivialLines",
+        "wholeReadWarnBytes",
+        "stopTranscriptBytes",
+        "stopSubagentMaxAge",
+        "stopPushMarkerMaxAge",
+        "stopGitTimeout",
+        "stopSeverity",
+        "recover",
+        "hookStdinWait",
+        "checkLockWait",
+        "checkOutputGrace",
+        "checkLogKeep",
+        "ciFailedLines",
+        "subagentCap",
+        "subagentCapStep",
+        "subagentCounterStaleDays",
+        "subagentTranscriptBytes",
+        "subagentCapAction",
+        "contextGuard",
+        "doctorTestDirsIgnore",
+        "commitFormat",
+        "commitRefs",
+        "commitNext",
+        "refsSources",
+        "changeSize",
+        "models",
+        "metrics",
+        "roadmapFiles",
+        "commandTimeout",
+        "commandKillGrace",
+        "installLockfiles",
+        "installLocal",
+        "prepushClashBranches",
+        "reviewBeforeMainListFiles",
+        "checkTailLines",
+        "releaseCheckBranches",
+        "retro",
+        "redWithoutFix",
+        "branchPrefixes",
+        "mergeCleanup",
+        "wholeReadSkipExtensions",
+        "wholeReadPaths",
+        "harvest",
+        "applyDiffLines",
+        "ciGreenConclusions",
+        "ciStatusTimeout",
+        "ciStepTimeout",
+        "ciSystemCommands",
+        "doctorScanBytes",
+        "patchCommitTypes",
+        "measure",
+        "mediaContent"
+      ],
+      "description": "Top-level keys of .claude/gw.json whose change does not make a branch push run the full check (E47): when the push's new commits change only these keys of the config, its related tests run. Any other key, an added, removed or broken config, and fullCheckSkipKeys itself still count as an environment change. The list replaces the default one."
+    },
+    "ownedFiles": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": [],
+      "description": "Repo-relative path patterns (fnmatch; an exact path is one) of workflow files the project made its own on purpose, e.g. .githooks/commit-msg. apply.py never overwrites one that exists and differs, writes no .gw-new for it and does not count it as drift; doctor.py does not recommend /gw-update for it. Absolute paths and '..' are rejected."
     },
     "checkCacheInputs": {
       "type": "array",
@@ -132,6 +399,18 @@
         ".claude/gw.local.json"
       ],
       "description": "Files (relative to the repo root, no '..') whose content is part of the check-cache key, for ignored files the check reads and the git tree does not see; a missing file counts as absent; [] = the key is the tree alone."
+    },
+    "checkLogKeep": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 20,
+      "description": "How many check-<sha>.log files of <git common dir>/gw scripts/check-green.sh lock-acquire keeps (the newest; the run that starts is never pruned); 0 = keep all."
+    },
+    "testJobs": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "How many test processes scripts/test-run.py runs at once (one test class each, the slowest first); 0 = one per CPU."
     },
     "checkOutputGrace": {
       "type": "integer",
@@ -201,6 +480,37 @@
       "default": false,
       "description": "true: the commit-msg hook requires a non-empty next-step trailer in the last paragraph (`Siguiente:` with language es, `Next:` with en); GW_NO_NEXT=1 skips it for one commit; merges, reverts, cherry-picks, rebases and fixup!/squash!/amend!/Revert lines are exempt, and merge-branch.sh requires it in its message."
     },
+    "commitTypes": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9-]*$"},
+      "minItems": 1,
+      "uniqueItems": true,
+      "default": ["feat", "fix", "hotfix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert"],
+      "description": "A13: the Conventional Commits types the commit-msg hook accepts with commitFormat conventional (letters, digits and hyphens; at least one). The list replaces the default one."
+    },
+    "commitWipPrefix": {
+      "type": "string",
+      "default": "WIP: ",
+      "description": "A13: the prefix of a commit made in red that the commit-msg hook lets stand before the Conventional Commits type (`WIP: feat(D1): x`) when it checks the format. An empty string means no prefix is accepted. Only the commit-msg hook reads it (metrics.py and the pre-push hook still look for WIP:)."
+    },
+    "agentModelNames": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "default": [],
+      "description": "A13: words an Agent: trailer may not name, ADDED (case-insensitive, whole words) to the built-in list of models and providers (claude, anthropic, opus, sonnet, haiku, fable, gpt, chatgpt, openai, gemini, llama, mistral, qwen, deepseek); a project can never remove a built-in one. Read with agentSignatures false."
+    },
+    "agentModelShapes": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "default": [],
+      "description": "A13: regexes (full match, Python syntax) of pieces of an Agent: trailer that name a model, ADDED to the built-in shapes (gpt<digit>..., o<digits>, <digits>o); a project can never remove a built-in one. Read with agentSignatures false."
+    },
+    "agentSignaturePatterns": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "default": [],
+      "description": "A13: regexes (case-insensitive, searched per line, anchor them yourself; only the subset Python re and grep -E share: literals, . [abc] [^abc] * + ? {n,m} | ( ) ^ $; shorthand classes, (?, [[:, and backreferences are rejected) of text that counts as an agent signature, ADDED to the built-in patterns in the commit-msg hook and in agent-signatures.py; a project can never remove a built-in one. Read with agentSignatures false."
+    },
     "refsSources": {
       "type": "array",
       "items": {"type": "string", "minLength": 1},
@@ -223,6 +533,22 @@
       "type": "boolean",
       "default": true,
       "description": "true: apply.py never replaces .github/workflows/check.yml when it has lines of the project's own (steps, Node version, cache...) that neither the template nor an earlier one has, not even with --update; it writes check.yml.gw-new and says how to merge. false: the old behaviour (an older copy is replaced)."
+    },
+    "ciOnPush": {
+      "type": "boolean",
+      "default": true,
+      "description": "true: .github/workflows/check.yml runs on every push outside the protected branch and on every pull request. false: only on pull requests (apply.py renders its push filter as branches-ignore: ['**']; rerun apply.py --update after changing it). ciIgnore and required checks still go by name."
+    },
+    "ciFailedLines": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 40,
+      "description": "ci-status.py --failed: at most this many lines of each red job's log (the end of the step that failed, from its first error line back); --lines overrides it. The URL of the whole log is always printed."
+    },
+    "shellcheckVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "The shellcheck version (X.Y.Z) the workflow repo's CI installs (pip install shellcheck-py==X.Y.Z.*) and tests/shellcheck.sh expects: another local version is a warning with that command (a failure in CI). Absent: not pinned."
     },
     "legacyNames": {
       "type": "boolean",
@@ -248,11 +574,50 @@
       "uniqueItems": true,
       "description": "Python versions the CI template runs as a matrix (non-empty strings without spaces, e.g. [\"3.10\", \"3.13\"]; quote them so 3.10 is not read as 3.1). Absent: one job with \"3.x\". Not [] (use no key)."
     },
+    "ciNodeDirs": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^(?!/)(?!(.*/)?\\.\\.(/|$))\\S+$"},
+      "uniqueItems": true,
+      "default": ["."],
+      "description": "Repo-relative directories (no spaces) the CI template looks in for a package.json: Node is set up when any has one (\".\" is the root; [\"app\", \"web\"] for subfolders). [] never sets Node up."
+    },
+    "ciRustDirs": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^(?!/)(?!(.*/)?\\.\\.(/|$))\\S+$"},
+      "uniqueItems": true,
+      "default": [],
+      "description": "Repo-relative directories (no spaces) with a Cargo.toml whose build the CI template caches with Swatinem/rust-cache, one workspace each (e.g. [\"src-tauri\"]). [] (the default) caches nothing."
+    },
     "ciIgnore": {
       "type": "array",
       "items": {"type": "string", "minLength": 1},
       "default": [],
       "description": "Names of foreign CI checks (a check-run name or a commit status context, e.g. a deploy) that do not block the merge nor count as the project's CI. An exact name, or a name with `*` for any text (`vercel*`); case matters; no regex. An ignored check never turns a red or pending check of the project into green, and a commit where only ignored checks reported counts as no CI."
+    },
+    "releaseDocs": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^(?!/)(?!(.*/)?\\.\\.(/|$)).+[^/]$"},
+      "uniqueItems": true,
+      "default": [],
+      "description": "Repo-relative files that must name the version being released as a backticked token (`X.Y.Z`), read from HEAD: `version.py --release` fails when one is missing or still shows another version (a README status or what's-new section). [] checks nothing."
+    },
+    "marketingSheets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sources": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^(?!/)(?!(.*/)?\\.\\.(/|$)).+\\.md$"},
+          "uniqueItems": true,
+          "default": []
+        },
+        "outDir": {"type": "string", "pattern": "^(?!/)(?!(.*/)?\\.\\.(/|$)).+[^/]$", "default": "docs/mkt"},
+        "maxPages": {"type": "integer", "minimum": 1, "default": 1},
+        "css": {"type": "string", "pattern": "^$|^(?!/)(?!(.*/)?\\.\\.(/|$)).+\\.css$", "default": ""},
+        "timeout": {"type": "integer", "minimum": 1, "default": 120}
+      },
+      "default": {"sources": [], "outDir": "docs/mkt", "maxPages": 1, "css": "", "timeout": 120},
+      "description": "One-page presentation sheets written in Markdown: mkt-sheet.py turns each source (repo-relative .md) into <outDir>/<parent folder>/<stem>.html and .pdf and checks they match the source. css: repo-relative stylesheet embedded instead of the built-in one (its relative url(...) are rewritten per HTML); timeout: seconds Chromium may take to print all sheets. A missing inner key takes its default. No sources: the feature is off."
     },
     "nonTestExtensions": {
       "type": "array",
@@ -298,6 +663,9 @@
               "sessionModel": {
                 "type": "string"
               },
+              "sessionEffort": {
+                "enum": ["low", "medium", "high", "xhigh", "max"]
+              },
               "subagentModel": {
                 "type": "string"
               }
@@ -313,7 +681,7 @@
         "minLength": 1
       },
       "default": [],
-      "description": "Headings of the log sections recover.py --state shows after a compaction or /clear (without logRows). Empty: the first section and the one named Pendiente/Pending."
+      "description": "Headings of the log sections recover.py --state shows after a compaction or /clear (without logRows). Empty: the first section and the one named Pendiente/Pending. After a compaction only the first section is shown."
     },
     "designReferences": {
       "type": "array",
@@ -476,7 +844,8 @@
     "taskId": {
       "type": "string",
       "minLength": 1,
-      "description": "Regex of the project's task ids (handoff.py); default [A-Z]{2,5}-\\d+."
+      "default": "[A-Z]{2,5}-\\d+[a-z]?",
+      "description": "Regex of the project's task ids (handoff.py); default [A-Z]{2,5}-\\d+[a-z]?."
     },
     "agentMap": {
       "type": "object",
@@ -516,7 +885,158 @@
       "type": "integer",
       "minimum": 1,
       "default": 30,
-      "description": "Subagents (Agent/Task calls) one session may launch before subagent-cap.py asks the user to check they are not looping, and again every 10 after."
+      "description": "Subagents (Agent/Task calls) one session may launch before subagent-cap.py asks the user to check they are not looping, and again every subagentCapStep after (what it does at the cap is subagentCapAction)."
+    },
+    "subagentCapStep": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 10,
+      "description": "After subagentCap is reached, subagent-cap.py asks again every this many Subagent calls (cap, cap+step, cap+2*step...)."
+    },
+    "subagentCounterStaleDays": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 7,
+      "description": "Days without a write after which subagent-cap.py deletes the other sessions' gw-subagents-* counter files (own regular files only) when it creates a new one."
+    },
+    "subagentTranscriptBytes": {
+      "type": "integer",
+      "minimum": 1024,
+      "maximum": 67108864,
+      "default": 524288,
+      "description": "Bytes read from the end of the session transcript by subagent-cap.py to find the session's model (the one a subagent inherits) when models.disabled is not empty."
+    },
+    "subagentCapAction": {
+      "type": "string",
+      "enum": ["ask", "warn", "deny"],
+      "default": "ask",
+      "description": "What subagent-cap.py does when subagentCap is reached: ask (permission prompt at the cap and every subagentCapStep after, as always), warn (only says it in additionalContext, never stops) or deny (denies every call from the cap on; raise subagentCap to go on). A model in models.disabled is denied whatever this says."
+    },
+    "roadmapFiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "done", "open"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1, "pattern": "^(?!/)(?!(.*/)?\\.\\.(/|$)).+[^/]$", "description": "Repo-relative path of one language version of the roadmap."},
+          "done": {"type": "string", "minLength": 1, "description": "Word roadmap.py done writes at the start of the status cell (hecho, done)."},
+          "open": {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1, "description": "Words a status cell starts with while the task is open (pendiente, en curso); roadmap.py done refuses any other status without --force."}
+        }
+      },
+      "default": [],
+      "description": "D55: the roadmap in each language, the source first; roadmap.py show <id> prints the task's row from each one and roadmap.py done <id> marks it done in all of them at once. [] turns the script off (it says so). Not the reserved `roadmap` key."
+    },
+    "measure": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "minCalls": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 5,
+          "description": "B29: calls below which measure.py (skill gw-opt-tokens) measures the previous session of the same branch instead of the current one (right after a /clear the current one has almost nothing), and says so. 0 = always the current one."
+        },
+        "imageTokens": {"type": "integer", "minimum": 1, "default": 1600, "description": "A13: tokens gw-opt-tokens measure.py estimates for each image in a result."},
+        "mixedRatio": {"type": "number", "minimum": 1, "default": 1.5, "description": "A13: max/min ratio of the context peaks of closed stretches above which measure.py says the session mixes compaction windows."},
+        "minOutput": {"type": "integer", "minimum": 1, "default": 100, "description": "A13: output tokens per call below which measure.py does not trust the output of a subagent log (it prints a dash)."},
+        "coldMs": {"type": "number", "minimum": 1, "default": 100, "description": "A13: load time in ms above which gw-opt-ai measure.py counts a call as a cold load (the --cold-ms argument and cold_ms in gw-opt-ai.md win)."}
+      },
+      "default": {"minCalls": 5, "imageTokens": 1600, "mixedRatio": 1.5, "minOutput": 100, "coldMs": 100}
+    },
+    "mediaContent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxSubjects": {"type": "integer", "minimum": 1, "default": 20, "description": "A13: commit subjects gw-media-content figures.py reads for its figures (the newest ones, at most)."}
+      },
+      "default": {"maxSubjects": 20}
+    },
+    "testScanSkipDirs": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "default": [".git", "node_modules", ".venv", "venv", "__pycache__", ".tox"],
+      "description": "A13: folder names (exact, at any depth) that tests-after-main.py skips when it walks the tree outside a git repo to find test files. Apart from doctorTestDirsIgnore on purpose. [] skips none."
+    },
+    "models": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "disabled": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default": [],
+          "description": "Models no subagent may run on: a full id (claude-opus-5-5), an id prefix (claude-opus), or a family alias (opus, sonnet, haiku, fable) that covers every id of the family. subagent-cap.py denies the call; gw-selector and gw-orchestrate-dealer never pick them. Changed with models.py disable|enable."
+        },
+        "agentFields": {
+          "type": "array",
+          "items": {"enum": ["model", "effort"]},
+          "uniqueItems": true,
+          "default": ["model", "effort"],
+          "description": "B11: the fields every subagent call must set, in the call or in its agent definition's frontmatter; subagent-cap.py reminds the agent (without blocking) of each one missing, so model and effort are picked per agent and not left to the session or to global variables. [] turns the reminder off."
+        },
+        "checkLevers": {
+          "type": "boolean",
+          "default": true,
+          "description": "B11: doctor.py warns when a global Claude Code variable overrides the model or effort picked per agent (CLAUDE_CODE_EFFORT_LEVEL, CLAUDE_CODE_SUBAGENT_MODEL with CLAUDE_CODE_SUBAGENT_MODEL_FORCE, the undocumented CLAUDE_CODE_SUBAGENT_EFFORT) in the environment or an env block of the project or user settings. false turns the check off."
+        }
+      },
+      "default": {
+        "disabled": [],
+        "agentFields": ["model", "effort"],
+        "checkLevers": true
+      },
+      "description": "Which models the workflow may use (B7) and how each agent gets its model and effort (B11)."
+    },
+    "changeSize": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "commit": {"type": "integer", "minimum": 0, "default": 400, "description": "D43: changed lines (added + deleted) of a commit above which the commit-msg hook warns; 0 = no warning."},
+        "block": {"type": "integer", "minimum": 0, "default": 1000, "description": "D43: changed lines of the open review block (B18: the branch's commits after the last one with the metrics.quality.findingsTrailer trailer, plus the staged change) above which the commit-msg hook warns; 0 = no warning."},
+        "severity": {"type": "string", "enum": ["warn", "block"], "default": "warn", "description": "A13: warn (the default) only warns when commit or block is exceeded; block makes change-size.py exit 1 and the commit-msg hook reject the commit until it is split or the review block is closed."},
+        "exclude": {"type": "array", "items": {"type": "string", "minLength": 1}, "default": ["^\\.claude/gw/", "(^|/)(package-lock\\.json|npm-shrinkwrap\\.json|yarn\\.lock|pnpm-lock\\.yaml|poetry\\.lock|Pipfile\\.lock|uv\\.lock|Cargo\\.lock|Gemfile\\.lock|composer\\.lock|go\\.sum)$"], "description": "D43: regexes searched in each changed repo-relative path; a path that matches does not count (the workflow's installed copies, lock files). Paths with linguist-generated in .gitattributes and binary files never count."},
+        "pairs": {"type": "object", "additionalProperties": {"type": "string"}, "default": {"^docs/en/": "docs/es/", "^(.*)\\.en\\.md$": "\\1.md", "^README\\.md$": "README.es.md"}, "description": "D43: paired documents: regex on a changed path -> its pair (re.sub replacement). When both change in one commit, only the larger side counts."}
+      },
+      "default": {"commit": 400, "block": 1000},
+      "description": "D43: size warnings (a block only with severity block): change-size.py, called by the commit-msg hook, warns about a big commit and about a review block that should be closed."
+    },
+    "testMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["paths", "tests"],
+            "properties": {
+              "paths": {"type": "string", "minLength": 1, "description": "Regex searched in each changed repo-relative path; its named groups feed the {name} placeholders of tests."},
+              "contains": {"type": "string", "minLength": 1, "description": "Optional regex searched in the file's text on disk: the rule applies only when it is found (a deleted file never matches)."},
+              "tests": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}, "description": "Test files (repo-relative) the change calls for. {name} is the named group as matched, {name:id} the same with every character that is not a letter, digit or _ turned into _ (scripts/config-guard.py -> test_config_guard.py), {path} the whole changed path. A test file that does not exist is left out."}
+            }
+          },
+          "default": [],
+          "description": "E21: which test files each changed file calls for; every rule that matches adds its tests. tests-for.py reads it."
+        },
+        "command": {
+          "type": "string",
+          "default": "",
+          "description": "E21: the command tests-for.py --run runs from the project root, with {files} replaced by the test files, each shell-quoted (e.g. PYTHONPATH=tests python3 -B -m unittest {files}). Empty: --run fails and says to set it."
+        }
+      },
+      "default": {"rules": [], "command": ""},
+      "description": "E21: the tests of a change, for a subagent or a person to run before committing (tests-for.py); not a hook."
+    },
+    "doctorTestDirsIgnore": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "default": [".git", "node_modules", ".claude/worktrees", ".claude/gw", "venv", ".venv", "env", ".tox", "site-packages", "__pycache__"],
+      "description": "E43: folder patterns (fnmatch on the repo-relative path or its tail, so node_modules also skips a/node_modules) that doctor.py skips when it looks for folders with test_*.py that no command of check runs; a folder with a pyvenv.cfg is always skipped."
     },
     "instructionLines": {
       "type": "object",
@@ -528,6 +1048,190 @@
       "default": {"warn": 150, "fail": 250},
       "description": "Line limits of AGENTS.md and CLAUDE.md, which every session loads whole: doctor.py warns above warn and fails above fail (warn must not be above fail)."
     },
+    "contextGuard": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cutoff": {"type": "integer", "minimum": 0, "default": 0},
+        "window": {"type": "integer", "minimum": 1000, "default": 200000},
+        "autocompactShare": {"type": "number", "exclusiveMinimum": 0, "maximum": 1, "default": 0.8},
+        "warn": {"type": "integer", "minimum": 1, "maximum": 100, "default": 25},
+        "alarm": {"type": "integer", "minimum": 1, "maximum": 100, "default": 50},
+        "charsPerToken": {"type": "number", "exclusiveMinimum": 0, "default": 3.5},
+        "bigWindow": {"type": "integer", "minimum": 1000, "default": 1000000}
+      },
+      "default": {"cutoff": 0, "window": 200000, "autocompactShare": 0.8, "warn": 25, "alarm": 50, "charsPerToken": 3.5, "bigWindow": 1000000},
+      "description": "Startup-context guard (B21): recover.py --state compares the first turn after a /clear or a compaction with the compaction cutoff (cutoff tokens, or 0 = window x autocompactShare) and warns above warn percent and alarms above alarm percent; a second startup over alarm after a compaction is a loop."
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ledger": {"type": "string", "minLength": 1, "default": "docs/metrics/ledger.jsonl"},
+        "record": {"type": "boolean", "default": true},
+        "reports": {"type": "string", "minLength": 1, "default": "docs/metrics"},
+        "gitTimeout": {"type": "integer", "minimum": 1, "maximum": 600, "default": 30, "description": "Seconds each git call of the quality report (metrics.py quality) may take."},
+        "alert": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "factor": {"type": "number", "minimum": 0, "default": 1.5},
+            "days": {"type": "integer", "minimum": 1, "default": 28},
+            "minDays": {"type": "integer", "minimum": 1, "default": 7}
+          },
+          "default": {"factor": 1.5, "days": 28, "minDays": 7}
+        },
+        "quality": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "findingsTrailer": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9-]*$", "default": "Findings"},
+            "retriesTrailer": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9-]*$", "default": "Retries"},
+            "reworkTypes": {"type": "array", "items": {"type": "string", "minLength": 1}, "default": ["fix", "revert"]}
+          },
+          "default": {"findingsTrailer": "Findings", "retriesTrailer": "Retries", "reworkTypes": ["fix", "revert"]}
+        },
+        "prices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["since", "models"],
+            "properties": {
+              "since": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+              "source": {"type": "string"},
+              "models": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["input", "cacheWrite", "cacheRead", "output"],
+                  "properties": {"input": {"type": "number", "minimum": 0}, "cacheWrite": {"type": "number", "minimum": 0}, "cacheRead": {"type": "number", "minimum": 0}, "output": {"type": "number", "minimum": 0}}
+                }
+              }
+            }
+          },
+          "default": [
+          {
+            "since": "2026-10-06",
+            "source": "Anthropic API list prices checked 2026-11-09 (claude-api skill, cached 2026-10-06); cacheWrite = 1.25 x input (5-minute cache); claude-haiku-5-5: prompts up to 100K tokens, cacheRead assumed 0.1 x input",
+            "models": {
+                "claude-fable-5-1": {"input": 10, "cacheWrite": 12.5, "cacheRead": 0.25, "output": 50},
+                "claude-fable-5": {"input": 10, "cacheWrite": 12.5, "cacheRead": 1, "output": 50},
+                "claude-opus-5-5": {"input": 4, "cacheWrite": 5, "cacheRead": 0.2, "output": 20},
+                "claude-opus-5": {"input": 5, "cacheWrite": 6.25, "cacheRead": 0.5, "output": 25},
+                "claude-opus-4-8": {"input": 5, "cacheWrite": 6.25, "cacheRead": 0.5, "output": 25},
+                "claude-opus-4-7": {"input": 5, "cacheWrite": 6.25, "cacheRead": 0.5, "output": 25},
+                "claude-opus-4-6": {"input": 5, "cacheWrite": 6.25, "cacheRead": 0.5, "output": 25},
+                "claude-sonnet-5-5": {"input": 2, "cacheWrite": 2.5, "cacheRead": 0.2, "output": 10},
+                "claude-sonnet-5": {"input": 2, "cacheWrite": 2.5, "cacheRead": 0.2, "output": 10},
+                "claude-sonnet-4-6": {"input": 3, "cacheWrite": 3.75, "cacheRead": 0.3, "output": 15},
+                "claude-haiku-5-5": {"input": 0.1, "cacheWrite": 0.125, "cacheRead": 0.01, "output": 0.5},
+                "claude-haiku-4-5": {"input": 1, "cacheWrite": 1.25, "cacheRead": 0.1, "output": 5}
+            }
+          }
+        ]
+        }
+      },
+      "default": {"ledger": "docs/metrics/ledger.jsonl", "record": true, "reports": "docs/metrics", "gitTimeout": 30, "alert": {"factor": 1.5, "days": 28, "minDays": 7}, "quality": {"findingsTrailer": "Findings", "retriesTrailer": "Retries", "reworkTypes": ["fix", "revert"]}},
+      "description": "Token ledger (B1-B6): the Stop hook metrics.py record appends, per session, agent, model and UTC date, the tokens the Claude Code transcripts show to the repo-relative ledger path (JSON lines, tokens only, never money); record false turns the recording off. reports: repo-relative folder where metrics.py report --write saves the period reports (daily/, weekly/, monthly/, quarterly/). alert (B6): the SessionStart hook (metrics.py alert) warns when a model's spend on today or yesterday (UTC) passes factor x its mean daily spend over the days before, counting only days with data and only with at least minDays of them; USD when all its rows are priced, else tokens; factor 0 turns it off. prices: dated tables of USD per million tokens per model (input, cacheWrite, cacheRead, output); a ledger row takes the newest table whose since is on or before its date, and the model key equal to its model or, failing that, the longest key that its model starts with followed by '-' (date suffixes); no table or no key = no price. A given prices replaces the whole default list. quality (B8): metrics.py quality reads the commit messages; findingsTrailer and retriesTrailer name the trailers whose integer values are summed per task id (Findings: accepted code-review findings; Retries: attempts that had to climb a rung); reworkTypes: the Conventional Commits types (after an optional WIP: prefix) that count as rework when they are not the first commit of the id, git reverts included."
+    },
+    "commandTimeout": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 900,
+      "description": "Seconds each install/setup command may run in session-start.sh (cloud sessions) before it is stopped and reported; the environment variable GW_COMMAND_TIMEOUT, when set, wins."
+    },
+    "commandKillGrace": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 5,
+      "description": "Seconds session-start.sh waits, after sending TERM to an install/setup command that ran past commandTimeout, before it sends KILL."
+    },
+    "installLockfiles": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "default": ["package-lock.json", "*/package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "*/yarn.lock", "pnpm-lock.yaml", "*/pnpm-lock.yaml", "bun.lock", "bun.lockb", "*/bun.lock", "Cargo.lock", "*/Cargo.lock", "poetry.lock", "*/poetry.lock", "uv.lock", "*/uv.lock", "Pipfile.lock", "requirements*.txt", "*/requirements*.txt", "Gemfile.lock", "go.sum", "*/go.sum", "composer.lock", "pom.xml", "*/pom.xml"],
+      "description": "git pathspecs of the files whose content decides whether session-start.sh runs install/setup again (their hash goes into the stamp). The list replaces the default one; empty: only the commands themselves decide."
+    },
+    "installLocal": {
+      "type": "boolean",
+      "default": false,
+      "description": "false: install/setup run only in cloud sessions (CLAUDE_CODE_REMOTE=true); true: also in a local session."
+    },
+    "prepushClashBranches": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 10,
+      "description": "How many other remote branches (the most recently committed to) the pre-push compares with the pushed one for a task id taken twice (a warning only)."
+    },
+    "reviewBeforeMainListFiles": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 10,
+      "description": "How many unreviewed code files the review-before-main block message lists (the rest is counted: \"... and N more\")."
+    },
+    "checkTailLines": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 40,
+      "description": "Lines of the failing log check.sh shows when a check fails; the environment variable GW_CHECK_TAIL, when set, wins."
+    },
+    "releaseCheckBranches": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "default": ["version/*"],
+      "description": "E44: shell glob patterns (* crosses /) of the branches where check.sh runs the check with GW_PUSH_PROTECTED=true, as the push to the protected branch does, so what only goes before it (version.py --release in the workflow repo) fails on the version branch first. A detached HEAD matches nothing; [] keeps every branch at false."
+    },
+    "retro": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "filePattern": {"type": "string", "minLength": 1, "default": "(^|/)retro-[^/]*\\.md$"},
+        "statusMarker": {"type": "string", "minLength": 1, "default": "(Estado|Status)"},
+        "decidedWords": {"type": "string", "minLength": 1, "default": "aplicad[ao]s?|rechazad[ao]s?|aplazad[ao]s?|decidid[ao]s?|aprobad[ao]s?|applied|rejected|deferred|decided|approved"},
+        "pendingWords": {"type": "string", "minLength": 1, "default": "pendientes?|pending|undecided|sin decidir|aún no|not yet"}
+      },
+      "default": {"filePattern": "(^|/)retro-[^/]*\\.md$", "statusMarker": "(Estado|Status)", "decidedWords": "aplicad[ao]s?|rechazad[ao]s?|aplazad[ao]s?|decidid[ao]s?|aprobad[ao]s?|applied|rejected|deferred|decided|approved", "pendingWords": "pendientes?|pending|undecided|sin decidir|aún no|not yet"},
+      "description": "How reviewed.sh (requireRetro) finds and reads a retro, as regexes in the common subset of grep -E and Python re: filePattern (matched in the path of each file the branch adds), statusMarker (the text after the opening ** of the line that starts the status paragraph), decidedWords (whole words that record the decision) and pendingWords (words that cancel it, in any position of that paragraph). Each key falls back to its default."
+    },
+    "redWithoutFix": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "compileRegex": {"type": "string", "minLength": 1, "default": "SyntaxError|IndentationError|ModuleNotFoundError|ImportError|ERROR collecting|error: could not compile|error\\[E[0-9]+\\]|error TS[0-9]+|Cannot find module|cannot find symbol|undefined reference|build failed|Failed to compile"},
+        "testRegex": {"type": "string", "minLength": 1, "default": "(def|fn|func|function)[[:space:]]+_?[Tt]est|(^|[^[:alnum:]_.])(it|test|describe)[[:space:]]*\\(|#\\[test\\]|@Test|unittest\\.TestCase|^[+@ -]*test_[A-Za-z0-9_]*[[:space:]]*\\(\\)"}
+      },
+      "default": {"compileRegex": "SyntaxError|IndentationError|ModuleNotFoundError|ImportError|ERROR collecting|error: could not compile|error\\[E[0-9]+\\]|error TS[0-9]+|Cannot find module|cannot find symbol|undefined reference|build failed|Failed to compile", "testRegex": "(def|fn|func|function)[[:space:]]+_?[Tt]est|(^|[^[:alnum:]_.])(it|test|describe)[[:space:]]*\\(|#\\[test\\]|@Test|unittest\\.TestCase|^[+@ -]*test_[A-Za-z0-9_]*[[:space:]]*\\(\\)"},
+      "description": "red-without-fix.sh, regexes for grep -E (POSIX classes allowed): compileRegex is what a load/compile red prints (--compile-re on the command line wins); testRegex finds test code in a fix file (a match refuses the file, exit 2). An invalid regex makes the script exit 2."
+    },
+    "branchPrefixes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "agent": {"type": "array", "items": {"type": "string", "minLength": 1}, "default": ["worktree-agent-*", "agent/*"]},
+        "keep": {"type": "array", "items": {"type": "string", "minLength": 1}, "default": ["claude/*"]}
+      },
+      "default": {"agent": ["worktree-agent-*", "agent/*"], "keep": ["claude/*"]},
+      "description": "merge-branch.sh branch cleanup, shell globs: agent = the branches it may delete after a merge (a branch whose worktree is under .claude/worktrees/ also counts); keep = branches it never deletes (the protected branch and the current one never are either). The ids of a task are still read from agent/<id>-<topic>."
+    },
+    "mergeCleanup": {
+      "type": "boolean",
+      "default": true,
+      "description": "true: after a green check, merge-branch.sh removes the merged subagent's worktree and branch; false: it leaves both."
+    },
+    "wholeReadSkipExtensions": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1, "pattern": "^\\.[A-Za-z0-9]+$"},
+      "default": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".ico", ".pdf", ".ipynb"],
+      "description": "File extensions (with the dot, compared in lower case) the whole-read warning never looks at: files Read shows as images or pages. The list replaces the default one."
+    },
+    "wholeReadPaths": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "default": [],
+      "description": "Repo-relative files or folders (a folder ends with /) the whole-read warning watches besides the log, logArchive and recordsDir."
+    },
     "privateCheck": {
       "anyOf": [
         {"type": "boolean"},
@@ -536,12 +1240,13 @@
           "additionalProperties": false,
           "properties": {
             "emails": {"type": "boolean", "default": true},
-            "allowEmails": {"type": "array", "items": {"type": "string", "minLength": 1, "pattern": "^[^@\\s]+@[^@\\s]+$"}, "default": []}
+            "allowEmails": {"type": "array", "items": {"type": "string", "minLength": 1, "pattern": "^[^@\\s]+@[^@\\s]+$"}, "default": []},
+            "maxHits": {"type": "integer", "minimum": 1, "default": 10}
           }
         }
       ],
-      "default": {"emails": true, "allowEmails": []},
-      "description": "private-check.py (pre-push, on what each push adds): key formats, e-mail addresses (emails, default true) other than the built-in example/noreply ones and allowEmails (public; private ones go in the local .claude/gw.local.json), and the privateNames of .claude/gw.local.json. false turns it all off; true is the defaults."
+      "default": {"emails": true, "allowEmails": [], "maxHits": 10},
+      "description": "private-check.py (pre-push, on what each push adds): key formats, e-mail addresses (emails, default true) other than the built-in example/noreply ones and allowEmails (public; private ones go in the local .claude/gw.local.json), maxHits (hits printed before \"... and N more\", default 10), and the privateNames of .claude/gw.local.json. false turns it all off; true is the defaults."
     }
   }
 }

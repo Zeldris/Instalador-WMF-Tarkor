@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.5.1
+# galivelop-workflow v0.6.0
 """The only reader of a project's .claude/gw.json (one fact, one place).
 
 Validates the config against schema/gw.schema.json (a stdlib validator for the subset the schema uses) and fills the
@@ -8,6 +8,8 @@ defaults the schema declares. Shell scripts call the CLI; Python scripts import 
   python3 config.py validate            # exit 0 if valid; errors on stderr, exit 2
   python3 config.py get KEY             # scalar: one line; list: one item per line; object: JSON
   python3 config.py get KEY --json      # always JSON
+  python3 config.py default KEY         # the schema default of a top-level key, with no config read (a script's
+                                        # fallback when the config cannot be read); a list: one item per line
   python3 config.py root                # the project root it resolved
   python3 config.py related --kind fast|slow [--deleted-file F]   # relatedTests commands to run, NUL-terminated, ready for `bash -c`
                                         # (reads the changed files that exist, one per line, on stdin)
@@ -28,6 +30,8 @@ given, not the repo's. Fails closed: no config, invalid config or unknown key ->
 Python 3.8+ (macOS ships 3.9).
 """
 import argparse
+import fnmatch
+import functools
 import json
 import os
 import posixpath
@@ -216,6 +220,11 @@ def validate(value, schema, path="$"):
         errors.append(f"{path}: must be one of {schema['enum']}, got {value!r}")
     if isinstance(value, (int, float)) and not isinstance(value, bool) and value < schema.get("minimum", value):
         errors.append(f"{path}: must be at least {schema['minimum']}, got {value!r}")
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if value > schema.get("maximum", value):
+            errors.append(f"{path}: must be at most {schema['maximum']}, got {value!r}")
+        if value <= schema.get("exclusiveMinimum", value - 1):
+            errors.append(f"{path}: must be above {schema['exclusiveMinimum']}, got {value!r}")
     if isinstance(value, str):
         if len(value) < schema.get("minLength", 0):
             errors.append(f"{path}: must not be empty")
@@ -248,19 +257,346 @@ def validate(value, schema, path="$"):
     return errors
 
 
-def instruction_lines(config):
-    """The `instructionLines` key as (warn, fail): the line limits of AGENTS.md/CLAUDE.md, each missing part filled
-    from the schema default (the only place the defaults live)."""
-    schema = json.loads(schema_path().read_text(encoding="utf-8"))
-    prop = schema["properties"]["instructionLines"]
-    given = config.get("instructionLines")
+@functools.lru_cache(maxsize=None)
+def _schema_text():
+    return schema_path().read_text(encoding="utf-8")
+
+
+def _schema():
+    """The parsed schema: read once per process, a fresh copy per call (callers may change what they get)."""
+    return json.loads(_schema_text())
+
+
+def _section(config, key):
+    """The object key `key` of the config with every missing inner key filled from the schema default (the only place
+    the defaults live): the loader fills only top-level keys."""
+    props = _schema()["properties"][key]["properties"]
+    given = config.get(key)
     given = given if isinstance(given, dict) else {}
-    return tuple(given.get(k, prop["properties"][k]["default"]) for k in ("warn", "fail"))
+    return {k: given.get(k, prop["default"]) for k, prop in props.items()}
+
+
+def _bounded_section(config, key):
+    """Like `_section`, but a value that is not an integer within the schema's minimum and maximum gives that key's
+    default: for the keys a hook reads, a bad value must never hide what the hook shows (the loader rejects it, a caller
+    that fell back to `{}` still gets numbers)."""
+    props = _schema()["properties"][key]["properties"]
+    given = config.get(key)
+    given = given if isinstance(given, dict) else {}
+    out = {}
+    for k, prop in props.items():
+        v = given.get(k, prop["default"])
+        ok = (isinstance(v, int) and not isinstance(v, bool) and v >= prop.get("minimum", v)
+              and v <= prop.get("maximum", v))
+        out[k] = v if ok else prop["default"]
+    return out
+
+
+def recover(config):
+    """The `recover` key (A13) as a dict (logLines, statusLines, worktrees, otherBranches, branchRow, worktreeRow,
+    outputCap, gitWait, searchMax, searchWidth): the sizes of recover.py's --state and --search. The schema's minimums
+    keep an over-low value from hiding the state; an invalid value (or `{}`, an unreadable config) gives the default."""
+    return _bounded_section(config, "recover")
+
+
+def handoff(config):
+    """The `handoff` key (A13) as a dict (rowLimit, cellLimit, doneItems): the log size rules of handoff.py; an invalid
+    value gives the schema default."""
+    return _bounded_section(config, "handoff")
+
+
+def _int_key(config, key):
+    """The top-level integer key `key`: its value when it is an integer within the schema's minimum and maximum, else
+    the schema default (for the keys a script reads after a config it could not read: a bad value never hides a check)."""
+    prop = _schema()["properties"][key]
+    given = config.get(key)
+    ok = (isinstance(given, int) and not isinstance(given, bool) and given >= prop.get("minimum", given)
+          and given <= prop.get("maximum", given))
+    return given if ok else prop["default"]
+
+
+def _string_list_key(config, key):
+    """The top-level key `key`, a list of non-empty strings: the list when it is one (and not empty when the schema
+    asks for `minItems`), else the schema default."""
+    prop = _schema()["properties"][key]
+    given = config.get(key)
+    allowed = prop.get("items", {}).get("enum")  # a closed list (ciGreenConclusions): anything else is the default
+    if (isinstance(given, list) and len(given) >= prop.get("minItems", 0)
+            and all(isinstance(x, str) and x and (allowed is None or x in allowed) for x in given)):
+        return list(given)
+    return list(prop["default"])
+
+
+def harvest(config):
+    """The `harvest` key (A13) as a dict (ideaChars, commitsShown): the sizes harvest.py prints; an invalid value gives
+    the schema default."""
+    return _bounded_section(config, "harvest")
+
+
+def commit_types(config):
+    """The `commitTypes` key (A13): the Conventional Commits types, the schema default when absent or invalid."""
+    return _string_list_key(config, "commitTypes")
+
+
+def commit_wip_prefix(config):
+    """The `commitWipPrefix` key (A13): the prefix of a commit made in red ("" = none), the default when not a string."""
+    given = config.get("commitWipPrefix")
+    return given if isinstance(given, str) else _schema()["properties"]["commitWipPrefix"]["default"]
+
+
+def patch_commit_types(config):
+    """The `patchCommitTypes` key (A13): the commit types version.py reads as asking for a patch bump."""
+    return _string_list_key(config, "patchCommitTypes")
+
+
+def ci_green_conclusions(config):
+    """The `ciGreenConclusions` key (A13): the check-run conclusions ci-status.py counts as green (success, neutral and
+    skipped only: a failing conclusion can never count as green)."""
+    return _string_list_key(config, "ciGreenConclusions")
+
+
+def ci_status_timeout(config):
+    """The `ciStatusTimeout` key (A13): seconds a gh or curl call of ci-status.py may take (0 = no limit)."""
+    return _int_key(config, "ciStatusTimeout")
+
+
+def ci_step_timeout(config):
+    """The `ciStepTimeout` key (A13): minutes a step of ci-local.py without its own `timeout-minutes` may take
+    (0 = no limit; a fraction of a minute is fine, like GitHub's own `timeout-minutes`)."""
+    given = config.get("ciStepTimeout")
+    if isinstance(given, (int, float)) and not isinstance(given, bool) and 0 <= given < float("inf"):
+        return given
+    return _schema()["properties"]["ciStepTimeout"]["default"]
+
+
+def ci_system_commands(config):
+    """The `ciSystemCommands` key (A13): the commands whose steps ci-local.py leaves out as system-package installs
+    (an empty list leaves none out)."""
+    prop = _schema()["properties"]["ciSystemCommands"]
+    given = config.get("ciSystemCommands")
+    if isinstance(given, list) and all(isinstance(x, str) and x in prop["items"]["enum"] for x in given):
+        return list(given)  # only package managers: a bad entry gives the default, never a way to skip a real step
+    return list(prop["default"])
+
+
+def doctor_scan_bytes(config):
+    """The `doctorScanBytes` key (A13): the size under which doctor.py reads a file that a `check` command names."""
+    return _int_key(config, "doctorScanBytes")
+
+
+def apply_diff_lines(config):
+    """The `applyDiffLines` key (A13): the lines of template diff apply.py prints for a seeded file."""
+    return _int_key(config, "applyDiffLines")
+
+
+def stale_refs_paths(config):
+    """The `staleRefsPaths` key (A13): the globs of the tracked files md-links.py scans for `staleRefs`."""
+    return _string_list_key(config, "staleRefsPaths")
+
+
+def instruction_lines(config):
+    """The `instructionLines` key as (warn, fail): the line limits of AGENTS.md/CLAUDE.md."""
+    limits = _section(config, "instructionLines")
+    return limits["warn"], limits["fail"]
+
+
+def doctor_test_dirs_ignore(config):
+    """The `doctorTestDirsIgnore` key: folder patterns doctor.py skips when it looks for test_*.py nobody runs (E43)."""
+    return list(config.get("doctorTestDirsIgnore", _schema()["properties"]["doctorTestDirsIgnore"]["default"]))
+
+
+def context_guard(config):
+    """The `contextGuard` key as a dict (cutoff, window, autocompactShare, warn, alarm,
+    charsPerToken, bigWindow)."""
+    return _section(config, "contextGuard")
+
+
+def metrics(config):
+    """The `metrics` key as a dict (ledger, record, reports, prices, alert, quality); `alert` and `quality` are filled
+    key by key."""
+    out = _section(config, "metrics")
+    props = _schema()["properties"]["metrics"]["properties"]
+    for key in ("alert", "quality"):
+        given = out[key] if isinstance(out[key], dict) else {}
+        out[key] = {k: given.get(k, p["default"]) for k, p in props[key]["properties"].items()}
+    return out
+
+
+def models(config):
+    """The `models` key as a dict (disabled) (B7)."""
+    return _section(config, "models")
+
+
+def measure(config):
+    """The `measure` key as a dict (minCalls, imageTokens, mixedRatio, minOutput, coldMs) (B29, A13)."""
+    return _section(config, "measure")
+
+
+def media_content(config):
+    """The `mediaContent` key as a dict (maxSubjects) (A13)."""
+    return _section(config, "mediaContent")
+
+
+def test_scan_skip_dirs(config):
+    """The `testScanSkipDirs` key (A13): the folder names tests-after-main.py skips in its walk outside git; the schema
+    default when absent or invalid (an empty list is valid: skip none)."""
+    given = config.get("testScanSkipDirs")
+    if isinstance(given, list) and all(isinstance(x, str) and x for x in given):
+        return list(given)
+    return list(_schema()["properties"]["testScanSkipDirs"]["default"])
+
+
+def review_trivial_lines(config):
+    """The `reviewTrivialLines` key (B27): the changed lines at or under which a phase 1 diff is trivial; the schema
+    default when absent or not a non-negative integer."""
+    given = config.get("reviewTrivialLines")
+    if isinstance(given, int) and not isinstance(given, bool) and given >= 0:
+        return given
+    return _schema()["properties"]["reviewTrivialLines"]["default"]
+
+
+def test_map(config):
+    """The `testMap` key as a dict (rules, command) (E21)."""
+    return _section(config, "testMap")
+
+
+def roadmap_files(config):
+    """The `roadmapFiles` key: [{"path", "done", "open"}] (D55), [] when absent."""
+    return config.get("roadmapFiles") or []
+
+
+def change_size(config):
+    """The `changeSize` key as a dict (commit, block, exclude, pairs) (D43)."""
+    return _section(config, "changeSize")
+
+
+def retro(config):
+    """The `retro` key as a dict (filePattern, statusMarker, decidedWords, pendingWords) (A13)."""
+    return _section(config, "retro")
+
+
+def red_without_fix(config):
+    """The `redWithoutFix` key as a dict (compileRegex, testRegex) (A13)."""
+    return _section(config, "redWithoutFix")
+
+
+def branch_prefixes(config):
+    """The `branchPrefixes` key as a dict (agent, keep) (A13)."""
+    return _section(config, "branchPrefixes")
+
+
+def marketing_sheets(config):
+    """The `marketingSheets` settings (`{"sources": [...]}` alone is a valid way to turn the feature on)."""
+    return _section(config, "marketingSheets")
+
+
+def log_size(config):
+    """The `logSize` key: the cap on the hand-off log in characters (0 = no cap), the schema default when absent."""
+    given = config.get("logSize")
+    if isinstance(given, int) and not isinstance(given, bool):
+        return given
+    return _schema()["properties"]["logSize"]["default"]
+
+
+def whole_read_warn_bytes(config):
+    """The `wholeReadWarnBytes` key (B26): the size above which a whole Read of the log or a record is warned about
+    (0 = never), the schema default when absent or invalid."""
+    given = config.get("wholeReadWarnBytes")
+    if isinstance(given, int) and not isinstance(given, bool) and given >= 0:
+        return given
+    return _schema()["properties"]["wholeReadWarnBytes"]["default"]
+
+
+def hook_stdin_wait(root=None):
+    """The `hookStdinWait` key (A13): seconds a hook waits for its event JSON on stdin. A hook reads stdin before it
+    knows whether the config is usable, so a missing, unreadable or invalid config (or value) gives the schema
+    default, never an error: the hook then says what is wrong when it reads the config for its own keys."""
+    try:
+        default = float(schema_default("hookStdinWait"))
+    except (ConfigError, OSError, ValueError, KeyError):
+        return 3.0  # only when the schema itself is missing (a broken install): the hook then reports it
+    try:
+        given = load(root)["hookStdinWait"]
+    except (ConfigError, OSError, ValueError, KeyError):
+        return default
+    if isinstance(given, bool) or not isinstance(given, (int, float)) or not 0.1 <= given <= 60:
+        return default
+    return float(given)
+
+
+def schema_default(key):
+    """The schema default of the top-level key `key` (the only place the defaults live)."""
+    return _schema()["properties"][key]["default"]
+
+
+SUBAGENT_KEYS = ("subagentCap", "subagentCapStep", "subagentCounterStaleDays", "subagentTranscriptBytes",
+                 "subagentCapAction")
+
+
+def subagent_settings(root=None):
+    """The subagent-cap.py keys (A13) as a dict: subagentCap, subagentCapStep, subagentCounterStaleDays,
+    subagentTranscriptBytes, subagentCapAction. A hook must keep counting, so a config it cannot read, or a value
+    that does not fit its schema, gives that key's schema default, never an error."""
+    out = {k: schema_default(k) for k in SUBAGENT_KEYS}
+    try:
+        conf = load(root)
+    except (ConfigError, OSError, ValueError):
+        return out
+    props = _schema()["properties"]
+    for key in SUBAGENT_KEYS:
+        given, prop = conf.get(key), props[key]
+        if prop["type"] == "string":
+            ok = given in prop["enum"]
+        else:
+            ok = (isinstance(given, int) and not isinstance(given, bool) and given >= prop["minimum"]
+                  and given <= prop.get("maximum", given))
+        if ok:
+            out[key] = given
+    return out
+
+
+def stop_severity(config):
+    """The `stopSeverity` key (A13) as a dict (unpushed, logRequired), each "block" or "warn"."""
+    return _section(config, "stopSeverity")
+
+
+def log_archive(config):
+    """The `logArchive` key: repo-relative path of the hand-off archive, the schema default when absent."""
+    given = config.get("logArchive")
+    return given if isinstance(given, str) and given else _schema()["properties"]["logArchive"]["default"]
+
+
+def owned(config, rel):
+    """Whether the repo-relative path `rel` matches an `ownedFiles` pattern (fnmatch.fnmatchcase; an exact path is a
+    pattern): a workflow file the project made its own on purpose, so apply.py and doctor.py leave it alone."""
+    rel = str(rel).replace(os.sep, "/")
+    return any(isinstance(p, str) and fnmatch.fnmatchcase(rel, p) for p in config.get("ownedFiles") or [])
+
+
+def log_size(config):
+    """The `logSize` key: the cap on the hand-off log in characters (0 = no cap), the schema default when absent."""
+    schema = json.loads(schema_path().read_text(encoding="utf-8"))
+    given = config.get("logSize")
+    return given if isinstance(given, int) and not isinstance(given, bool) else schema["properties"]["logSize"]["default"]
+
+
+def log_archive(config):
+    """The `logArchive` key: repo-relative path of the hand-off archive, the schema default when absent."""
+    schema = json.loads(schema_path().read_text(encoding="utf-8"))
+    given = config.get("logArchive")
+    return given if isinstance(given, str) and given else schema["properties"]["logArchive"]["default"]
+
+
+# What Python re and grep -E do not share (A13): shorthand classes and word boundaries, extension groups, POSIX classes,
+# backreferences. agentSignaturePatterns reach both engines, so they are limited to the common subset.
+SHARED_REGEX_UNSAFE = re.compile(r"\\[dDsSwWbBAZz<>`'1-9]|\(\?|\[\[:|\[\^?\[:")
 
 
 def semantic_errors(config):
-    """Problems the schema subset cannot express: a relatedTests `paths` that is not a valid regex, an agentMap
-    prefix that is not one folder name, an instructionLines `warn` above its `fail`."""
+    """Problems the schema subset cannot express: a relatedTests `paths`, testMap `paths`/`contains` or changeSize
+    `exclude`/`pairs`, fullCheckPaths, agentModelShapes or agentSignaturePatterns entry that is not a valid regex (or a pair replacement that does not fit its
+    regex), an agentMap prefix that is not one folder name, an instructionLines `warn` above its `fail`, an
+    ownedFiles pattern that is absolute or has a `..`."""
     errors = []
     warn, fail = instruction_lines(config)
     if warn > fail:
@@ -281,6 +617,63 @@ def semantic_errors(config):
                         re.compile(entry["paths"])
                     except re.error as exc:
                         errors.append(f"$.relatedTests.{kind}[{i}].paths: {entry['paths']!r} is not a valid regex ({exc})")
+    test_rules = config.get("testMap", {}).get("rules") if isinstance(config.get("testMap"), dict) else None
+    for i, rule in enumerate(test_rules if isinstance(test_rules, list) else []):
+        for key in ("paths", "contains"):
+            if isinstance(rule, dict) and isinstance(rule.get(key), str):
+                try:
+                    re.compile(rule[key])
+                except re.error as exc:
+                    errors.append(f"$.testMap.rules[{i}].{key}: {rule[key]!r} is not a valid regex ({exc})")
+    size = config.get("changeSize") if isinstance(config.get("changeSize"), dict) else {}
+    regexes = [("exclude", i, rx) for i, rx in enumerate(size.get("exclude") or []) if isinstance(rx, str)]
+    regexes += [("pairs", rx, rx) for rx in (size.get("pairs") or {})]
+    for key, where, rx in regexes:
+        try:
+            re.compile(rx)
+        except re.error as exc:
+            errors.append(f"$.changeSize.{key}[{where!r}]: {rx!r} is not a valid regex ({exc})")
+    for i, rx in enumerate(config.get("fullCheckPaths") or []):
+        if isinstance(rx, str):
+            try:
+                re.compile(rx)
+            except re.error as exc:
+                errors.append(f"$.fullCheckPaths[{i}]: {rx!r} is not a valid regex ({exc})")
+    for key in ("agentModelShapes", "agentSignaturePatterns"):
+        for i, rx in enumerate(config.get(key) or []):
+            if isinstance(rx, str):
+                try:
+                    re.compile(rx)
+                except re.error as exc:
+                    errors.append(f"$.{key}[{i}]: {rx!r} is not a valid regex ({exc})")
+                    continue
+                if key == "agentSignaturePatterns" and (m := SHARED_REGEX_UNSAFE.search(rx)):
+                    errors.append(f"$.{key}[{i}]: {rx!r} uses {m.group(0)!r}, which Python re and grep -E read differently; "
+                                  "write it with the common subset only (literals, . [abc] [^abc] * + ? {n,m} | ( ) ^ $), "
+                                  "e.g. [0-9] instead of \\d, [ \\t] instead of \\s")
+    retro_keys = config.get("retro") if isinstance(config.get("retro"), dict) else {}
+    for key, rx in retro_keys.items():  # reviewed.sh reads them with grep -E and awk: the common subset only
+        if isinstance(rx, str):
+            try:
+                re.compile(rx)
+            except re.error as exc:
+                errors.append(f"$.retro.{key}: {rx!r} is not a valid regex ({exc})")
+                continue
+            if m := SHARED_REGEX_UNSAFE.search(rx):
+                errors.append(f"$.retro.{key}: {rx!r} uses {m.group(0)!r}, which Python re and grep -E read differently; "
+                              "write it with the common subset only (literals, . [abc] [^abc] * + ? {n,m} | ( ) ^ $)")
+    for i, pat in enumerate(config.get("ownedFiles") or []):
+        if isinstance(pat, str) and pat:
+            parts = pat.replace("\\", "/").split("/")
+            if pat.startswith("/") or re.match(r"^[A-Za-z]:", pat):
+                errors.append(f"$.ownedFiles[{i}]: {pat!r} is an absolute path; use a path relative to the repo root")
+            elif ".." in parts:
+                errors.append(f"$.ownedFiles[{i}]: {pat!r} has a '..' component; use a path inside the repo")
+    for rx, repl in (size.get("pairs") or {}).items():
+        try:
+            re.compile(rx).sub(repl, "")
+        except (re.error, IndexError) as exc:
+            errors.append(f"$.changeSize.pairs[{rx!r}]: replacement {repl!r} does not fit its regex ({exc})")
     return errors
 
 
@@ -530,13 +923,15 @@ def load_local(root):
 
 
 def private_check(config):
-    """The `privateCheck` key as {"emails": bool, "allowEmails": [...]} with its defaults, or None when it is false
-    (private-check.py off)."""
+    """The `privateCheck` key as {"emails": bool, "allowEmails": [...], "maxHits": int} with its defaults, or None when
+    it is false (private-check.py off)."""
     value = config.get("privateCheck", True)
     if value is False:
         return None
     value = value if isinstance(value, dict) else {}
-    return {"emails": value.get("emails", True), "allowEmails": list(value.get("allowEmails") or [])}
+    max_hits = _schema()["properties"]["privateCheck"]["default"]["maxHits"]
+    return {"emails": value.get("emails", True), "allowEmails": list(value.get("allowEmails") or []),
+            "maxHits": value.get("maxHits", max_hits)}
 
 
 def related_commands(config, kind, files, deleted=(), skipped=None):
@@ -584,6 +979,81 @@ def related_commands(config, kind, files, deleted=(), skipped=None):
     return out
 
 
+def _raw_at(root, rev):
+    """The top-level JSON object of .claude/gw.json in commit `rev`, or None when it is missing or not an object."""
+    try:
+        data = json.loads(read_at(root, rev))
+    except (ConfigError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def config_keys_changed(root, commits):
+    """The top-level keys of .claude/gw.json that `commits` (shas) change, each against every parent it has (E47).
+    None, failing closed, when a commit or a parent has no readable config object there (an added, removed or broken
+    file) or git cannot list a commit's parents."""
+    changed = set()
+    for sha in commits:
+        try:
+            r = subprocess.run(["git", "-C", str(root), "rev-parse", f"{sha}^@"], capture_output=True, text=True)
+        except OSError:
+            return None
+        if r.returncode != 0:
+            return None
+        new = _raw_at(root, sha)
+        for parent in r.stdout.split():
+            old = _raw_at(root, parent)
+            if new is None or old is None:
+                return None
+            changed |= {k for k in set(old) | set(new) if old.get(k, _MISSING) != new.get(k, _MISSING)}
+    return changed
+
+
+_MISSING = object()
+
+
+def push_scope(config, files, commits=None):
+    """What the pre-push runs for a branch push that changes `files` (repo-relative), as (scope, reason): ("full",
+    why) or ("related", None) (D49). Full when branchCheck is "full", when relatedTests has no command (there would
+    be nothing to run), or when a file matches a fullCheckPaths regex or is .claude/gw.json (an environment change).
+    E47: with `commits` (the push's new shas), a .claude/gw.json change counts only when one of the keys it changes is
+    not in fullCheckSkipKeys (fullCheckSkipKeys itself always counts; an unreadable config on either side, too).
+    The protected branch never asks: it always runs the full check."""
+    if config.get("branchCheck", "related") == "full":
+        return "full", "branchCheck is full"
+    related = config.get("relatedTests") or {}
+    if not any(related.get(kind) for kind in ("fast", "slow")):
+        return "full", "relatedTests has no command"
+    regexes = [re.compile(rx) for rx in config.get("fullCheckPaths") or []]
+    for name in files:
+        if any(rx.search(name) for rx in regexes):
+            return "full", f"environment change: {name}"
+    if CONFIG_REL.as_posix() in files:
+        if commits is None:
+            return "full", f"environment change: {CONFIG_REL.as_posix()}"
+        keys = config_keys_changed(config["_root"], commits)
+        if keys is None:
+            return "full", f"environment change: {CONFIG_REL.as_posix()} (cannot compare it with its parent)"
+        skip = set(config.get("fullCheckSkipKeys") or []) - {"fullCheckSkipKeys"}
+        counted = sorted(keys - skip)
+        if counted:
+            return "full", f"environment change: {CONFIG_REL.as_posix()} ({', '.join(counted)})"
+    return "related", None
+
+
+def _print_value(value, as_json):
+    """A scalar on one line, a list one item per line, an object as JSON (`get` and `default`)."""
+    if as_json or isinstance(value, dict):
+        print(json.dumps(value, ensure_ascii=False))
+    elif isinstance(value, list):
+        for item in value:
+            print(item if not isinstance(item, (dict, list)) else json.dumps(item, ensure_ascii=False))
+    elif isinstance(value, bool):
+        print("true" if value else "false")
+    else:
+        print(value)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--root", help="project path (default: see above)")
@@ -591,15 +1061,29 @@ def main(argv=None):
     parser.add_argument("--paths-at", help="look for the old-name path fallback in this commit (default: --rev)")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("validate")
+    default_p = sub.add_parser("default", help="the schema default of a top-level key (no config needed): a script's "
+                                               "fallback when the config cannot be read")
+    default_p.add_argument("key")
     sub.add_parser("root")
     sub.add_parser("local", help="the validated local file .claude/gw.local.json as JSON (null when absent)")
     related = sub.add_parser("related", help="relatedTests commands that apply to the files on stdin")
     related.add_argument("--kind", choices=("fast", "slow"), required=True)
     related.add_argument("--deleted-file", help="file listing, one per line, the pushed paths that no longer exist")
+    scope_p = sub.add_parser("push-scope", help="'full <reason>' or 'related' for a branch push changing the files on stdin")
+    scope_p.add_argument("--commits", help="file listing the push's new commits, one sha per line: a .claude/gw.json "
+                                           "change then counts only by its keys (fullCheckSkipKeys, E47)")
     get = sub.add_parser("get")
     get.add_argument("key", help="top-level key, or dotted (relatedTests.fast)")
     get.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
+    if args.command == "default":
+        try:
+            value = schema_default(args.key)
+        except (ConfigError, KeyError, OSError):
+            print(f"gw config: key '{args.key}' has no default in the schema", file=sys.stderr)
+            return 2
+        _print_value(value, False)
+        return 0
     try:
         config = load(args.root, args.rev, args.paths_at)
     except ConfigError as exc:
@@ -630,21 +1114,25 @@ def main(argv=None):
         for command in skipped:
             print(f"related-tests: skipped ({args.kind}): {command} (its changed files were only deleted)", file=sys.stderr)
         return 0
-    value = config
+    if args.command == "push-scope":
+        commits = None
+        if args.commits:
+            with open(args.commits, encoding="utf-8") as fh:
+                commits = [line.strip() for line in fh.read().splitlines() if line.strip()]
+        scope, reason = push_scope(config, [line for line in sys.stdin.read().splitlines() if line], commits)
+        print(f"{scope} {reason}" if reason else scope)
+        return 0
+    value = dict(config, metrics=metrics(config), models=models(config), measure=measure(config), mediaContent=media_content(config),
+                 recover=recover(config), handoff=handoff(config), harvest=harvest(config),
+                 contextGuard=context_guard(config),
+                 stopSeverity=stop_severity(config), changeSize=change_size(config),
+                 retro=retro(config), redWithoutFix=red_without_fix(config), branchPrefixes=branch_prefixes(config))  # inner keys fill from the schema too
     for part in args.key.split("."):
         if not isinstance(value, dict) or part not in value or part.startswith("_"):
             print(f"gw config: key '{args.key}' is not set and has no default", file=sys.stderr)
             return 2
         value = value[part]
-    if args.json or isinstance(value, dict):
-        print(json.dumps(value, ensure_ascii=False))
-    elif isinstance(value, list):
-        for item in value:
-            print(item if not isinstance(item, (dict, list)) else json.dumps(item, ensure_ascii=False))
-    elif isinstance(value, bool):
-        print("true" if value else "false")
-    else:
-        print(value)
+    _print_value(value, args.json)
     return 0
 
 

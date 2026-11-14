@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.5.1
+# galivelop-workflow v0.6.0
 # Cache of "the project's `check` already passed": lets the pre-push (and scripts/check.sh) skip a check that already
-# ran green on the same tree with the same commands and wrapper, less than 24 h ago. One line per success,
-# "<epoch> <key>", in <git common dir>/gw-check-green (shared by linked worktrees), the last 50 kept.
+# ran green on the same tree with the same commands and wrapper, less than `checkReuseTtl` (24 h) ago. One line per success,
+# "<epoch> <key>", in <git common dir>/gw-check-green (shared by linked worktrees), the last `checkReuseKeep` (50) kept.
 #   printf '%s\n' "$checks" | bash check-green.sh key <tree-sha> <wrapper> [<inputs-hash>]   # prints the key
 #   printf '%s\n' "$paths" | bash check-green.sh inputs [<dir>]   # E23: hash of the content of the files listed (checkCacheInputs,
 #                                       # relative to <dir>, the checkout or the worktree where the check runs; ignored files the check reads, e.g. .claude/gw.local.json)
@@ -13,8 +13,8 @@
 #   bash check-green.sh worktree-tree   # the tree the working copy would commit after `git add -A` (real index untouched);
 #                                       # fails when that tree may not be what a check sees (assume-unchanged or
 #                                       # skip-worktree entries, sparse checkout, a modified submodule)
-#   bash check-green.sh has <key>       # exit 0 and the age in minutes if recorded < 24 h ago; any problem is a miss (1)
-#   bash check-green.sh epoch <key>     # exit 0 and the epoch (seconds) of the newest line for the key if recorded < 24 h ago
+#   bash check-green.sh has <key>       # exit 0 and the age in minutes if recorded < `checkReuseTtl` ago; any problem is a miss (1)
+#   bash check-green.sh epoch <key>     # exit 0 and the epoch (seconds) of the newest line for the key if recorded < `checkReuseTtl` ago
 #   bash check-green.sh add <key> [<epoch>]  # records the key now (or at <epoch>, to inherit the age of the green it derives
 #                                       # from); best effort (a write failure warns and exits 0)
 #   bash check-green.sh lock-acquire <owner-pid> <sha> <wait-seconds> <log>
@@ -23,11 +23,10 @@
 #                                       # exit 0 taken, 3 another live check holds it (names pid/sha/log) after waiting
 #                                       # <wait-seconds>, 1 cannot. A lock whose process is gone, or whose pid now belongs
 #                                       # to another process (different start time), is discarded.
+#                                       # E40: once taken, the check-<sha>.log files beside it beyond the newest `checkLogKeep` go.
 #   bash check-green.sh lock-release <owner-pid>   # removes the lock only if <owner-pid> owns it
 # GW_CHECK_CACHE=0 makes `has` always miss. Bash 3.2 compatible. Root from this script's path, never from the cwd.
 set -uo pipefail
-TTL_SECONDS=86400  # a recorded success older than this is a miss
-KEEP_LINES=50      # lines the cache file keeps
 FORMAT="gw-check-cache 1"
 here="$(cd "$(dirname "$0")" && pwd)"
 # Git exports GIT_DIR (and friends) to hooks, also in a linked worktree; with GIT_DIR set `rev-parse --show-toplevel`
@@ -36,6 +35,13 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
 root="$(unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; git -C "$here" rev-parse --show-toplevel 2>/dev/null)" || {
   echo "check-green: $here is not inside a git repository; reinstall the workflow: /gw-update" >&2; exit 1; }
 cd "$root" || exit 1
+
+cfg_number() {  # cfg_number <key>: the key's value from .claude/gw.json (the default when unset); fails on an invalid config
+  local v
+  v="$(python3 "$here/config.py" --root "$root" get "$1" 2>/dev/null)" || return 1
+  case "$v" in '' | *[!0-9]*) return 1 ;; esac
+  echo "$v"
+}
 
 usage() {
   echo "check-green: $1; usage: bash $0 key <tree-sha> <wrapper> [<inputs-hash>] | inputs [<dir>] | worktree-tree | has <key> | epoch <key> | add <key> [<epoch>] | lock-acquire <pid> <sha> <wait> <log> | lock-release <pid>" >&2
@@ -146,10 +152,11 @@ cmd_worktree_tree() {
     echo "check-green: cannot write the tree of the work tree; reproduce it with: git add -A --dry-run && git write-tree" >&2; return 1; }
 }
 
-lookup_epoch() {  # lookup_epoch <key>: prints the epoch of the newest line for the key if it is < 24 h old, else fails
+lookup_epoch() {  # lookup_epoch <key>: prints the epoch of the newest line for the key if it is younger than `checkReuseTtl`, else fails
   [ "${GW_CHECK_CACHE:-}" != "0" ] || return 1
   valid_key "$1" || return 1
-  local file now epoch k age found=""
+  local file now epoch k age found="" ttl
+  ttl="$(cfg_number checkReuseTtl)" || return 1  # `checkReuseTtl` seconds: an invalid config is a miss (fail closed)
   file="$(cache_file)" || return 1
   [ -f "$file" ] || return 1
   now="$(date +%s)" || return 1
@@ -161,7 +168,7 @@ lookup_epoch() {  # lookup_epoch <key>: prints the epoch of the newest line for 
   done 2>/dev/null < "$file"
   [ -n "$found" ] || return 1
   age=$((now - found))
-  [ "$age" -ge 0 ] && [ "$age" -lt "$TTL_SECONDS" ] || return 1  # in the future (clock change) or too old
+  [ "$age" -ge 0 ] && [ "$age" -lt "$ttl" ] || return 1  # in the future (clock change) or too old
   echo "$found"
 }
 cmd_has() {
@@ -179,7 +186,8 @@ cmd_epoch() {
 cmd_add() {
   { [ "$#" -ge 1 ] && [ "$#" -le 2 ]; } || usage "add needs a key and optionally an epoch"
   valid_key "$1" || usage "'$1' is not a git object name"
-  local file now tmp
+  local file now tmp keep
+  keep="$(cfg_number checkReuseKeep)" || { echo "check-green: warning: cannot read checkReuseKeep, check not recorded; fix .claude/gw.json: python3 $here/config.py validate" >&2; return 0; }
   file="$(cache_file)" || { echo "check-green: warning: cannot locate the git dir, check not recorded; check the repository: git rev-parse --git-common-dir" >&2; return 0; }
   now="$(date +%s)" || { echo "check-green: warning: cannot read the clock, check not recorded; check it: date +%s" >&2; return 0; }
   if [ -n "${2:-}" ]; then
@@ -194,8 +202,8 @@ cmd_add() {
   trap 'exit 143' TERM
   trap 'exit 129' HUP
   if {
-    if [ -f "$file" ]; then  # drop older lines of the same key, keep the last KEEP_LINES - 1
-      awk -v key="$1" '$2 != key' "$file" 2>/dev/null | tail -n $((KEEP_LINES - 1))
+    if [ -f "$file" ]; then  # drop older lines of the same key, keep the last `checkReuseKeep` - 1
+      awk -v key="$1" '$2 != key' "$file" 2>/dev/null | tail -n $((keep - 1))
     fi
     printf '%s %s\n' "$now" "$1"
   } > "$tmp" 2>/dev/null && mv -f "$tmp" "$file" 2>/dev/null; then
@@ -216,7 +224,12 @@ lock_file() {  # absolute path of the lock, creating <git common dir>/gw, or fai
 proc_start() {  # the start time of a process as ps prints it ("?" if ps cannot tell but the process exists); empty if gone
   local out
   out="$(LC_ALL=C ps -o lstart= -p "$1" 2>/dev/null | sed 's/^ *//; s/ *$//; s/  */ /g')"
-  if [ -z "$out" ] && kill -0 "$1" 2>/dev/null; then out="?"; fi
+  if [ -z "$out" ]; then  # D76: a process of another user is alive too (kill -0 fails with EPERM, as before-stop.py accepts)
+    case "$(kill -0 "$1" 2>&1)" in
+      "") out="?" ;;
+      *[Nn]ot\ permitted* | *EPERM*) out="?" ;;
+    esac
+  fi
   printf '%s\n' "$out"
 }
 proc_is() {  # proc_is <pid> <start>: that very process is still running (not gone, not a zombie, not a reused pid)
@@ -224,6 +237,22 @@ proc_is() {  # proc_is <pid> <start>: that very process is still running (not go
   st="$(LC_ALL=C ps -o stat= -p "$1" 2>/dev/null | tr -d ' ')"
   case "$st" in Z*) return 1 ;; esac
   [ -n "$2" ] && [ "$(proc_start "$1")" = "$2" ]
+}
+
+prune_logs() {  # prune_logs <lock> <keep-log>: E40 keeps the newest `checkLogKeep` check-<sha>.log of the lock's folder (0 = all)
+  local dir keep f n=0
+  dir="$(dirname "$1")"
+  keep="$(python3 "$here/config.py" --root "$root" get checkLogKeep 2>/dev/null)" || return 0
+  case "$keep" in '' | *[!0-9]*) return 0 ;; esac
+  [ "$keep" -gt 0 ] || return 0
+  # ls -t lists the newest first, one per line (the folder may hold spaces; the names, check-<sha>.log, never do)
+  # shellcheck disable=SC2012
+  ls -1t "$dir"/check-*.log 2>/dev/null | while IFS= read -r f; do
+    [ "$f" != "$2" ] || continue  # the log of the run that is starting is never pruned
+    n=$((n + 1))
+    [ "$n" -le "$keep" ] || rm -f "$f" 2>/dev/null
+  done
+  return 0
 }
 
 cmd_lock_acquire() {
@@ -234,7 +263,7 @@ cmd_lock_acquire() {
   mine="$owner|$(proc_start "$owner")|$sha|$log"
   waited=0  # whole seconds slept: $SECONDS ticks on the second, so SECONDS+wait could give up after wait-1 s
   while :; do
-    ln -s "$mine" "$lock" 2>/dev/null && return 0
+    if ln -s "$mine" "$lock" 2>/dev/null; then prune_logs "$lock" "$log"; return 0; fi
     cur="$(readlink "$lock" 2>/dev/null)"
     if [ -z "$cur" ]; then
       if [ -e "$lock" ] || [ -L "$lock" ]; then  # an old-format lock (a directory) or an empty one
@@ -246,12 +275,27 @@ cmd_lock_acquire() {
       [ "$vanished" -lt 5 ] || { echo "check-green: cannot create the lock $lock; make its folder writable: chmod u+w $(dirname "$lock")" >&2; return 1; }
       continue
     fi
-    [ "${cur%%|*}" != "$owner" ] || return 0  # already ours (a hook that checks several refs)
+    if [ "${cur%%|*}" = "$owner" ]; then  # already ours (a hook that checks several refs): D76 it now describes this run
+      [ "$cur" = "$mine" ] && return 0
+      rm -f "$lock.$owner.new"
+      { ln -s "$mine" "$lock.$owner.new" 2>/dev/null && mv -f "$lock.$owner.new" "$lock" 2>/dev/null; } || {
+        rm -f "$lock.$owner.new"
+        echo "check-green: cannot update the lock $lock; make its folder writable: chmod u+w $(dirname "$lock")" >&2; return 1; }
+      return 0
+    fi
     pid="${cur%%|*}"; rest="${cur#*|}"; start="${rest%%|*}"; rest="${rest#*|}"; osha="${rest%%|*}"; olog="${rest#*|}"
     if ! proc_is "$pid" "$start"; then  # orphan: dropped under a mutex, so two stealers never judge and drop in turn
       steal="$lock.steal"
       if ! mkdir "$steal" 2>/dev/null; then
         sp="$(cat "$steal/pid" 2>/dev/null)"
+        if [ -z "$sp" ]; then  # D76: a mutex with no pid is one its owner has not written yet or died before writing
+          sleep 1
+          sp="$(cat "$steal/pid" 2>/dev/null)"
+          if [ -z "$sp" ]; then
+            rm -rf "$steal"
+            continue
+          fi
+        fi
         if [ -n "$sp" ] && ! proc_is "${sp%%|*}" "${sp#*|}"; then  # its owner died holding it
           rm -rf "$steal"
           continue

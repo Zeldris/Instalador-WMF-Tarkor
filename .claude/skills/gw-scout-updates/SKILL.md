@@ -5,7 +5,7 @@ disable-model-invocation: true
 license: MIT
 compatibility: Claude Code or any Agent Skills agent; git; python3 for scripts/ (standard library only); web search for step 3
 metadata:
-  version: "0.5.1"
+  version: "0.6.0"
   source: "Galivelop workshop; generalised from the Tarkor and installer gw-scout-updates"
 ---
 
@@ -48,9 +48,11 @@ Formats: [`references/formats.md`](references/formats.md). Sources by component 
    `uncounted`: a new manifest; add its components to its section. `--section <title>` prints one section alone;
    print the whole file only when rewriting it. *Done when* the script exits 0.
 2. **Focus and cost.** Focus: the section the user asked for, or all. Read `proposals.md` and note which components of
-   the focus have live or rejected proposals. State the estimate (about 90k tokens per section searched, plus about
-   2k per candidate pair judged) and **wait for the user's yes**. *Done when* the user confirms focus and cost.
-3. **Search.** One background subagent per focus (`sonnet`, the shape of the `research` skill) with a closed brief:
+   the focus have live or rejected proposals. State the estimate (about 90k tokens per section searched, less the
+   ~136k startup saved by grouping into 2 subagents, plus about 2k per candidate pair judged) and **wait for the user's yes**. *Done when* the user confirms focus and cost.
+3. **Search.** **Two** background subagents (`sonnet`, the shape of the `research` skill), each with the foci
+   grouped by kind (dependencies and runtimes; AI and infrastructure) instead of one per focus: every subagent pays
+   a startup of its own (~136k saved per pass). A single focus, or one group, needs only one. Each gets a closed brief:
    the components and versions, the constraints, the sources of `references/sources.md` for that type, the existing
    proposals for the component, and the card fields of step 6; never the whole report or `architecture.md`. **Free
    first** (open source, local, free tier) and low cost; paid only when no comparable free option exists, with its

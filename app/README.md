@@ -34,6 +34,9 @@ cargo run -p tarkor-nucleo --example analizar   # qué detectaría en este equip
 npm run tauri build              # instaladores (.exe en Windows; .AppImage y .deb en Linux)
 ```
 
+Licencias de terceros (`INS-47`): `npm run build` corre antes `herramientas/licencias-terceros.mjs`, que saca las crates con `cargo-about` (necesita la versión fijada en `VERSION_CARGO_ABOUT` de ese `.mjs`, que instala `tools/dev/instalar-entorno.sh` y la orden `ORDEN_INSTALAR` que imprime el generador si falta; licencias aceptadas en `about.toml`) y los paquetes de npm de producción de `node_modules`, y escribe `src/licencias/generadas/terceros.json` (lo que enseña la pantalla de licencias) y `dist-licencias/THIRD-PARTY-NOTICES.txt` (para publicar con cada versión); ninguno se versiona.
+Sin generarlos, la pantalla dice que no se generaron: `npm run dev` y `npm test` funcionan igual.
+
 `TARKOR_DATOS=/ruta` cambia la carpeta de datos (para pruebas sin tocar la real).
 
 Opciones del ejecutable que usa el desinstalador de Windows (`INS-44`), sin abrir ventana: `tarkor --info-desinstalar <archivo>` escribe un INI (UTF-16) con la ruta y el tamaño de la IA en uso, y `tarkor --desinstalar [--partidas] [--ia]` borra los registros y, si se piden, las partidas y la carpeta de la IA (solo si es la de por defecto o se llama `Tarkor IA`).

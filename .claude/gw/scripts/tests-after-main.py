@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.5.1
+# galivelop-workflow v0.6.0
 """A unittest TestCase defined after the `unittest.main()` call never runs, and the check stays green (a check for CI).
 
 `unittest.main()` runs the tests that exist when it is called and then exits. A `class X(unittest.TestCase)` written
@@ -17,13 +17,43 @@ Exit 0 if every file is clean (or there are no test files, or some only warned);
 """
 import argparse
 import ast
+import json
 import os
 import subprocess
 import sys
 from pathlib import Path
 
 sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# The walk outside git skips these folders when config.py cannot be loaded; otherwise the `testScanSkipDirs` key (A13).
+# It stays apart from doctorTestDirsIgnore on purpose: that list is longer (env, site-packages, .claude/gw, ...) and has
+# another job, so merging them would change what is scanned.
 SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__", ".tox"}
+
+
+def skip_dirs(root):
+    """The folder names the walk outside git skips: the project's `testScanSkipDirs` (the schema default without a
+    config), SKIP_DIRS when config.py or the schema cannot be loaded. config.py cannot load a config outside a git
+    repo (the very case of this walk), so then the raw `.claude/gw.json` goes through the same getter, which checks the
+    value itself."""
+    try:
+        import config
+    except ImportError:
+        return SKIP_DIRS
+    try:
+        try:
+            return set(config.test_scan_skip_dirs(config.load(root)))
+        except (config.ConfigError, OSError, ValueError, KeyError):
+            with open(os.path.join(root, ".claude", "gw.json"), encoding="utf-8") as fh:
+                raw = json.load(fh)
+            return set(config.test_scan_skip_dirs(raw if isinstance(raw, dict) else {}))
+    except (OSError, ValueError, KeyError):
+        try:
+            return set(config.test_scan_skip_dirs({}))
+        except (OSError, ValueError, KeyError, AttributeError):
+            return SKIP_DIRS
+    except AttributeError:
+        return SKIP_DIRS
 
 
 class Scan:
@@ -139,8 +169,9 @@ def discover(root):
         return sorted(f for f in out.split("\0") if f and is_test_file(f))
     except (OSError, subprocess.CalledProcessError):
         found = []
+        skip = skip_dirs(root)
         for d, dirs, files in os.walk(root):
-            dirs[:] = [x for x in dirs if x not in SKIP_DIRS]
+            dirs[:] = [x for x in dirs if x not in skip]
             found += [os.path.relpath(os.path.join(d, f), root) for f in files if is_test_file(f)]
         return sorted(found)
 

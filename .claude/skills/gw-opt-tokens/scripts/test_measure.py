@@ -86,6 +86,14 @@ def ago(hours: float) -> str:
     return (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=hours)).isoformat().replace('+00:00', 'Z')
 
 
+def workflow_file(rel):
+    """`rel` of the workflow: in its own repo (`scripts/`, `schema/`) or copied into a project (`.claude/gw/`)."""
+    for root in (os.path.join(HERE, '..', '..', '..'), os.path.join(HERE, '..', '..', '..', 'gw')):
+        if os.path.isfile(os.path.join(root, rel)):
+            return os.path.join(root, rel)
+    return os.path.join(HERE, '..', '..', '..', rel)
+
+
 class Measure(unittest.TestCase):
     def measure(self, parts: list, subagents: dict | None = None, hours: str = '0', extra: tuple = ()) -> str:
         d = folder()
@@ -194,6 +202,47 @@ class Measure(unittest.TestCase):
         self.assertNotIn('Only synthetic', out)
         self.assertNotIn('synthetic', out)
 
+    def run_on(self, *parts) -> str:
+        d = folder()
+        path = log(os.path.join(d, 's', 'subagents', 'agent-x.jsonl'), *parts)
+        r = subprocess.run(['python3', MEASURE, '--session', path, '--hours', '0'], capture_output=True, text=True, cwd=d)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r.stdout
+
+    def test_subagent_log_all_sidechain_is_measured_like_a_main_one(self):
+        out = self.run_on(*noise(), response('a1', 100, isSidechain=True), response('a2', 300, isSidechain=True))
+        self.assertIn('API calls: 2', out)
+        self.assertIn('Input 400 tokens', out)
+
+    def test_subagent_log_counts_each_response_once_and_keeps_tool_results(self):
+        out = self.run_on(response('a1', 100, text('t'), call('t1', '', name='Read', file_path='/a'), isSidechain=True),
+                          result('t1', 'x' * 350, isSidechain=True), response('a2', 300, isSidechain=True))
+        self.assertIn('API calls: 2', out)
+        self.assertRegex(out, r'Read\s+1 calls\s+100 tok')
+
+    def test_mixed_log_still_drops_the_sidechain_lines(self):
+        out = self.run_on(response('m1', 100), response('a1', 9999, isSidechain=True))
+        self.assertIn('API calls: 1', out)
+        self.assertIn('Input 100 tokens', out)
+
+    def test_empty_subagent_log_reports_no_calls(self):
+        d = folder()
+        path = log(os.path.join(d, 's', 'subagents', 'agent-x.jsonl'))
+        r = subprocess.run(['python3', MEASURE, '--session', path, '--hours', '0'], capture_output=True, text=True, cwd=d)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn('No calls in that period', r.stderr)
+
+    def test_subagent_log_with_lines_without_usage(self):
+        out = self.run_on(_line('user', 'hi', isSidechain=True), response('a1', 50, isSidechain=True),
+                          _line('assistant', [text('no usage')], isSidechain=True))
+        self.assertIn('API calls: 1', out)
+        self.assertIn('Input 50 tokens', out)
+
+    def test_main_session_still_ignores_its_subagents_sidechain_lines(self):
+        out = self.measure([response('m1', 100)], {'agent-a': ('Explore', [response('s1', 500, isSidechain=True)])})
+        self.assertIn('API calls: 1', out)
+        self.assertIn('Input 100 tokens', out)
+
     def test_no_subagents_no_section(self):
         self.assertNotIn('BY SUBAGENT', self.measure([response('m1', 100)]))
 
@@ -242,6 +291,38 @@ class Measure(unittest.TestCase):
         self.assertNotEqual(bad.returncode, 0)
         self.assertIn('--since: "no-such-xyz" is neither a commit nor an ISO-8601 date', bad.stderr)
 
+    def test_since_picks_the_session_that_covers_the_period(self):
+        """D70: the newest log (a later session) must not win over the one that has the calls of the period."""
+        home, repo = folder(), folder()
+        subprocess.run(['git', 'init', '-q', repo], check=True)
+        proj = os.path.join(home, '.claude', 'projects', '-home-user')
+        old = log(os.path.join(proj, 'old.jsonl'), response('a', 10, timestamp=ago(50)), response('b', 20, timestamp=ago(49)))
+        new = log(os.path.join(proj, 'new.jsonl'), response('c', 30, timestamp=ago(1)))
+        os.utime(old, (1, 1))  # new.jsonl is the newest file
+        env = {**os.environ, 'HOME': home, 'CLAUDE_CODE_REMOTE': 'true'}
+        run = lambda *args: subprocess.run(['python3', MEASURE, *args], capture_output=True, text=True, cwd=repo, env=env)
+        r = run('--since', ago(60))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('Session: old.jsonl', r.stdout)
+        self.assertIn('API calls: 2  |', r.stdout)
+        recent = run('--since', ago(2))  # only the newest has calls there
+        self.assertIn('Session: new.jsonl', recent.stdout)
+        none = run('--since', ago(0.5))  # nobody covers it: the newest, then the usual "no calls" exit
+        self.assertNotEqual(none.returncode, 0)
+        self.assertIn('No calls in that period', none.stderr)
+        self.assertTrue(os.path.exists(new))
+
+    def test_artifact_rows_show_the_action(self):
+        """B22: HEAVIEST RESULTS tells `quickstart` from `publish` for Artifact calls."""
+        parts = [response('a', 100, call('t1', '', name='Artifact', action='quickstart', intent='other')),
+                 result('t1', 'x' * 7000),
+                 response('b', 200, call('t2', '', name='Artifact', file_path='/tmp/p.html', icon='chart')),
+                 result('t2', 'y' * 3500),
+                 response('c', 300, text('end'))]
+        out = self.measure(parts)
+        self.assertIn('Artifact: action=quickstart {"intent": "other"}', out)
+        self.assertIn('Artifact: action=publish file_path=/tmp/p.html', out)
+
     def test_warns_when_the_session_mixes_compaction_windows(self):
         """Stretches that ended in a compaction at 1,000 and then at 300: the window changed inside the period."""
         mixed = self.measure([response('a', 500), response('b', 1000), *compaction(),
@@ -278,6 +359,180 @@ class Measure(unittest.TestCase):
             self.assertEqual(local.returncode, 0, local.stderr)
             self.assertIn('API calls: 1', local.stdout)
             self.assertIn('warning: log from a session opened outside the repo, in folder -home-user', local.stderr)
+
+    def short_session(self, current: int, config=None, previous: tuple = (('prev', 'feat'),), branch: str | None = 'feat',
+                      args: tuple = ('--hours', '0'), previous_calls: int = 3, branches: tuple = ()) -> subprocess.CompletedProcess:
+        """B29: no --session; the current log (`cur.jsonl`, newest, `current` calls on `branch`) and older logs given
+        as (name, branch) with 3 calls each; `config` is the text of the repo's .claude/gw.json (None = no file)."""
+        home, repo = folder(), folder()
+        subprocess.run(['git', 'init', '-q', repo], check=True)
+        proj = os.path.join(home, '.claude', 'projects', '-home-user')
+        for i, (name, b) in enumerate(previous):
+            extra = {'gitBranch': b} if b else {}
+            path = log(os.path.join(proj, f'{name}.jsonl'),
+                       *[response(f'{name}{n}', 50, timestamp=ago(2), **extra) for n in range(previous_calls)])
+            os.utime(path, (100 + i if i >= 0 else 100, 100 + i))
+        extra = {'gitBranch': branch} if branch else {}
+        parts = [response(f'c{n}', 10, timestamp=ago(0.1), **extra) for n in range(current)]
+        for b in branches:  # the session ends on the last of these branches
+            parts.insert(0, response('sw', 10, timestamp=ago(0.2), gitBranch=b))
+        log(os.path.join(proj, 'cur.jsonl'), *parts)
+        if config is not None:
+            write(os.path.join(repo, '.claude', 'gw.json'), config)
+            for rel in ('scripts/config.py', 'schema/gw.schema.json'):
+                os.makedirs(os.path.dirname(os.path.join(repo, rel)), exist_ok=True)
+                shutil.copy(workflow_file(rel), os.path.join(repo, rel))
+        env = {**os.environ, 'HOME': home, 'CLAUDE_CODE_REMOTE': 'true'}
+        return subprocess.run(['python3', MEASURE, *args], capture_output=True, text=True, cwd=repo, env=env)
+
+    CONFIG = '{"version": "0.1.0", "language": "en", "log": "docs/log.md", "protectedBranch": "main", ' \
+             '"pushToProtected": "pr", "check": ["make check"], "reviewMark": "docs/reviewed.txt", ' \
+             '"content": ["^docs/"]%s}'
+
+    def test_short_session_measures_the_previous_one_of_the_same_branch(self):
+        r = self.short_session(2)  # no config file: minCalls 5
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('Session: prev.jsonl', r.stdout)
+        self.assertIn('API calls: 3', r.stdout)
+        self.assertIn('Note: the current session has 2 calls (under measure.minCalls = 5); '
+                      'measuring the previous session of branch feat: prev.jsonl', r.stdout)
+
+    def test_enough_calls_measures_the_current_one(self):
+        for n in (5, 6):  # the threshold itself is enough
+            r = self.short_session(n)
+            self.assertIn('Session: cur.jsonl', r.stdout)
+            self.assertNotIn('Note:', r.stdout)
+
+    def test_previous_session_of_another_branch_or_without_branch_is_not_used(self):
+        r = self.short_session(2, previous=(('other', 'main'),))
+        self.assertIn('Session: cur.jsonl', r.stdout)
+        self.assertIn('there is no previous session of branch feat: measuring cur.jsonl', r.stdout)
+        self.assertIn('API calls: 2', r.stdout)
+        # the previous one is the newest of the same branch, skipping other branches in between
+        r = self.short_session(2, previous=(('old', 'feat'), ('mid', 'main')))
+        self.assertIn('Session: old.jsonl', r.stdout)
+
+    def test_no_previous_session_measures_the_current_one_with_a_note(self):
+        r = self.short_session(2, previous=())
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('Session: cur.jsonl', r.stdout)
+        self.assertIn('Note: the current session has 2 calls (under measure.minCalls = 5) and there is no '
+                      'previous session of branch feat: measuring cur.jsonl', r.stdout)
+
+    def test_previous_session_without_calls_in_the_period_is_skipped(self):
+        r = self.short_session(2, args=('--since', ago(1)))  # prev.jsonl calls are stamped HOUR (2026-10-19)
+        self.assertIn('Session: cur.jsonl', r.stdout)
+        self.assertIn('there is no previous session', r.stdout)
+
+    def test_min_calls_zero_turns_it_off(self):
+        r = self.short_session(1, config=self.CONFIG % ', "measure": {"minCalls": 0}')
+        self.assertIn('Session: cur.jsonl', r.stdout)
+        self.assertNotIn('Note:', r.stdout)
+
+    def test_min_calls_comes_from_the_config(self):
+        low = self.short_session(2, config=self.CONFIG % ', "measure": {"minCalls": 2}')
+        self.assertIn('Session: cur.jsonl', low.stdout)
+        high = self.short_session(5, config=self.CONFIG % ', "measure": {"minCalls": 6}')
+        self.assertIn('Session: prev.jsonl', high.stdout)
+        self.assertIn('measure.minCalls = 6', high.stdout)
+        absent = self.short_session(2, config=self.CONFIG % '')  # valid config without the key: the default
+        self.assertIn('Session: prev.jsonl', absent.stdout)
+
+    def chars_per_token_in(self, config):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('measure_mod', MEASURE)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        repo = folder()
+        subprocess.run(['git', 'init', '-q', repo], check=True)
+        if config is not None:
+            write(os.path.join(repo, '.claude', 'gw.json'), config)
+            for rel in ('scripts/config.py', 'schema/gw.schema.json'):
+                os.makedirs(os.path.dirname(os.path.join(repo, rel)), exist_ok=True)
+                shutil.copy(workflow_file(rel), os.path.join(repo, rel))
+        return mod.chars_per_token(repo)
+
+    def test_chars_per_token_comes_from_the_context_guard_config(self):
+        self.assertEqual(self.chars_per_token_in(None), 3.5, 'no config: the built-in value')
+        self.assertEqual(self.chars_per_token_in(self.CONFIG % ''), 3.5, 'valid config without the key: the default')
+        self.assertEqual(self.chars_per_token_in(self.CONFIG % ', "contextGuard": {"charsPerToken": 4}'), 4.0)
+        self.assertEqual(self.chars_per_token_in(self.CONFIG % ', "contextGuard": {"charsPerToken": 0}'), 3.5,
+                         'an invalid value (the config fails closed) keeps 3.5')
+        self.assertEqual(self.chars_per_token_in('{not json'), 3.5)
+
+    def measure_value_in(self, config, name, default, integer):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('measure_mod2', MEASURE)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        repo = folder()
+        subprocess.run(['git', 'init', '-q', repo], check=True)
+        if config is not None:
+            write(os.path.join(repo, '.claude', 'gw.json'), config)
+            for rel in ('scripts/config.py', 'schema/gw.schema.json'):
+                os.makedirs(os.path.dirname(os.path.join(repo, rel)), exist_ok=True)
+                shutil.copy(workflow_file(rel), os.path.join(repo, rel))
+        return mod.measure_value(repo, name, default, integer)
+
+    def test_a13_measure_constants_default_set_and_bad_values(self):
+        for name, default, integer, good, shown in (('imageTokens', 1600, True, 2000, 2000),
+                                                    ('mixedRatio', 1.5, False, 2.5, 2.5),
+                                                    ('minOutput', 100, True, 7, 7)):
+            def in_(config):
+                return self.measure_value_in(config, name, default, integer)
+            self.assertEqual(in_(None), default, name + ': no config')
+            self.assertEqual(in_(self.CONFIG % ''), default, name + ': valid config without the key')
+            self.assertEqual(in_(self.CONFIG % ', "measure": {"%s": %s}' % (name, good)), shown, name + ': set value')
+            for bad in ('0', '-3', '"x"'):  # the config fails closed (its reason: the schema minimum or type): default
+                self.assertEqual(in_(self.CONFIG % ', "measure": {"%s": %s}' % (name, bad)), default, name + bad)
+            self.assertEqual(in_('{not json'), default)
+
+    def test_malformed_or_invalid_config_falls_back_to_the_default(self):
+        for config in ('{not json', self.CONFIG % ', "measure": {"minCalls": -1}',
+                       self.CONFIG % ', "measure": {"minCalls": "x"}'):
+            r = self.short_session(2, config=config)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn('Session: prev.jsonl', r.stdout, config)
+            self.assertIn('measure.minCalls = 5', r.stdout)
+
+    def test_default_period_after_a_clear_still_measures_the_previous_session(self):
+        """The previous log (more calls, inside the 24 h) must not be taken as the current session."""
+        r = self.short_session(1, previous_calls=8, args=())
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('Session: prev.jsonl', r.stdout)
+        self.assertIn('API calls: 8', r.stdout)
+        self.assertIn('Note: the current session has 1 calls', r.stdout)
+        enough = self.short_session(6, previous_calls=8, args=())  # current has enough: the usual choice
+        self.assertNotIn('Note:', enough.stdout)
+
+    def test_session_that_switched_branch_counts_by_its_last_branch(self):
+        r = self.short_session(2, previous=(('onfeat', 'feat'), ('onmain', 'main')), branches=('main',), branch='feat')
+        self.assertIn('Session: onfeat.jsonl', r.stdout)  # ended on feat, though it began on main
+        r = self.short_session(2, previous=(('onfeat', 'feat'), ('onmain', 'main')), branches=('feat',), branch='main')
+        self.assertIn('Session: onmain.jsonl', r.stdout)
+
+    def test_current_session_without_branch_is_measured_with_a_note(self):
+        r = self.short_session(2, branch=None)  # detached HEAD or an old log: no gitBranch
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('Session: cur.jsonl', r.stdout)
+        self.assertIn('there is no previous session of its branch: measuring cur.jsonl', r.stdout)
+
+    def test_previous_sessions_with_the_same_mtime_break_the_tie_by_name(self):
+        home, repo = folder(), folder()
+        subprocess.run(['git', 'init', '-q', repo], check=True)
+        proj = os.path.join(home, '.claude', 'projects', '-home-user')
+        for name in ('a', 'b'):
+            os.utime(log(os.path.join(proj, f'{name}.jsonl'),
+                         *[response(f'{name}{n}', 5, gitBranch='feat', timestamp=ago(2)) for n in range(3)]), (100, 100))
+        log(os.path.join(proj, 'cur.jsonl'), response('c', 10, gitBranch='feat', timestamp=ago(0.1)))
+        env = {**os.environ, 'HOME': home, 'CLAUDE_CODE_REMOTE': 'true'}
+        r = subprocess.run(['python3', MEASURE, '--hours', '0'], capture_output=True, text=True, cwd=repo, env=env)
+        self.assertIn('Session: b.jsonl', r.stdout)
+
+    def test_explicit_session_is_never_replaced(self):
+        out = self.measure([response('a', 10, gitBranch='feat')])  # --session with 1 call
+        self.assertIn('Session: s.jsonl', out)
+        self.assertNotIn('Note:', out)
 
 
 if __name__ == '__main__':
