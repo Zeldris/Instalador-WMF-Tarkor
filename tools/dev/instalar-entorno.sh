@@ -23,8 +23,12 @@ if command -v apt-get >/dev/null && command -v dpkg >/dev/null && { [ "$(id -u)"
   if [ ${#faltan[@]} -gt 0 ]; then
     log="$(mktemp)"
     echo "Instalando ${#faltan[@]} paquetes de sistema (${faltan[*]})…"
-    ("${como_root[@]}" apt-get update -qq && "${como_root[@]}" env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${faltan[@]}") >"$log" 2>&1 \
-      || echo "AVISO: no se pudieron instalar (log en $log); sin ellos no compila src-tauri ni corren las e2e."
+    if ! ("${como_root[@]}" apt-get update -qq && "${como_root[@]}" env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${faltan[@]}") >"$log" 2>&1; then
+      echo "AVISO: no se pudieron instalar (log en $log); sin ellos no compila src-tauri ni corren las e2e. Final del log:"
+      tail -n 20 "$log" | sed 's/^/  | /'
+      # En CI (GitHub Actions pone CI=true) se para aquí: si no, el fallo sale más tarde y sin su causa, en clippy.
+      [ "${CI:-}" = true ] && exit 1
+    fi
   fi
 else
   echo "Paquetes de sistema: instálalos a mano si faltan (${paquetes[*]})."
