@@ -10,28 +10,44 @@ set -uo pipefail
 cd "$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 
 paquetes=(libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libxdo-dev libssl-dev
-  gcc-mingw-w64-x86-64 webkit2gtk-driver xvfb)
+  gcc-mingw-w64-x86-64)
+# Solo para las e2e: van aparte porque `apt-get install` es todo o nada y alguno no existe en todas las imágenes
+# (webkit2gtk-driver falta en el ubuntu-latest de GitHub Actions desde nov. 2026); su falta solo avisa.
+paquetes_e2e=(webkit2gtk-driver xvfb)
 # Como root, apt-get directo; si no, con un sudo que no pida contraseña (el runner de GitHub Actions, donde lo corre
 # el `check` de .github/workflows/check.yml).
 como_root=()
 [ "$(id -u)" = 0 ] || { sudo -n true 2>/dev/null && como_root=(sudo -n); }
-if command -v apt-get >/dev/null && command -v dpkg >/dev/null && { [ "$(id -u)" = 0 ] || [ ${#como_root[@]} -gt 0 ]; }; then
-  faltan=()
-  for p in "${paquetes[@]}"; do
+# Instala los que falten de la lista; si apt falla, enseña el final de su log y devuelve 1.
+instalar_apt() {
+  local faltan=() p log
+  for p in "$@"; do
     dpkg -s "$p" >/dev/null 2>&1 || faltan+=("$p")
   done
-  if [ ${#faltan[@]} -gt 0 ]; then
-    log="$(mktemp)"
-    echo "Instalando ${#faltan[@]} paquetes de sistema (${faltan[*]})…"
-    if ! ("${como_root[@]}" apt-get update -qq && "${como_root[@]}" env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${faltan[@]}") >"$log" 2>&1; then
-      echo "AVISO: no se pudieron instalar (log en $log); sin ellos no compila src-tauri ni corren las e2e. Final del log:"
-      tail -n 20 "$log" | sed 's/^/  | /'
-      # En CI (GitHub Actions pone CI=true) se para aquí: si no, el fallo sale más tarde y sin su causa, en clippy.
-      [ "${CI:-}" = true ] && exit 1
-    fi
+  [ ${#faltan[@]} -gt 0 ] || return 0
+  log="$(mktemp)"
+  echo "Instalando ${#faltan[@]} paquetes de sistema (${faltan[*]})…"
+  if [ -z "${apt_actualizado:-}" ]; then
+    "${como_root[@]}" apt-get update -qq >"$log" 2>&1 && apt_actualizado=1
   fi
+  if ! "${como_root[@]}" env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${faltan[@]}" >>"$log" 2>&1; then
+    echo "AVISO: no se pudieron instalar (log en $log). Final del log:"
+    tail -n 20 "$log" | sed 's/^/  | /'
+    return 1
+  fi
+}
+if command -v apt-get >/dev/null && command -v dpkg >/dev/null && { [ "$(id -u)" = 0 ] || [ ${#como_root[@]} -gt 0 ]; }; then
+  if ! instalar_apt "${paquetes[@]}"; then
+    echo "AVISO: sin ellos no compila src-tauri."
+    # En CI (GitHub Actions pone CI=true) se para aquí: si no, el fallo sale más tarde y sin su causa, en clippy.
+    [ "${CI:-}" = true ] && exit 1
+  fi
+  # Uno a uno: el que no exista no impide instalar el otro.
+  for p in "${paquetes_e2e[@]}"; do
+    instalar_apt "$p" || echo "AVISO: sin $p no corren las e2e."
+  done
 else
-  echo "Paquetes de sistema: instálalos a mano si faltan (${paquetes[*]})."
+  echo "Paquetes de sistema: instálalos a mano si faltan (${paquetes[*]} ${paquetes_e2e[*]})."
 fi
 
 (cd app && npm install --no-audit --no-fund --loglevel=error) \
