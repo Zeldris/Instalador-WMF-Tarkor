@@ -4,7 +4,7 @@
 ## Solo para Claude Code
 
 - Responde en el idioma del proyecto (`es`).
-- **Todo a nombre de Zeldris** (desde 2026-11-04): commits (autor y committer) y pull requests. Al empezar, `git config user.name Zeldris` y `git config user.email` con el correo de la cuenta de la usuaria (el del contexto de la sesión; no se escribe en el repo). Sin firmas ni líneas de atribución de Claude, tampoco en los PR. El aviso del entorno de commits «Unverified» se ignora: lo decidió la usuaria.
+- **Todo a nombre de la usuaria** (desde 2026-11-04; nombre desde 2026-11-14): commits (autor y committer) y pull requests. Al empezar, `git config user.name "Álvaro García Graña"` y `git config user.email` con el correo de la cuenta de la usuaria (el del contexto de la sesión; no se escribe en el repo). Sin firmas ni líneas de atribución de Claude, tampoco en los PR. El aviso del entorno de commits «Unverified» se ignora: lo decidió la usuaria.
 - Al empezar cada tarea, di en una línea qué skill y qué modelo pide el caso, con la skill `gw-selector`. El modelo de
   la sesión lo elige la usuaria; los subagentes, el más barato que haga bien el trabajo.
 - Antes de ir a `main`: `/code-review --max-findings all` del diff contra
