@@ -10,10 +10,10 @@
 // el resto es entrada y salida.
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, realpathSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 
 export const VERSION_CARGO_ABOUT = '0.9.3'
 export const ORDEN_INSTALAR = `cargo install cargo-about --locked --features cli --version ${VERSION_CARGO_ABOUT}`
@@ -109,19 +109,46 @@ export function paquetesDeProduccion(lock) {
 /** ¿Es este archivo uno de licencia con texto (no solo la etiqueta SPDX de `LICENSE.spdx`)? */
 export const esArchivoDeLicencia = (nombre) => /^(licen[sc]e|copying)([-_.].*)?$/i.test(nombre) && !/\.spdx$/i.test(nombre)
 
-/**
- * Los textos de respaldo de un paquete npm sin archivo de licencia propio: el texto estándar de cada id de su
- * licencia que ya traiga alguna crate (`textosPorId`: id SPDX -> texto). Devuelve [] si no hay ninguno.
- */
-export function textosDeRespaldo(licencia, textosPorId) {
-  return idsDeExpresion(licencia).map((id) => textosPorId.get(id)).filter(Boolean)
+/** Crate de Rust homóloga de un paquete npm de los plugins de Tauri (`@tauri-apps/plugin-X` -> `tauri-plugin-X`), o null. */
+export function crateHomologa(nombre) {
+  const m = /^@tauri-apps\/plugin-(.+)$/.exec(nombre)
+  return m ? `tauri-plugin-${m[1]}` : null
 }
 
-/** Mapa id SPDX -> primer texto (el de menor orden, para que sea estable) de la salida de cargo-about. */
-export function textosPorId(salida) {
-  const m = new Map()
-  for (const l of [...salida.licenses].sort((a, b) => comparar(a.text, b.text))) if (!m.has(l.id)) m.set(l.id, l.text)
-  return m
+/**
+ * Los textos de respaldo de un paquete npm sin archivo de licencia propio, por este orden: los de su crate homóloga
+ * si cargo-about la trae (`textosPorCrate`: nombre de crate -> textos) y, si no, el texto canónico de cada id SPDX de
+ * su licencia (`canonicos`: id -> texto, guardados en el repo). Nunca el texto de una crate no relacionada. [] si no hay.
+ */
+export function textosDeRespaldo(nombre, licencia, textosPorCrate, canonicos) {
+  const crate = crateHomologa(nombre)
+  const propios = crate ? textosPorCrate.get(crate) : null
+  if (propios && propios.length > 0) return propios
+  return idsDeExpresion(licencia).map((id) => canonicos.get(id)).filter(Boolean)
+}
+
+/** Mapa nombre de crate -> textos de licencia, de las entradas de `entradasDeCargoAbout`. */
+export function textosPorCrate(entradas) {
+  return new Map(entradas.map((e) => [e.nombre, e.textos]))
+}
+
+/** Licencias aceptadas (`accepted`) de un `about.toml`: lista de ids o expresiones SPDX. */
+export function aceptadasDeToml(toml) {
+  const m = /^accepted\s*=\s*\[([^\]]*)\]/m.exec(toml)
+  if (!m) throw new Error('about.toml no tiene `accepted`')
+  return [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1])
+}
+
+/**
+ * ¿Está aceptada esta expresión SPDX? Basta que cada término `AND` tenga alguna alternativa `OR` aceptada
+ * (`Apache-2.0 WITH LLVM-exception` cuenta como un id). Sin paréntesis; con ellos, todos sus ids deben estar aceptados.
+ */
+export function licenciaAceptada(expr, aceptadas) {
+  const ok = (id) => aceptadas.includes(id.trim())
+  const e = (expr ?? '').trim()
+  if (!e) return false
+  if (e.includes('(')) return idsDeExpresion(e).every(ok)
+  return e.split(/\s+AND\s+/).every((y) => y.split(/\s+OR\s+/).some(ok))
 }
 
 /** El texto plano de `THIRD-PARTY-NOTICES.txt`. */
@@ -144,6 +171,9 @@ export function aTextoPlano(datos) {
 const AQUI = dirname(fileURLToPath(import.meta.url))
 const APP = resolve(AQUI, '..')
 
+// Textos canónicos de reserva por id SPDX (en el repo, nunca el de una crate cualquiera).
+const CANONICOS = { 'Apache-2.0': 'Apache-2.0.txt', MIT: 'MIT-SPDX.txt' }
+
 function fallar(mensaje) {
   console.error(`licencias-terceros: ${mensaje}`)
   process.exit(1)
@@ -154,13 +184,16 @@ function correrCargoAbout() {
   if (version.error || version.status !== 0) {
     fallar(`falta cargo-about. Instálalo con:\n  ${ORDEN_INSTALAR}`)
   }
+  if (version.stdout.trim() !== `cargo-about ${VERSION_CARGO_ABOUT}`) {
+    fallar(`cargo-about es «${version.stdout.trim()}» y el generador está fijado a ${VERSION_CARGO_ABOUT}. Instálalo con:\n  ${ORDEN_INSTALAR}`)
+  }
   // A un archivo con -o, no por stdout: bajo PowerShell (el CI de Windows) cargo-about se niega a escribir en una
   // salida redirigida, por los problemas de codificación de PowerShell.
   const dir = mkdtempSync(join(tmpdir(), 'cargo-about-'))
   const salida = join(dir, 'licencias.json')
   try {
     const r = spawnSync('cargo', ['about', 'generate', '--workspace', '--locked', '--format', 'json', '-o', salida], {
-      cwd: APP, encoding: 'utf8', maxBuffer: 1 << 30,
+      cwd: APP, encoding: 'utf8',
     })
     if (r.status !== 0 || !existsSync(salida)) {
       process.stderr.write(r.stderr ?? '')
@@ -172,7 +205,9 @@ function correrCargoAbout() {
   }
 }
 
-function entradasDeNpm(porId) {
+export function entradasDeNpmEn(APP, porCrate) {
+  const aceptadas = aceptadasDeToml(readFileSync(join(APP, 'about.toml'), 'utf8'))
+  const canonicos = new Map(Object.entries(CANONICOS).map(([id, f]) => [id, limpiarTexto(readFileSync(join(AQUI, '..', 'src', 'licencias', f), 'utf8'))]))
   const lock = JSON.parse(readFileSync(join(APP, 'package-lock.json'), 'utf8'))
   // Un paquete opcional que no se instala en esta plataforma no entra en la app: se salta.
   return paquetesDeProduccion(lock).filter((p) => !(p.opcional && !existsSync(join(APP, p.ruta)))).map((p) => {
@@ -181,11 +216,14 @@ function entradasDeNpm(porId) {
     let licencia = p.licencia
     if (!licencia) licencia = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')).license
     if (!licencia) fallar(`el paquete npm ${p.nombre}@${p.version} no declara licencia.`)
+    if (!licenciaAceptada(licencia, aceptadas)) {
+      fallar(`el paquete npm ${p.nombre}@${p.version} tiene la licencia «${licencia}», que no está en \`accepted\` de app/about.toml (se añade solo tras revisarla).`)
+    }
     const textos = readdirSync(dir).filter(esArchivoDeLicencia).sort().map((f) => readFileSync(join(dir, f), 'utf8'))
     if (textos.length === 0) {
-      const respaldo = textosDeRespaldo(licencia, porId)
-      if (respaldo.length === 0) fallar(`el paquete npm ${p.nombre}@${p.version} (${licencia}) no trae archivo de licencia y no hay texto estándar de respaldo.`)
-      console.warn(`licencias-terceros: ${p.nombre}@${p.version} no trae archivo de licencia; se usa el texto estándar de ${licencia}.`)
+      const respaldo = textosDeRespaldo(p.nombre, licencia, porCrate, canonicos)
+      if (respaldo.length === 0) fallar(`el paquete npm ${p.nombre}@${p.version} (${licencia}) no trae archivo de licencia y no hay texto de respaldo (ni de su crate homóloga ni canónico).`)
+      console.warn(`licencias-terceros: ${p.nombre}@${p.version} no trae archivo de licencia; se usa el texto de respaldo de ${licencia}.`)
       textos.push(...respaldo)
     }
     return { nombre: p.nombre, version: p.version, ecosistema: 'npm', licencia, textos }
@@ -194,7 +232,8 @@ function entradasDeNpm(porId) {
 
 function main() {
   const cargo = correrCargoAbout()
-  const datos = agrupar([...entradasDeCargoAbout(cargo), ...entradasDeNpm(textosPorId(cargo))])
+  const rust = entradasDeCargoAbout(cargo)
+  const datos = agrupar([...rust, ...entradasDeNpmEn(APP, textosPorCrate(rust))])
   const json = join(APP, 'src', 'licencias', 'generadas', 'terceros.json')
   const txt = join(APP, 'dist-licencias', 'THIRD-PARTY-NOTICES.txt')
   mkdirSync(dirname(json), { recursive: true })
@@ -205,4 +244,12 @@ function main() {
   console.log(`licencias-terceros: ${datos.grupos.length} licencias, ${paquetes} paquetes -> ${json} y ${txt}`)
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main()
+/** ¿Se corre este archivo directamente? Compara rutas reales (enlaces simbólicos) y, en Windows, sin distinguir mayúsculas. */
+export function esEjecucionDirecta(url, argv1, plataforma = process.platform) {
+  if (!argv1) return false
+  const real = (p) => { try { return realpathSync(p) } catch { return resolve(p) } }
+  const norm = (p) => (plataforma === 'win32' ? real(p).toLowerCase() : real(p))
+  return norm(fileURLToPath(url)) === norm(argv1)
+}
+
+if (esEjecucionDirecta(import.meta.url, process.argv[1])) main()

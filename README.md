@@ -26,7 +26,7 @@ gestión de procesos). La build final se hace desde el repo privado (ver
 | Motor de IA | Ollama propio de la app como sidecar, descargado en el primer arranque | Propuesta, se valida en fase 0 | [03](docs/03-ollama-y-modelos-ia.md) |
 | Narrador | Modelo base + `system` por petición (sin `ollama create`) | Propuesta, se valida en fase 0 | [03](docs/03-ollama-y-modelos-ia.md) |
 | Modelo del narrador | `llama3.1:8b` en Equilibrado y Máximo, el mismo que el juego (Llama 3.1 Community License) | Decidido (2026-11-11) | [03](docs/03-ollama-y-modelos-ia.md), [12](docs/12-catalogo-y-rendimiento.md) |
-| Licencias en el instalador | Pantalla «Licencias y avisos» (paso 2 y Ajustes): «Built with Llama», aviso de Meta, política de uso y textos completos | Implementado | [08](docs/08-legal-y-privacidad.md), [11](docs/11-diseno-del-frontal.md) |
+| Licencias en el instalador | Pantalla «Licencias y avisos» (paso 2 y Ajustes): «Built with Llama», aviso de Meta, política de uso y textos completos. Licencias de terceros (INS-47): generadas en el build con cargo-about y npm, sección al estilo chrome://credits y `THIRD-PARTY-NOTICES.txt` | Implementado | [08](docs/08-legal-y-privacidad.md), [11](docs/11-diseno-del-frontal.md) |
 | Hardware | Análisis del equipo con permiso + perfiles Mínimo / Ligero / Equilibrado / Máximo / Ultra (experimental) | Decidido | [09](docs/09-deteccion-de-equipo-y-perfiles.md) |
 | Modelos y perfiles | En `app/catalogo/catalogo.json`, sin tocar código; sustituible desde la carpeta de datos | Implementado | [12](docs/12-catalogo-y-rendimiento.md) |
 | Rendimiento | Ajustes de Ollama y del backend calculados para cada equipo y perfil | Implementado, cifras por medir | [12](docs/12-catalogo-y-rendimiento.md) |

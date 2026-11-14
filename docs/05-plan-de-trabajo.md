@@ -214,11 +214,12 @@ Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md
   de terceros» al final de la página de licencias, agrupada por licencia y desplegable (paquete, versión y texto,
   sin repetir textos iguales), generada en el build y no versionada. El mismo contenido va a un
   `THIRD-PARTY-NOTICES.txt` que `INS-46` publica con cada versión, junto al `NOTICE` de Llama (`08`).
-  Hecho el 2026-11-12: `app/herramientas/licencias-terceros.mjs` (lo corre `npm run build`) junta cargo-about 0.9.3
+  Hecho el 2026-11-12: `app/herramientas/licencias-terceros.mjs` (lo corre `npm run build`) junta cargo-about (versión fijada en
+  `VERSION_CARGO_ABOUT` de ese archivo)
   (`app/about.toml`: licencias aceptadas y los dos destinos) y las dependencias de producción de `package-lock.json`, y
   escribe `app/src/licencias/generadas/terceros.json` y `app/dist-licencias/THIRD-PARTY-NOTICES.txt` (los dos
-  ignorados). Hoy: 24 licencias y 368 paquetes (360 crates y 8 de npm), ~410 KB. La sección `LicenciasDeTerceros`
-  solo pinta un grupo al abrirlo; sin el archivo (dev, vitest) dice que no se generó. El CI instala cargo-about en
+  ignorados). Hoy: 24 licencias y 368 paquetes (360 crates y 8 de npm), ~590 KB (`terceros.json`, en su propio fragmento del bundle, cargado al abrir la sección). La sección `LicenciasDeTerceros`
+  solo pinta un grupo al abrirlo; sin el archivo (dev, vitest) dice que no se generó, y el build de producción para si falta. El CI instala cargo-about en
   los tres jobs que compilan, e `instalar-entorno.sh` en local. Entran también las dependencias de build (más de lo
   estricto, nunca menos). Los dos plugins de Tauri de npm no traen archivo de licencia: van con el texto estándar.
 - [ ] **INS-56** La marca de Tarkor en el asistente (de `UX-40` del juego, decidido con la usuaria el

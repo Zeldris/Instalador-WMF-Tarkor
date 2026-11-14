@@ -46,7 +46,23 @@ fi
 (cd app && cargo fetch -q) || echo "AVISO: cargo fetch falló (¿red?); se reintentará al compilar."
 git config blame.ignoreRevsFile .git-blame-ignore-revs
 command -v tauri-driver >/dev/null || echo "Para las e2e falta tauri-driver: cargo install tauri-driver --locked"
-# INS-47: las licencias de terceros las saca cargo-about en cada `npm run build` (versión fijada en app/herramientas/licencias-terceros.mjs).
-command -v cargo-about >/dev/null || cargo install cargo-about --locked --features cli --version 0.9.3 \
-  || echo "AVISO: falta cargo-about y no se pudo instalar; el build lo necesita: cargo install cargo-about --locked --features cli --version 0.9.3"
+# INS-47: las licencias de terceros las saca cargo-about en cada `npm run build`. La versión se fija en un solo sitio,
+# app/herramientas/licencias-terceros.mjs (VERSION_CARGO_ABOUT); se reinstala si la instalada es otra. Primero se baja el
+# binario precompilado de la release (segundos); si falla, se compila con `cargo install`.
+ver_about="$(sed -n "s/^export const VERSION_CARGO_ABOUT = '\([^']*\)'.*/\1/p" app/herramientas/licencias-terceros.mjs)"
+if [ -z "$ver_about" ]; then
+  echo "AVISO: no se pudo leer VERSION_CARGO_ABOUT de app/herramientas/licencias-terceros.mjs; cargo-about sin comprobar."
+elif [ "$(cargo-about --version 2>/dev/null)" != "cargo-about $ver_about" ]; then
+  log="$(mktemp)"
+  echo "Instalando cargo-about $ver_about (log en $log)…"
+  url="https://github.com/EmbarkStudios/cargo-about/releases/download/$ver_about/cargo-about-$ver_about-x86_64-unknown-linux-musl.tar.gz"
+  destino="${CARGO_HOME:-$HOME/.cargo}/bin"
+  tmp_about="$(mktemp -d)"
+  { [ "$(uname -s)-$(uname -m)" = "Linux-x86_64" ] && mkdir -p "$destino" \
+      && curl -sSfL "$url" | tar -xz -C "$tmp_about" --strip-components=1 \
+      && install -m 755 "$tmp_about/cargo-about" "$destino/cargo-about"; } >>"$log" 2>&1 \
+    || cargo install cargo-about --locked --features cli --version "$ver_about" >>"$log" 2>&1 \
+    || echo "AVISO: falta cargo-about $ver_about y no se pudo instalar (log en $log); el build lo necesita: cargo install cargo-about --locked --features cli --version $ver_about"
+  rm -rf "$tmp_about"
+fi
 echo "Entorno listo: dependencias de Tauri, npm del asistente y crates de Cargo."

@@ -1,6 +1,12 @@
 // La parte pura del generador de licencias de terceros (INS-47): agrupar, deduplicar y ordenar.
+import { spawnSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import {
+  aceptadasDeToml, crateHomologa, esEjecucionDirecta, licenciaAceptada, textosPorCrate,
   agrupar, aTextoPlano, entradasDeCargoAbout, esArchivoDeLicencia, idsDeExpresion, normalizarExpresion,
   paquetesDeProduccion, textosDeRespaldo,
 } from './licencias-terceros.mjs'
@@ -68,9 +74,64 @@ describe('licencias-terceros', () => {
   it('reconoce los archivos de licencia, no la etiqueta SPDX, y usa el texto estándar de respaldo', () => {
     for (const n of ['LICENSE', 'LICENCE', 'COPYING', 'LICENSE-MIT', 'license.md', 'LICENSE-APACHE-2.0']) expect(esArchivoDeLicencia(n), n).toBe(true)
     for (const n of ['LICENSE.spdx', 'package.json', 'licenses.json', 'README.md']) expect(esArchivoDeLicencia(n), n).toBe(false)
-    const m = new Map([['MIT', 'texto MIT']])
-    expect(textosDeRespaldo('MIT OR Apache-2.0', m)).toEqual(['texto MIT'])
-    expect(textosDeRespaldo('ISC', m)).toEqual([])
+    const canonicos = new Map([['MIT', 'texto MIT canónico']])
+    expect(textosDeRespaldo('x', 'MIT OR Apache-2.0', new Map(), canonicos)).toEqual(['texto MIT canónico'])
+    expect(textosDeRespaldo('x', 'ISC', new Map(), canonicos)).toEqual([])
+  })
+
+  it('el respaldo de un plugin de Tauri es el texto de su crate homóloga, nunca el de una crate ajena', () => {
+    expect(crateHomologa('@tauri-apps/plugin-dialog')).toBe('tauri-plugin-dialog')
+    expect(crateHomologa('react')).toBeNull()
+    // Con el código viejo salía el menor alfabético por id: aquí `Aaa` (código de otra crate) es menor que el texto bueno.
+    const crate = (name, text) => ({ crate: { name, version: '1.0.0', license: 'MIT', source: 'registry+x' }, text })
+    const entradas = entradasDeCargoAbout({ licenses: [
+      { id: 'MIT', text: 'Aaa fn main() { /* código de regex_syntax */ }', used_by: [crate('regex-syntax')] },
+      { id: 'MIT', text: 'MIT (c) Tauri Programme', used_by: [{ crate: { name: 'tauri-plugin-dialog', version: '2.0.0', license: 'MIT', source: 'registry+x' } }] },
+    ] })
+    const porCrate = textosPorCrate(entradas)
+    const canonicos = new Map([['MIT', 'MIT canónico']])
+    expect(textosDeRespaldo('@tauri-apps/plugin-dialog', 'MIT', porCrate, canonicos)).toEqual(['MIT (c) Tauri Programme'])
+    // Sin crate homóloga: el canónico, no el texto de regex-syntax.
+    expect(textosDeRespaldo('@tauri-apps/plugin-clipboard-manager', 'MIT', porCrate, canonicos)).toEqual(['MIT canónico'])
+    expect(textosDeRespaldo('otro', 'MIT', porCrate, canonicos).join()).not.toContain('regex_syntax')
+  })
+
+  it('aplica a npm las licencias aceptadas de about.toml', () => {
+    const acc = aceptadasDeToml('x = 1\naccepted = [\n  "MIT",\n  "OFL-1.1",\n  "Apache-2.0 WITH LLVM-exception",\n]\ntargets = ["a"]')
+    expect(acc).toEqual(['MIT', 'OFL-1.1', 'Apache-2.0 WITH LLVM-exception'])
+    expect(licenciaAceptada('MIT', acc)).toBe(true)
+    expect(licenciaAceptada('GPL-3.0-only OR MIT', acc)).toBe(true)
+    expect(licenciaAceptada('GPL-3.0-only', acc)).toBe(false)
+    expect(licenciaAceptada('MIT AND GPL-3.0-only', acc)).toBe(false)
+    expect(licenciaAceptada('', acc)).toBe(false)
+  })
+
+  it('el generador para con un mensaje claro si un paquete npm trae una licencia no aceptada', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'lt-'))
+    mkdirSync(join(dir, 'herramientas'))
+    mkdirSync(join(dir, 'node_modules', 'malo'), { recursive: true })
+    writeFileSync(join(dir, 'about.toml'), 'accepted = ["MIT"]\n')
+    writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ packages: { '': {}, 'node_modules/malo': { version: '1.0.0', license: 'GPL-3.0-only' } } }))
+    const r = spawnSync(process.execPath, ['--input-type=module', '-e', `
+      import { entradasDeNpmEn } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, 'licencias-terceros.mjs')).href)}
+      entradasDeNpmEn(${JSON.stringify(dir)}, new Map())`], { encoding: 'utf8' })
+    expect(r.status).toBe(1)
+    expect(r.stderr).toContain('malo@1.0.0')
+    expect(r.stderr).toContain('GPL-3.0-only')
+    expect(r.stderr).toContain('no está en `accepted` de app/about.toml')
+  })
+
+  it('reconoce la ejecución directa con rutas distintas del mismo archivo', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'lt-'))
+    const f = join(dir, 'a.mjs')
+    writeFileSync(f, '')
+    symlinkSync(f, join(dir, 'enlace.mjs'))
+    expect(esEjecucionDirecta(pathToFileURL(f).href, join(dir, 'enlace.mjs'))).toBe(true)
+    expect(esEjecucionDirecta(pathToFileURL(f).href, join(dir, 'otro.mjs'))).toBe(false)
+    expect(esEjecucionDirecta(pathToFileURL(f).href, undefined)).toBe(false)
+    // Windows: la unidad en mayúsculas o minúsculas.
+    expect(esEjecucionDirecta(pathToFileURL(f).href, f.toUpperCase(), 'win32')).toBe(true)
+    expect(esEjecucionDirecta(pathToFileURL(f).href, f.toUpperCase(), 'linux')).toBe(false)
   })
 
   it('el texto plano lleva cada grupo con su cuenta y sus textos', () => {

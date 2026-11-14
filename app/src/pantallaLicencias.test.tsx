@@ -122,8 +122,19 @@ describe('Licencias de terceros', () => {
     expect(document.querySelector('details')).toBeNull()
   })
 
-  it('la página de licencias incluye la sección (sin el archivo generado, la línea discreta)', async () => {
-    render(<Licencias volver={() => {}} />)
+  it('carga los datos al montar la sección (perezosa) y mientras llegan no dice nada', async () => {
+    const cargar = vi.fn().mockResolvedValue(datos)
+    render(<LicenciasDeTerceros cargar={cargar} />)
+    expect(screen.queryByText(t.tercerosSin)).toBeNull()
+    expect(await screen.findByText(t.tercerosResumen(3))).toBeTruthy()
+    expect(cargar).toHaveBeenCalledOnce()
+  })
+
+  it('la página de licencias carga la sección; sin el archivo generado (cargador que devuelve null), la línea «no se generaron»', async () => {
+    // Hermético: no depende de si existe src/licencias/generadas/terceros.json.
+    render(<Licencias volver={() => {}} cargarTerceros={() => Promise.resolve(null)} />)
     expect(await screen.findByRole('heading', { name: t.terceros })).toBeTruthy()
+    expect(await screen.findByText(t.tercerosSin)).toBeTruthy()
+    expect(t.tercerosSin).toContain('no se generaron')
   })
 })
