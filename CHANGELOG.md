@@ -20,6 +20,8 @@ y el tag `vX.Y.Z` crea el release con esas notas (`.github/workflows/release.yml
 - Dependencias del núcleo y la app al día frente a los avisos de RustSec: `rustls`, `rustls-webpki`, raíces de
   certificados, `tokio`, `rustix`; `zip` 2 → 9 y `ruzstd` 0.8 → 0.9 en la extracción del motor (INS-64).
 - Dependabot semanal (npm, cargo y acciones) y job `auditoria` en el CI con `cargo audit` y `npm audit` (INS-64).
+- Job `e2e` en el CI: las pruebas de punta a punta del asistente con tauri-driver bajo xvfb, más la variante del
+  error de red con un registro de modelos bloqueado falso (INS-63).
 
 ### Cambiado
 
