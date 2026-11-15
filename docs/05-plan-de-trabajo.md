@@ -34,13 +34,13 @@ Lo ya fusionado en `main` (fases 0, 1 y 4 hechas, con pruebas de punta a punta).
 | INS-6 | Prueba de empaquetado del backend a bytecode con Postgres (`herramientas/empaquetar-backend.mjs`); repetirla sobre SQLite y probar Prisma sin motor nativo queda para tras `INS-60` | hecho (2026-09-28, aprox.; fase 0, con la repetición sobre SQLite pendiente) |
 | INS-13 | Perfiles pequeños: se ofrecen Mínimo y Ligero con modelos Apache 2.0, avisando del resultado (calidad a confirmar en `INS-8`) | hecho (2026-09-28, aprox.; fase 1) |
 | INS-14 | Perfiles por encima del máximo seguro: elegibles con aviso y confirmación en la tarjeta (`09`, `11`) | hecho (2026-10-25; en el asistente y en Ajustes) |
-| INS-21 | Proveedor de base de datos por variable de entorno y `schema.sqlite.prisma` en el build, con test de sincronía | hecho (2026-09-28, aprox.; repo del juego, PR #1 cerrado sin fusionar: se rehace en `INS-60`) |
-| INS-22 | Embeddings en JSON y similitud coseno en JS | hecho (2026-09-28, aprox.; repo del juego, PR #1 sin fusionar) |
-| INS-23 | `lockRowForUpdate()` con mutex en memoria para SQLite | hecho (2026-09-28, aprox.; repo del juego, PR #1 sin fusionar) |
-| INS-24 | Los 16 campos de lista a `Json`; `push` reescritos con `anadirNpcRetirado` | hecho (2026-09-28, aprox.; repo del juego, PR #1 sin fusionar) |
-| INS-25 | `mode: 'insensitive'` y `skipDuplicates` | hecho (2026-09-28, aprox.; repo del juego, PR #1 sin fusionar) |
-| INS-26 | Batería de tests del backend pasando contra SQLite | hecho (2026-09-28, aprox.; repo del juego, PR #1 sin fusionar) |
-| INS-27 | Script de build de la base de datos plantilla (migrada, catálogo, lore indexado) | hecho (2026-09-28, aprox.; repo del juego, PR #1 sin fusionar) |
+| INS-21 | Proveedor de base de datos por variable de entorno y `schema.sqlite.prisma` en el build, con test de sincronía | descartado (hecho el 2026-09-28, aprox., en el PR #1 del repo del juego, que se cerró sin fusionar; se rehace en `INS-60`) |
+| INS-22 | Embeddings en JSON y similitud coseno en JS | descartado (PR #1 del juego cerrado sin fusionar; se rehace en `INS-60`) |
+| INS-23 | `lockRowForUpdate()` con mutex en memoria para SQLite | descartado (PR #1 del juego cerrado sin fusionar; se rehace en `INS-60`) |
+| INS-24 | Los 16 campos de lista a `Json`; `push` reescritos con `anadirNpcRetirado` | descartado (PR #1 del juego cerrado sin fusionar; se rehace en `INS-60`) |
+| INS-25 | `mode: 'insensitive'` y `skipDuplicates` | descartado (PR #1 del juego cerrado sin fusionar; se rehace en `INS-60`) |
+| INS-26 | Batería de tests del backend pasando contra SQLite | descartado (PR #1 del juego cerrado sin fusionar; se rehace en `INS-60`) |
+| INS-27 | Script de build de la base de datos plantilla (migrada, catálogo, lore indexado) | descartado (PR #1 del juego cerrado sin fusionar; se rehace en `INS-60`) |
 | INS-31 | Frontend: URL del backend en tiempo de ejecución (`apiBaseUrl()`, contrato `window.__TARKOR__.apiUrl` de [`04`](04-empaquetado-tauri.md)) | hecho (2026-10-26; en `main` del juego, `b76c66b2`, 8 tests) |
 | INS-32 | Frontend: fuentes Cinzel e Inter en local | hecho (2026-10-26; ya en `main` del juego por `BAS-1`, `4a150259`; sin cambios allí) |
 | INS-33 | Frontend: sin `ImagePromptSlot` ni admin en el juego empaquetado; «Crear desde cero» deshabilitada | hecho (2026-10-27; en `main` del juego, `aae4a755`, `esEmpaquetado()`, 9 tests) |
@@ -69,7 +69,7 @@ Cierra con el plan como roadmap, una sola versión en la app, `CHANGELOG.md` y `
 | Id | Tarea | Estado |
 |---|---|---|
 | FLU-10 | Roadmap por versiones (este documento), `roadmapFiles` en `.claude/gw.json`, versión única en `app/src-tauri/tauri.conf.json` copiada por script a `package.json` y `Cargo.toml`, `CHANGELOG.md` Keep a Changelog y `release.yml` por tag sin binarios | en curso (2026-11-15: hecho todo salvo el tag `v0.1.0` sobre `9fce3d1`, que espera confirmación de la usuaria) |
-| FLU-11 | Corregir plan y bitácora sobre el PR #1 del juego: está cerrado sin fusionar, no «a medias» | pendiente |
+| FLU-11 | Corregir plan y bitácora sobre el PR #1 del juego: está cerrado sin fusionar, no «a medias» | hecho (2026-11-15; `INS-21`…`INS-27` pasan a descartados, la bitácora y [`02`](02-migracion-postgres-a-sqlite.md) apuntan a `INS-60`) |
 
 ## `0.3` «Base de datos»
 

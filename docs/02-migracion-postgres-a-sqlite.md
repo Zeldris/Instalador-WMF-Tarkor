@@ -122,6 +122,6 @@ Antes de migrar, se hace una copia de seguridad del `.sqlite` del jugador (`tark
 
 ## Qué falta
 
-- Implementar los puntos 1-4 en el repo del juego (fase 2 de
-  [`05-plan-de-trabajo.md`](05-plan-de-trabajo.md)).
+- Implementar los puntos 1-4 en el repo del juego sobre su `main` actual (`INS-60` de
+  [`05-plan-de-trabajo.md`](05-plan-de-trabajo.md)): el primer intento, su PR #1, se cerró sin fusionar.
 - Pasar la batería de tests del backend (`vitest`) contra SQLite.

@@ -13,8 +13,8 @@ cada commit.**
 | **Actualizado** | 2026-11-15 |
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #16 (2026-11-12, `5d3fcf3`): `INS-44`, `INS-45` e `INS-57` (borrar datos al desinstalar en Windows y Linux, hoja de estilos), con la confirmación de la usuaria y el CI de GitHub en verde. |
-| **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-15: FLU-10 casi cerrado. Hecho: roadmap por versiones, roadmapFiles, versión única (tools/dev/version.py comprobar/copiar/publicar/notas, con test), CHANGELOG.md y release.yml por tag. Falta: tag v0.1.0 sobre 9fce3d1 (pendiente de la usuaria; ese commit no trae release.yml: el release iría a mano), FLU-11 y las tres fases antes de main. Leves: 5 referencias de diseño, versiones en «Texto usado por», normalizarExpresion, flex en details; instalar-entorno.sh sin aviso en apt-get update y logs mktemp. Presupuesto de compactaciones: 1 |
+| **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 (SQLite) no está en el juego: su PR #1 se cerró sin fusionar y se rehace en `INS-60`. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-15: FLU-10 casi cerrado y FLU-11 hecho (INS-21…27 descartados: el PR #1 del juego se cerró sin fusionar; se rehace en INS-60). Falta: tag v0.1.0 sobre 9fce3d1 (pendiente de la usuaria; ese commit no trae release.yml: el release iría a mano), la revisión de bloque atrasada (1192 líneas desde origin/main) y las tres fases antes de main. Leves: 5 referencias de diseño, versiones en «Texto usado por», normalizarExpresion, flex en details; instalar-entorno.sh sin aviso en apt-get update y logs mktemp. Presupuesto de compactaciones: 1 |
 | **Tests** | 2026-11-12: núcleo `cargo test -p tarkor-nucleo` 149 y el check del proyecto en verde. Asistente `vitest` y E2E con el Ollama falso: último verde el 2026-10-25 (`vitest` 27 entonces). |
 
 ## Dónde está todo (para saber qué sigue)
@@ -29,9 +29,8 @@ cada commit.**
 
 ## Siguiente paso y los que vienen (en orden)
 
-1. Fusionar el PR #1 del repo del juego (fase 2): dos tests intermitentes de
-   `routes/turn.integration.test.ts` y endurecer `lib/prisma.test.ts` (detalle en el
-   [plan](../05-plan-de-trabajo.md)).
+1. `INS-60`: rehacer la fase 2 (SQLite) sobre el `main` actual del juego; el PR #1 se cerró sin fusionar
+   (detalle en el [plan](../05-plan-de-trabajo.md)).
 2. Fase 3 (modo empaquetado del juego, `INS-31`…`INS-37`) y fase 4 (`INS-41`…`INS-47`, e `INS-56`: la marca de Tarkor en el asistente cuando el juego fusione `UX-40`; `INS-58`: colocar las imágenes de [`13`](../13-hoja-de-estilos-e-imagenes.md) cuando el generador las entregue).
 3. Pendientes leves de la revisión de `INS-48` (no vuelven a revisarse en su PR): `bloqueado` no descuenta lo
    ya descargado en Ajustes; no se impide mover la carpeta con una descarga en marcha (el asistente hoy no lo
