@@ -13,7 +13,7 @@ mod vigilancia;
 use comandos_basicos::*;
 use comandos_datos::*;
 use comandos_ia::*;
-use estado::{Candado, Estado};
+use estado::{Bloquear, Candado, Estado};
 use motor_ciclo::*;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
@@ -86,7 +86,7 @@ pub fn run() {
     app.run(|app, evento| {
         // Al cerrar, el motor se para siempre (docs/08: nada queda funcionando en segundo plano).
         if let RunEvent::Exit = evento {
-            if let Some(mut p) = app.state::<Estado>().motor.lock().unwrap().take() {
+            if let Some(mut p) = app.state::<Estado>().motor.bloquear().take() {
                 p.parar();
             }
         }

@@ -15,6 +15,7 @@ use tauri::Manager;
 pub(crate) async fn instalar_motor(app: tauri::AppHandle, canal: Channel<motor::Progreso>) -> Result<(), ErrorIa> {
     let estado = app.state::<Estado>();
     if estado.ollama_externo.is_some() {
+        // Si el frontal ya no escucha el canal (ventana cerrada), el progreso se pierde sin más: la tarea sigue.
         let _ = canal.send(motor::Progreso::Listo);
         return Ok(());
     }
@@ -22,6 +23,7 @@ pub(crate) async fn instalar_motor(app: tauri::AppHandle, canal: Channel<motor::
     let (ia, m, cancelar) = (estado.ia(), estado.catalogo.motor.clone(), estado.cancelar.clone());
     tauri::async_runtime::spawn_blocking(move || {
         motor::instalar(&ia, &m, &cancelar, &mut |p| {
+            // Si el frontal ya no escucha el canal (ventana cerrada), el progreso se pierde sin más: la tarea sigue.
             let _ = canal.send(p);
         })
         .map(|_| ())
@@ -105,7 +107,7 @@ pub(crate) async fn arrancar_con_turno(app: &tauri::AppHandle, turno: &Turno<'_>
         .map_err(|e| e.to_string())?;
     estado.poner_motor(proceso, turno);
     // Un motor nuevo y sano: el aviso de la parada anterior ya no vale.
-    *estado.detenido.lock().unwrap() = None;
+    *estado.detenido.bloquear() = None;
     Ok(())
 }
 

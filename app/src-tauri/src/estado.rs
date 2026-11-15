@@ -4,7 +4,7 @@
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use tarkor_nucleo::catalogo::Perfil;
 use tarkor_nucleo::catalogo::{Catalogo, Origen};
 use tarkor_nucleo::config::{Config, Rutas};
@@ -133,15 +133,15 @@ impl Estado {
         if let Some(url) = &self.ollama_externo {
             return Ok(Cliente::new(url.clone()));
         }
-        let url = self.url_motor.lock().unwrap().clone();
+        let url = self.url_motor.bloquear().clone();
         url.map(Cliente::new).ok_or_else(|| "El motor de IA no está en marcha.".to_string())
     }
 
     /// Saca el motor propio del `Mutex` (y su URL) para pararlo o sustituirlo, con el candado de arranque cogido.
     pub(crate) fn sacar_motor(&self, turno: &Turno<'_>) -> Option<Proceso> {
         assert!(turno.es_de(&self.arranque), "sacar_motor con un turno que no es de Estado::arranque");
-        let p = self.motor.lock().unwrap().take();
-        *self.url_motor.lock().unwrap() = None;
+        let p = self.motor.bloquear().take();
+        *self.url_motor.bloquear() = None;
         p
     }
 
@@ -149,12 +149,25 @@ impl Estado {
     pub(crate) fn poner_motor(&self, proceso: Proceso, turno: &Turno<'_>) {
         assert!(turno.es_de(&self.arranque), "poner_motor con un turno que no es de Estado::arranque");
         let url = proceso.url();
-        *self.motor.lock().unwrap() = Some(proceso);
-        *self.url_motor.lock().unwrap() = Some(url);
+        *self.motor.bloquear() = Some(proceso);
+        *self.url_motor.bloquear() = Some(url);
     }
 }
 
 pub(crate) type Res<T> = Result<T, String>;
+
+/// `lock()` que sigue dando el dato aunque otro hilo haya muerto con el mutex cogido (envenenado). Los datos de
+/// `Estado` son valores sueltos (URL, aviso, proceso) que no quedan a medias, y un `unwrap` aquí tiraría la
+/// vigilancia o el cierre de la app por un pánico ajeno.
+pub(crate) trait Bloquear<T> {
+    fn bloquear(&self) -> MutexGuard<'_, T>;
+}
+
+impl<T> Bloquear<T> for Mutex<T> {
+    fn bloquear(&self) -> MutexGuard<'_, T> {
+        self.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
 
 /// Error de una descarga que el frontal distingue por su clase (`INS-42`): `red` (se perdió internet: la Descarga
 /// espera y reintenta sola) y `sin_memoria` (pide un perfil más ligero). Viaja como objeto, no como texto.
@@ -196,6 +209,21 @@ mod tests {
     use super::*;
     use std::future::Future;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+    #[test]
+    fn bloquear_da_el_dato_con_el_mutex_envenenado() {
+        let m = Arc::new(Mutex::new(Some(7)));
+        let m2 = m.clone();
+        let _ = std::thread::spawn(move || {
+            let _guarda = m2.lock().unwrap();
+            panic!("envenena el mutex");
+        })
+        .join();
+        assert!(m.is_poisoned(), "el mutex debe estar envenenado");
+        assert_eq!(*m.bloquear(), Some(7));
+        *m.bloquear() = None;
+        assert_eq!(*m.bloquear(), None);
+    }
 
     #[test]
     fn turno_si_parado_solo_cuando_no_corre() {

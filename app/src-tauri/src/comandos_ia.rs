@@ -91,10 +91,12 @@ pub(crate) fn descargar_faltantes(
     let hay = cliente.modelos()?;
     for m in modelos {
         if tiene(&hay, m) {
+            // Si el frontal ya no escucha el canal (ventana cerrada), el progreso se pierde sin más: la tarea sigue.
             let _ = canal.send(ProgresoModelo { modelo: m.clone(), estado: "success".into(), hecho: 1, total: 1 });
             continue;
         }
         cliente.descargar_modelo(m, cancelar, &mut |p| {
+            // Si el frontal ya no escucha el canal (ventana cerrada), el progreso se pierde sin más: la tarea sigue.
             let _ = canal.send(p);
         })?;
     }
@@ -300,9 +302,11 @@ pub(crate) async fn reparar(
         let comprobado = tauri::async_runtime::spawn_blocking(move || -> Result<(bool, usize), ErrorIa> {
             // `motor::Error::Red` (bajar el motor) llega con `red: true`; el resto, como texto.
             let reinstalado = motor::reparar(&ia, &m, &cancelar, &mut |p| {
+                // Si el frontal ya no escucha el canal (ventana cerrada), el progreso se pierde sin más: la tarea sigue.
                 let _ = canal_motor.send(p);
             })?;
             let capas = modelos::reparar(&modelos::carpeta(&ia), &lista, &cancelar, &mut |hecho, total| {
+                // Si el frontal ya no escucha el canal (ventana cerrada), el progreso se pierde sin más: la tarea sigue.
                 let _ = canal_modelos.send(ProgresoModelo {
                     modelo: String::new(),
                     estado: "verificando".into(),
@@ -331,6 +335,7 @@ pub(crate) async fn reparar(
     tauri::async_runtime::spawn_blocking(move || -> Result<(), ErrorIa> {
         for m in &lista {
             cliente.descargar_modelo(m, &cancelar, &mut |p| {
+                // Si el frontal ya no escucha el canal (ventana cerrada), el progreso se pierde sin más: la tarea sigue.
                 let _ = canal.send(p);
             })?;
         }

@@ -97,7 +97,7 @@ pub(crate) async fn informe(app: tauri::AppHandle) -> Res<String> {
         let version = cliente.as_ref().ok().and_then(|c| c.version().ok());
         let ps: Res<Vec<Cargado>> = cliente.and_then(|c| c.cargados().map_err(|e| e.to_string()));
         let registro = informe::ultimas_lineas(&estado.rutas.registros.join(REGISTRO_MOTOR), informe::LINEAS_REGISTRO);
-        let ultimo = estado.ultimo_motivo_parada.lock().unwrap().clone();
+        let ultimo = estado.ultimo_motivo_parada.bloquear().clone();
         let motor = EstadoMotor {
             version_catalogo: &estado.catalogo.motor.version,
             version_en_marcha: version.as_deref(),

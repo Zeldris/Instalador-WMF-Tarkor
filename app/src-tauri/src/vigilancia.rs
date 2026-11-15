@@ -15,8 +15,9 @@ pub(crate) fn avisar_parada(app: &tauri::AppHandle, motivo: String) {
         motivo: motivo.clone(),
         sin_memoria: procesos::sin_memoria(procesos::desde_ultimo_arranque(&cola)),
     };
-    *estado.ultimo_motivo_parada.lock().unwrap() = Some(motivo);
-    *estado.detenido.lock().unwrap() = Some(aviso.clone());
+    *estado.ultimo_motivo_parada.bloquear() = Some(motivo);
+    *estado.detenido.bloquear() = Some(aviso.clone());
+    // Si el evento no llega, el frontal lee el aviso guardado al montarse (`motor_detenido`).
     let _ = app.emit("motor-detenido", aviso);
 }
 
@@ -29,10 +30,10 @@ pub(crate) fn avisar_parada(app: &tauri::AppHandle, motivo: String) {
 /// `Mutex` cogido; `cliente()` no lo usa (lee `url_motor`) y el relanzado conserva el puerto.
 pub(crate) fn vigilar_una_vez(app: &tauri::AppHandle) {
     let estado = app.state::<Estado>();
-    let mut motor = estado.motor.lock().unwrap();
+    let mut motor = estado.motor.bloquear();
     let Some(proceso) = motor.as_mut() else { return };
     let visto = proceso.vigilar();
-    let ya_avisado = estado.detenido.lock().unwrap().is_some();
+    let ya_avisado = estado.detenido.bloquear().is_some();
     if let Some(motivo) = procesos::aviso_nuevo(&visto, ya_avisado) {
         avisar_parada(app, motivo.to_string());
     }
@@ -41,7 +42,7 @@ pub(crate) fn vigilar_una_vez(app: &tauri::AppHandle) {
 /// El aviso de motor detenido pendiente, para que el frontal lo lea al montarse.
 #[tauri::command]
 pub(crate) fn motor_detenido(estado: State<'_, Estado>) -> Option<MotorDetenido> {
-    estado.detenido.lock().unwrap().clone()
+    estado.detenido.bloquear().clone()
 }
 
 /// «Reintentar» de la pantalla «El motor se ha detenido»: saca el motor viejo del `Mutex`, borra el
@@ -55,7 +56,7 @@ pub(crate) async fn reintentar_motor(app: tauri::AppHandle) -> Res<()> {
     // Primero se saca el proceso y luego se borra el aviso: la vigilancia no ve un motor caído sin
     // aviso y lo avisa otra vez mientras se reintenta.
     let viejo = estado.sacar_motor(&turno);
-    *estado.detenido.lock().unwrap() = None;
+    *estado.detenido.bloquear() = None;
     if let Some(mut v) = viejo {
         v.parar();
     }
