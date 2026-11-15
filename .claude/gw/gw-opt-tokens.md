@@ -47,10 +47,15 @@ antes de la `/retro`; todo en español, y solo lo que confirme la usuaria entra 
   no sale. Un log de fallo entero (4,2k) arrastró ~100k.
 - **Un archivo ya leído, por tramos** (opt-tokens de `FLU-9`): la segunda vez, `grep -n` o `sed -n` del tramo, no el
   archivo entero; `instalar-entorno.sh` leído 5 veces arrastró ~63k.
+- **El plan con `roadmap.py`** (opt-tokens de `FLU-10`): una fila o una versión del plan, con
+  `python3 .claude/gw/scripts/roadmap.py show <id>` o `list <versión>`; un tramo, con `grep -n`. `docs/05-plan-de-trabajo.md`
+  leído entero 24 veces arrastró ~238k.
+- **Los tags los sube la usuaria** (opt-tokens de `FLU-10`): el proxy da 403 al subir un tag desde la sesión, también
+  tras `add_repo`. Se le da la orden (`git tag -a vX.Y.Z <sha> && git push origin vX.Y.Z`); probarlo arrastró ~44k.
 
 ## Costes conocidos
 
-- **Conectores MCP** (opt-tokens de `FLU-9`): de los ~86k de arranque, ~74k son sistema y herramientas MCP. La
+- **Conectores MCP** (opt-tokens de `FLU-9`): de los ~86k de arranque, ~74k son sistema y herramientas MCP; en `FLU-10`, ~96k de ~108k (2026-11-15). La
   usuaria desactiva los que el proyecto no usa (p. ej. Claude_Docs); `/context` dice cuánto pesa cada uno.
 - **Compilar Rust en frío**: el primer `cargo build`/`clippy` de una sesión tarda minutos y su salida es larga. Se
   filtra (`-q`, `grep -E "^(warning|error)"`) y se lanza en segundo plano si no bloquea.
