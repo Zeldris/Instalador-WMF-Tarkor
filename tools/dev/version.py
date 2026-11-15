@@ -10,6 +10,7 @@ workspace en `app/Cargo.lock`) y saca de `CHANGELOG.md` las notas de una versió
     python3 tools/dev/version.py copiar           # copia la de tauri.conf.json a las demás
     python3 tools/dev/version.py publicar X.Y.Z   # pone X.Y.Z y pasa [Unreleased] a [X.Y.Z] - hoy
     python3 tools/dev/version.py notas vX.Y.Z     # notas de esa versión (el tag tiene que coincidir con la versión)
+    python3 tools/dev/version.py notas --historico vX.Y.Z   # ídem, sin exigir que sea la versión actual (release de un tag antiguo)
 
 Los archivos se editan con expresiones regulares para no tocar su formato; sin tomllib, que el job qa del CI
 (Python 3.10) no trae.
@@ -96,16 +97,18 @@ def copiar(raiz: str = RAIZ, version: str = '') -> list:
         fuente = [(FUENTE, *_json_version(1))]
     else:
         version, fuente = actual(raiz), []
-    cambiados = []
+    # Todo o nada: primero se lee y se comprueba cada ruta, y solo si todas se encuentran se escribe.
+    originales, nuevos = {}, {}
     for ruta, patron, veces in fuente + COPIAS:
-        texto = leer(raiz, ruta)
+        # Varias copias pueden estar en el mismo archivo (Cargo.lock): se acumulan sobre el texto ya cambiado.
+        texto = nuevos[ruta] if ruta in nuevos else originales.setdefault(ruta, leer(raiz, ruta))
         if len(_encontradas(texto, patron, veces)) < veces:
             raise SystemExit(f'{ruta}: no se encuentra la versión')
-        nuevo = _poner(texto, patron, veces, version)
-        if nuevo != texto:
-            escribir(raiz, ruta, nuevo)
-            cambiados.append(ruta)
-    return sorted(set(cambiados))
+        nuevos[ruta] = _poner(texto, patron, veces, version)
+    cambiados = [ruta for ruta in nuevos if nuevos[ruta] != originales[ruta]]
+    for ruta in cambiados:
+        escribir(raiz, ruta, nuevos[ruta])
+    return sorted(cambiados)
 
 
 SECCION = re.compile(r'^## \[([^\]]+)\][^\n]*\n', re.MULTILINE)
@@ -114,7 +117,8 @@ SECCION = re.compile(r'^## \[([^\]]+)\][^\n]*\n', re.MULTILINE)
 def _secciones(texto: str) -> dict:
     """Título de cada `## [x]` → (inicio del título, inicio del cuerpo, fin del cuerpo)."""
     marcas = list(SECCION.finditer(texto))
-    fin_ultima = re.search(r'^\[[^\]]+\]:\s', texto, re.MULTILINE)
+    # El fin de la última sección es la primera definición de enlace tras su cabecera, no la primera del archivo.
+    fin_ultima = re.compile(r'^\[[^\]]+\]:\s', re.MULTILINE).search(texto, marcas[-1].end()) if marcas else None
     resultado = {}
     for i, m in enumerate(marcas):
         fin = marcas[i + 1].start() if i + 1 < len(marcas) else (fin_ultima.start() if fin_ultima else len(texto))
@@ -135,30 +139,37 @@ def notas(version: str, raiz: str = RAIZ) -> str:
 
 def publicar(version: str, raiz: str = RAIZ, fecha: str = '') -> list:
     """Pone la versión y pasa lo de [Unreleased] a una sección nueva con fecha; [Unreleased] queda vacía."""
+    if not SEMVER.match(version):
+        raise SystemExit(f'la versión tiene que ser X.Y.Z: {version!r}')
     texto = leer(raiz, CHANGELOG)
     secciones = _secciones(texto)
     if version in secciones:
         raise SystemExit(f'{CHANGELOG}: ya hay sección ## [{version}]')
+    anterior = actual(raiz)
+    if tuple(map(int, version.split('.'))) <= tuple(map(int, anterior.split('.'))):
+        raise SystemExit(f'{version} no es mayor que la actual {anterior}')
     if 'Unreleased' not in secciones:
         raise SystemExit(f'{CHANGELOG}: no hay sección ## [Unreleased]')
     _, cuerpo, fin = secciones['Unreleased']
     if not texto[cuerpo:fin].strip():
         raise SystemExit(f'{CHANGELOG}: [Unreleased] está vacía; no hay nada que publicar')
-    anterior = actual(raiz)
-    cambiados = copiar(raiz, version)
-    fecha = fecha or datetime.date.today().isoformat()
-    texto = texto[:cuerpo] + f'\n## [{version}] - {fecha}\n' + texto[cuerpo:]
-    # Enlaces de comparación al pie: [Unreleased] desde el tag nuevo y el de la versión nueva desde la anterior.
+    # Enlaces de comparación al pie: se validan antes de escribir nada.
     unreleased = re.search(r'^\[Unreleased\]:\s*(\S+/compare/)v[^.\s]+\.[^.\s]+\.[^.\s]+\.\.\.HEAD$', texto, re.MULTILINE)
-    if unreleased:
-        base = unreleased.group(1)
-        texto = (texto[:unreleased.start()] + f'[Unreleased]: {base}v{version}...HEAD\n'
-                 f'[{version}]: {base}v{anterior}...v{version}' + texto[unreleased.end():])
+    if not unreleased:
+        raise SystemExit(f'{CHANGELOG}: falta la línea del pie `[Unreleased]: <base>/compare/vX.Y.Z...HEAD`')
+    fecha = fecha or datetime.date.today().isoformat()
+    cambiados = copiar(raiz, version)
+    texto = texto[:cuerpo] + f'\n## [{version}] - {fecha}\n' + texto[cuerpo:]
+    # [Unreleased] desde el tag nuevo y el de la versión nueva desde la anterior.
+    unreleased = re.search(r'^\[Unreleased\]:\s*(\S+/compare/)v[^.\s]+\.[^.\s]+\.[^.\s]+\.\.\.HEAD$', texto, re.MULTILINE)
+    base = unreleased.group(1)
+    texto = (texto[:unreleased.start()] + f'[Unreleased]: {base}v{version}...HEAD\n'
+             f'[{version}]: {base}v{anterior}...v{version}' + texto[unreleased.end():])
     escribir(raiz, CHANGELOG, texto)
     return sorted(set(cambiados + [CHANGELOG]))
 
 
-def main(argv=None) -> int:
+def main(argv=None, raiz: str = RAIZ) -> int:
     p = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     sub = p.add_subparsers(dest='orden')
     sub.add_parser('comprobar', help='sale en 1 si alguna copia no coincide con tauri.conf.json')
@@ -168,30 +179,31 @@ def main(argv=None) -> int:
     pub.add_argument('--fecha', default='', help='AAAA-MM-DD (por defecto, hoy)')
     nt = sub.add_parser('notas', help='notas de CHANGELOG.md para el tag vX.Y.Z')
     nt.add_argument('tag')
+    nt.add_argument('--historico', action='store_true', help='no exige que el tag sea la versión actual')
     a = p.parse_args(argv)
 
     if a.orden is None:
-        print(actual())
+        print(actual(raiz))
     elif a.orden == 'comprobar':
-        malas = diferencias()
+        malas = diferencias(raiz)
         for m in malas:
             print(m, file=sys.stderr)
         if malas:
             print('arreglo: python3 tools/dev/version.py copiar', file=sys.stderr)
             return 1
-        print(f'versión {actual()} en todas las copias')
+        print(f'versión {actual(raiz)} en todas las copias')
     elif a.orden == 'copiar':
-        for r in copiar():
+        for r in copiar(raiz):
             print(r)
     elif a.orden == 'publicar':
-        for r in publicar(a.version, fecha=a.fecha):
+        for r in publicar(a.version, raiz, fecha=a.fecha):
             print(r)
     elif a.orden == 'notas':
         if not re.match(r'^v\d+\.\d+\.\d+$', a.tag):
             raise SystemExit(f'el tag tiene que ser vX.Y.Z: {a.tag!r}')
-        if a.tag[1:] != actual():
-            raise SystemExit(f'el tag {a.tag} no coincide con la versión de {FUENTE} ({actual()})')
-        sys.stdout.write(notas(a.tag[1:]))
+        if not a.historico and a.tag[1:] != actual(raiz):
+            raise SystemExit(f'el tag {a.tag} no coincide con la versión de {FUENTE} ({actual(raiz)})')
+        sys.stdout.write(notas(a.tag[1:], raiz))
     return 0
 
 

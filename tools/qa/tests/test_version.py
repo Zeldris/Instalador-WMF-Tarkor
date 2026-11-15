@@ -1,5 +1,7 @@
 """FLU-10: tools/dev/version.py copia la versión de tauri.conf.json, saca las notas de CHANGELOG.md y publica."""
+import contextlib
 import importlib.util
+import io
 import os
 import unittest
 
@@ -58,6 +60,14 @@ class Copiar(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, 'Cargo.lock: no se encuentra'):
             version.copiar(raiz)
 
+    def test_todo_o_nada(self):
+        raiz = repo()
+        escribir(os.path.join(raiz, 'app/Cargo.lock'), '[[package]]\nname = "tarkor"\nversion = "0.1.0"\n')
+        with self.assertRaisesRegex(SystemExit, 'Cargo.lock: no se encuentra'):
+            version.copiar(raiz, '0.3.0')
+        self.assertIn('"version": "0.2.0"', leer(os.path.join(raiz, 'app/src-tauri/tauri.conf.json')))
+        self.assertEqual(leer(os.path.join(raiz, 'app/package.json')), ARCHIVOS['app/package.json'])
+
     def test_version_no_semver(self):
         raiz = repo()
         with self.assertRaisesRegex(SystemExit, 'X.Y.Z'):
@@ -70,6 +80,25 @@ class Notas(unittest.TestCase):
         self.assertEqual(version.notas('0.1.0', raiz), '### Añadido\n\n- Lo primero.\n')
         with self.assertRaisesRegex(SystemExit, r'no hay sección ## \[9.9.9\]'):
             version.notas('9.9.9', raiz)
+
+    def test_enlace_en_la_intro_no_corta_la_ultima_seccion(self):
+        raiz = repo()
+        texto = leer(os.path.join(raiz, 'CHANGELOG.md')).replace('Texto.\n', 'Texto.\n\n[roadmap]: docs/x.md\n')
+        escribir(os.path.join(raiz, 'CHANGELOG.md'), texto)
+        self.assertEqual(version.notas('0.1.0', raiz), '### Añadido\n\n- Lo primero.\n')
+
+    def test_historico_no_exige_la_version_actual(self):
+        raiz = repo()
+        with self.assertRaisesRegex(SystemExit, 'no coincide'):
+            version.main(['notas', 'v0.1.0'], raiz)
+        with self.assertRaisesRegex(SystemExit, 'vX.Y.Z'):
+            version.main(['notas', '--historico', '0.1.0'], raiz)
+        with self.assertRaisesRegex(SystemExit, r'no hay sección ## \[9.9.9\]'):
+            version.main(['notas', '--historico', 'v9.9.9'], raiz)
+        salida = io.StringIO()
+        with contextlib.redirect_stdout(salida):
+            version.main(['notas', '--historico', 'v0.1.0'], raiz)
+        self.assertEqual(salida.getvalue(), '### Añadido\n\n- Lo primero.\n')
 
     def test_tag_distinto_de_la_version(self):
         with self.assertRaisesRegex(SystemExit, 'no coincide'):
@@ -95,6 +124,25 @@ class Publicar(unittest.TestCase):
             version.publicar('0.4.0', raiz)
         with self.assertRaisesRegex(SystemExit, 'ya hay sección'):
             version.publicar('0.3.0', raiz)
+
+    def test_no_mayor_que_la_actual(self):
+        raiz = repo()
+        with self.assertRaisesRegex(SystemExit, '0.2.0 no es mayor que la actual 0.2.0'):
+            version.publicar('0.2.0', raiz)
+        with self.assertRaisesRegex(SystemExit, '0.1.9 no es mayor que la actual 0.2.0'):
+            version.publicar('0.1.9', raiz)
+        with self.assertRaisesRegex(SystemExit, 'X.Y.Z'):
+            version.publicar('1.0', raiz)
+
+    def test_sin_pie_no_escribe_nada(self):
+        raiz = repo()
+        sin_pie = ARCHIVOS['CHANGELOG.md'].replace('[Unreleased]: https://github.com/o/r/compare/v0.1.0...HEAD\n', '')
+        escribir(os.path.join(raiz, 'CHANGELOG.md'), sin_pie)
+        with self.assertRaisesRegex(SystemExit, r'falta la línea del pie `\[Unreleased\]: <base>/compare/vX.Y.Z...HEAD`'):
+            version.publicar('0.3.0', raiz)
+        self.assertEqual(leer(os.path.join(raiz, 'CHANGELOG.md')), sin_pie)
+        self.assertEqual(version.actual(raiz), '0.2.0')
+        self.assertEqual(leer(os.path.join(raiz, 'app/package.json')), ARCHIVOS['app/package.json'])
 
 
 class RepoReal(unittest.TestCase):
