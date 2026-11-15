@@ -1,0 +1,25 @@
+# FLU-10: el tag vX.Y.Z crea el release de GitHub con las notas de esa versión en CHANGELOG.md.
+# Sin binarios todavía: los instaladores y SHA256SUMS llegan con INS-46 (versión 0.6 del roadmap).
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Notas de la versión
+        # Falla si el tag no coincide con app/src-tauri/tauri.conf.json o si CHANGELOG.md no tiene su sección.
+        run: |
+          python3 tools/dev/version.py comprobar
+          python3 tools/dev/version.py notas "$GITHUB_REF_NAME" > "$RUNNER_TEMP/notas.md"
+      - name: Crear el release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notas.md" --verify-tag
