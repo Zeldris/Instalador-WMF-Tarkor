@@ -25,22 +25,22 @@ Lo ya fusionado en `main` (fases 0, 1 y 4 hechas, con pruebas de punta a punta).
 
 | Id | Tarea | Estado |
 |---|---|---|
-| INS-1 | Proyecto Tauri v2 en `app/` con el asistente (React + Vite + TypeScript) y los tokens visuales del juego ([`11`](11-diseno-del-frontal.md)) | hecho (2026-09-28; fase 0) |
-| INS-2 | Detección de equipo en Rust (`sysinfo`) y cálculo de perfiles de [`09`](09-deteccion-de-equipo-y-perfiles.md), con tests | hecho (2026-09-28; fase 0) |
-| INS-3 | `config.json` en la carpeta de datos: al abrir, asistente si no está completado | hecho (2026-09-28; fase 0) |
+| INS-1 | Proyecto Tauri v2 en `app/` con el asistente (React + Vite + TypeScript) y los tokens visuales del juego ([`11`](11-diseno-del-frontal.md)) | hecho (2026-09-28, aprox.; fase 0) |
+| INS-2 | Detección de equipo en Rust (`sysinfo`) y cálculo de perfiles de [`09`](09-deteccion-de-equipo-y-perfiles.md), con tests | hecho (2026-09-28, aprox.; fase 0) |
+| INS-3 | `config.json` en la carpeta de datos: al abrir, asistente si no está completado | hecho (2026-09-28, aprox.; fase 0) |
 | INS-3b | Catálogo de modelos y perfiles en JSON (con perfil Mínimo) y ajustes de Ollama por equipo ([`12`](12-catalogo-y-rendimiento.md)) | hecho (2026-09-28; fase 0) |
-| INS-4 | Gestor de sidecars en Rust: puerto libre, arranque y parada, health-check, un reinicio automático | hecho (2026-09-28; fase 0) |
-| INS-5 | Ollama portable: descarga fijada con SHA256, arranque aislado, modelos con progreso vía `/api/pull` | hecho (2026-09-28; fase 0) |
-| INS-6 | Prueba de empaquetado del backend a bytecode con Postgres (`herramientas/empaquetar-backend.mjs`); repetirla sobre SQLite y probar Prisma sin motor nativo queda para tras `INS-60` | hecho (2026-09-28; fase 0, con la repetición sobre SQLite pendiente) |
-| INS-13 | Perfiles pequeños: se ofrecen Mínimo y Ligero con modelos Apache 2.0, avisando del resultado (calidad a confirmar en `INS-8`) | hecho (2026-09-28; fase 1) |
+| INS-4 | Gestor de sidecars en Rust: puerto libre, arranque y parada, health-check, un reinicio automático | hecho (2026-09-28, aprox.; fase 0) |
+| INS-5 | Ollama portable: descarga fijada con SHA256, arranque aislado, modelos con progreso vía `/api/pull` | hecho (2026-09-28, aprox.; fase 0) |
+| INS-6 | Prueba de empaquetado del backend a bytecode con Postgres (`herramientas/empaquetar-backend.mjs`); repetirla sobre SQLite y probar Prisma sin motor nativo queda para tras `INS-60` | hecho (2026-09-28, aprox.; fase 0, con la repetición sobre SQLite pendiente) |
+| INS-13 | Perfiles pequeños: se ofrecen Mínimo y Ligero con modelos Apache 2.0, avisando del resultado (calidad a confirmar en `INS-8`) | hecho (2026-09-28, aprox.; fase 1) |
 | INS-14 | Perfiles por encima del máximo seguro: elegibles con aviso y confirmación en la tarjeta (`09`, `11`) | hecho (2026-10-25; en el asistente y en Ajustes) |
-| INS-21 | Proveedor de base de datos por variable de entorno y `schema.sqlite.prisma` en el build, con test de sincronía | hecho (2026-09-28; repo del juego, PR #1 cerrado sin fusionar: se rehace en `INS-60`) |
-| INS-22 | Embeddings en JSON y similitud coseno en JS | hecho (2026-09-28; repo del juego, PR #1 sin fusionar) |
-| INS-23 | `lockRowForUpdate()` con mutex en memoria para SQLite | hecho (2026-09-28; repo del juego, PR #1 sin fusionar) |
-| INS-24 | Los 16 campos de lista a `Json`; `push` reescritos con `anadirNpcRetirado` | hecho (2026-09-28; repo del juego, PR #1 sin fusionar) |
-| INS-25 | `mode: 'insensitive'` y `skipDuplicates` | hecho (2026-09-28; repo del juego, PR #1 sin fusionar) |
-| INS-26 | Batería de tests del backend pasando contra SQLite | hecho (2026-09-28; repo del juego, PR #1 sin fusionar) |
-| INS-27 | Script de build de la base de datos plantilla (migrada, catálogo, lore indexado) | hecho (2026-09-28; repo del juego, PR #1 sin fusionar) |
+| INS-21 | Proveedor de base de datos por variable de entorno y `schema.sqlite.prisma` en el build, con test de sincronía | hecho (2026-09-28, aprox.; repo del juego, PR #1 cerrado sin fusionar: se rehace en `INS-60`) |
+| INS-22 | Embeddings en JSON y similitud coseno en JS | hecho (2026-09-28, aprox.; repo del juego, PR #1 sin fusionar) |
+| INS-23 | `lockRowForUpdate()` con mutex en memoria para SQLite | hecho (2026-09-28, aprox.; repo del juego, PR #1 sin fusionar) |
+| INS-24 | Los 16 campos de lista a `Json`; `push` reescritos con `anadirNpcRetirado` | hecho (2026-09-28, aprox.; repo del juego, PR #1 sin fusionar) |
+| INS-25 | `mode: 'insensitive'` y `skipDuplicates` | hecho (2026-09-28, aprox.; repo del juego, PR #1 sin fusionar) |
+| INS-26 | Batería de tests del backend pasando contra SQLite | hecho (2026-09-28, aprox.; repo del juego, PR #1 sin fusionar) |
+| INS-27 | Script de build de la base de datos plantilla (migrada, catálogo, lore indexado) | hecho (2026-09-28, aprox.; repo del juego, PR #1 sin fusionar) |
 | INS-31 | Frontend: URL del backend en tiempo de ejecución (`apiBaseUrl()`, contrato `window.__TARKOR__.apiUrl` de [`04`](04-empaquetado-tauri.md)) | hecho (2026-10-26; en `main` del juego, `b76c66b2`, 8 tests) |
 | INS-32 | Frontend: fuentes Cinzel e Inter en local | hecho (2026-10-26; ya en `main` del juego por `BAS-1`, `4a150259`; sin cambios allí) |
 | INS-33 | Frontend: sin `ImagePromptSlot` ni admin en el juego empaquetado; «Crear desde cero» deshabilitada | hecho (2026-10-27; en `main` del juego, `aae4a755`, `esEmpaquetado()`, 9 tests) |
