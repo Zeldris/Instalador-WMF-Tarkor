@@ -53,8 +53,6 @@ jobs:
   # las capturas quedan como artefacto si algo falla.
   e2e:
     runs-on: ubuntu-22.04
-    env:
-      TMPDIR: ${{ runner.temp }}/e2e
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -80,7 +78,9 @@ jobs:
           tool: cargo-about@${{ steps.about.outputs.version }},tauri-driver
       - run: npm ci
         working-directory: app
-      - run: mkdir -p "$TMPDIR"
+      # El contexto `runner` no existe en el `env` del job: TMPDIR se fija aquí para los pasos que siguen.
+      - name: Carpeta temporal de los E2E
+        run: mkdir -p "$RUNNER_TEMP/e2e" && echo "TMPDIR=$RUNNER_TEMP/e2e" >> "$GITHUB_ENV"
       - run: bash tools/qa/e2e.sh
       - name: Variante del error de red (E2E_ESPERA_ERROR_RED=1)
         run: E2E_ESPERA_ERROR_RED=1 bash tools/qa/e2e.sh app/e2e/asistente.e2e.mjs
