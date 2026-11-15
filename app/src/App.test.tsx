@@ -328,6 +328,25 @@ describe('asistente de primer arranque', () => {
       expect(await screen.findByText(new RegExp(`^Perfil ${recomendadoDe(e).nombre}\\.`))).toBeTruthy()
     })
 
+    it('las barras de la descarga son progressbar con nombre y rango (INS-66)', async () => {
+      const e = evaluarEjemplo(equipoEjemplo)
+      render(<Descarga ir={() => {}} config={huerfana()} evaluacion={e} actualizar={() => {}} />)
+      const total = await screen.findByRole('progressbar', { name: 'Total' })
+      expect(total.getAttribute('aria-valuemin')).toBe('0')
+      expect(total.getAttribute('aria-valuemax')).toBe('100')
+      expect(total.getAttribute('aria-valuenow')).not.toBeNull()
+      expect((await screen.findAllByRole('progressbar')).length).toBeGreaterThan(1)
+    })
+
+    it('el medidor de memoria es un progressbar con rango (INS-66)', async () => {
+      const e = evaluarEjemplo(equipoEjemplo)
+      render(<ElegirPerfil ir={() => {}} config={huerfana()} evaluacion={e} rutas={null} cambiarCarpeta={async () => {}} actualizar={() => {}} />)
+      const medidor = await screen.findByRole('progressbar')
+      expect(medidor.getAttribute('aria-valuemin')).toBe('0')
+      expect(Number(medidor.getAttribute('aria-valuemax'))).toBeGreaterThan(0)
+      expect(medidor.getAttribute('aria-valuenow')).not.toBeNull()
+    })
+
     it('Perfil no se cae, marca el recomendado y guarda el recomendado, no el id que no existe', async () => {
       const e = evaluarEjemplo(equipoEjemplo)
       const guardados: unknown[] = []
