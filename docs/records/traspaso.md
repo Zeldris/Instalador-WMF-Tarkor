@@ -10,11 +10,11 @@ cada commit.**
 
 | | |
 |---|---|
-| **Actualizado** | 2026-11-14 |
+| **Actualizado** | 2026-11-15 |
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #16 (2026-11-12, `5d3fcf3`): `INS-44`, `INS-45` e `INS-57` (borrar datos al desinstalar en Windows y Linux, hoja de estilos), con la confirmación de la usuaria y el CI de GitHub en verde. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 está hecha en el repo del juego, a falta de fusionar su PR #1. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-14: INS-47 + FLU-9 fusionados en main (PR #18, 9fce3d1) con Check y App en verde; a main por PR, confirmado por la usuaria. Leves pendientes: 5 referencias de diseño, versiones en «Texto usado por», normalizarExpresion, flex en details; instalar-entorno.sh: fallo de apt-get update sin aviso propio y logs mktemp sin borrar. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-15: auditorías hechas (docs/records/auditoria-2026-11-15/). Propuesta de versiones en versiones.md, pendiente de que la usuaria la confirme; luego rehacer docs/05 como roadmap por versiones (FLU-10) con INS-60…67. Leves pendientes de antes: 5 referencias de diseño, versiones en «Texto usado por», normalizarExpresion, flex en details; instalar-entorno.sh sin aviso en apt-get update y logs mktemp. |
 | **Tests** | 2026-11-12: núcleo `cargo test -p tarkor-nucleo` 149 y el check del proyecto en verde. Asistente `vitest` y E2E con el Ollama falso: último verde el 2026-10-25 (`vitest` 27 entonces). |
 
 ## Dónde está todo (para saber qué sigue)
