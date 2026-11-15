@@ -74,6 +74,13 @@
   "plan": [
     "docs/05-plan-de-trabajo.md"
   ],
+  "roadmapFiles": [
+    {
+      "path": "docs/05-plan-de-trabajo.md",
+      "done": "hecho",
+      "open": ["pendiente", "en curso"]
+    }
+  ],
   "taskId": "(?:INS|FLU)-\\d+",
   "commitNext": true,
   "agentSignatures": false

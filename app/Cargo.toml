@@ -3,6 +3,8 @@ resolver = "3"
 members = ["nucleo", "src-tauri"]
 
 [workspace.package]
+# La versión del instalador: la copia `tools/dev/version.py` desde src-tauri/tauri.conf.json (FLU-10).
+version = "0.1.0"
 # La versión mínima de Rust de todos los miembros: el X.Y de app/rust-toolchain.toml (FLU-6).
 rust-version = "1.94"
 
