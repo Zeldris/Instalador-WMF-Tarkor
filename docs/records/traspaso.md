@@ -14,7 +14,7 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #16 (2026-11-12, `5d3fcf3`): `INS-44`, `INS-45` e `INS-57` (borrar datos al desinstalar en Windows y Linux, hoja de estilos), con la confirmación de la usuaria y el CI de GitHub en verde. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 (SQLite) no está en el juego: su PR #1 se cerró sin fusionar y se rehace en `INS-60`. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-15: en la nube, sin otros repos: INS-64, INS-67, INS-66, INS-65 e INS-63 hechas (CI de app.yml en verde con el job e2e, run 43768643962). Falta la revisión de bloque (/code-review) de INS-63…INS-67 antes de main. Lo del juego y de máquinas concretas, «para revisar en local» en Siguiente paso. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-15: en la nube, sin otros repos: INS-63…INS-67 hechas y revisión de bloque cerrada (8 hallazgos arreglados, 2 leves al punto 22). Falta: fase 2 (gw-opt-tokens y retro, a presentar a la usuaria) y fase 3 antes de main. Lo del juego y de máquinas concretas, «para revisar en local» en Siguiente paso. |
 | **Tests** | 2026-11-12: núcleo `cargo test -p tarkor-nucleo` 149 y el check del proyecto en verde. Asistente `vitest` y E2E con el Ollama falso: último verde el 2026-10-25 (`vitest` 27 entonces). |
 
 ## Dónde está todo (para saber qué sigue)
@@ -135,6 +135,10 @@ cada commit.**
     (5 errores, `FileNotFoundError`); aquí lleva un parche local (`workflow_file()` mira también `.claude/gw/`, como
     hace `measure.py`). El aviso de `apply.py` sobre `docs/propuestas` en `docs/13:14` es un falso positivo: es una
     ruta del repo GVIG, no de este. La mayoría de los hallazgos del punto 16 llegaron arreglados en la 0.5.2.
+22. Pendientes leves de la revisión de bloque `INS-63`…`INS-67` (2026-11-15; no vuelven a revisarse en su PR): el
+    porcentaje de la barra de descarga (`pantallasIa.tsx`, ~160 y ~169) se calcula dos veces (`aria-valuenow` y
+    ancho); el job e2e de `app.yml` llama dos veces a `tools/qa/e2e.sh` y repite vite y cargo-about para la variante
+    del error de red (convendría reutilizar el binario).
 
 ## Decisiones de la usuaria que bloquean algo
 

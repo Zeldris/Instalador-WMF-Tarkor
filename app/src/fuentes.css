@@ -1,6 +1,7 @@
 /* Fuentes empaquetadas en local (@fontsource), solo los subconjuntos latin y latin-ext y solo woff2 (INS-67):
-   el asistente es en castellano y WebView2 y WebKitGTK leen woff2. Generado de los 400.css…700.css de
-   @fontsource; con unicode-range, el navegador baja solo el subconjunto que use la página. */
+   el asistente es en castellano y WebView2 y WebKitGTK leen woff2. Generado por tools/dev/fuentes.py (no se edita
+   a mano) de los 400.css…700.css de @fontsource; con unicode-range, el navegador baja solo el subconjunto que use
+   la página. */
 
 /* cinzel-latin-ext-400-normal */
 @font-face {

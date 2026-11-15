@@ -101,6 +101,8 @@ jobs:
         working-directory: app
     steps:
       - uses: actions/checkout@v4
+      - name: Rust de app/rust-toolchain.toml
+        run: rustup toolchain install --no-self-update
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-audit

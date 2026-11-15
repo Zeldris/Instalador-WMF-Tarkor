@@ -338,10 +338,10 @@ describe('asistente de primer arranque', () => {
       expect((await screen.findAllByRole('progressbar')).length).toBeGreaterThan(1)
     })
 
-    it('el medidor de memoria es un progressbar con rango (INS-66)', async () => {
+    it('el medidor de memoria es un meter con rango (INS-66)', async () => {
       const e = evaluarEjemplo(equipoEjemplo)
       render(<ElegirPerfil ir={() => {}} config={huerfana()} evaluacion={e} rutas={null} cambiarCarpeta={async () => {}} actualizar={() => {}} />)
-      const medidor = await screen.findByRole('progressbar')
+      const medidor = await screen.findByRole('meter')
       expect(medidor.getAttribute('aria-valuemin')).toBe('0')
       expect(Number(medidor.getAttribute('aria-valuemax'))).toBeGreaterThan(0)
       expect(medidor.getAttribute('aria-valuenow')).not.toBeNull()
