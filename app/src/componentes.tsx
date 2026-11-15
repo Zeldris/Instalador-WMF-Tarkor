@@ -382,7 +382,8 @@ export function CopiarInforme() {
     let dado: string
     try {
       dado = await obtener()
-    } catch {
+    } catch (e) {
+      console.error('No se pudo componer el informe:', e)
       setError(tx.informe.errorInforme)
       setOcupado(false)
       return
@@ -390,7 +391,8 @@ export function CopiarInforme() {
     try {
       await api.copiar(dado)
       setCopiado(true)
-    } catch {
+    } catch (e) {
+      console.error('No se pudo copiar el informe al portapapeles:', e)
       setVisible(true)
       setError(tx.informe.errorCopiar)
     }

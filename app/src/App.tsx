@@ -35,7 +35,7 @@ export default function App() {
   useEffect(() => {
     let vivo = true
     let quitar: (() => void) | null = null
-    api.alMotorDetenido((a) => ponerAviso(a)).then((f) => { if (vivo) quitar = f; else f() }).catch(() => {})
+    api.alMotorDetenido((a) => ponerAviso(a)).then((f) => { if (vivo) quitar = f; else f() }).catch((e) => console.error('No se pudo escuchar el aviso de motor detenido:', e))
     return () => { vivo = false; quitar?.() }
   }, [ponerAviso])
 

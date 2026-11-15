@@ -277,7 +277,7 @@ function useCambiarPerfil(reemplazarConfig: (c: Config) => void) {
       }))
       setEstado('')
       // Con un Ollama externo el núcleo devuelve una lista vacía: sus modelos no se tocan.
-      setSobrantes(await api.modelosSobrantes().catch(() => []))
+      setSobrantes(await api.modelosSobrantes().catch((e) => { console.error('No se pudo leer la lista de modelos sobrantes:', e); return [] }))
     } catch (e) {
       // Pausar manda sobre un corte de red que llega a la vez (sin reintento ni error). Otro fallo sí se enseña: p. ej. el
       // motor que no arranca con el perfil nuevo, ya descargado, no es una pausa.
