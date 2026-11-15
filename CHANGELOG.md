@@ -23,6 +23,7 @@ y el tag `vX.Y.Z` crea el release con esas notas (`.github/workflows/release.yml
 
 ### Cambiado
 
+- Solidez del núcleo de la app (INS-65): `lib.rs` partido en módulos; un pánico ya no envenena los mutex y tumba los comandos; si falla la limpieza tras una copia de carpeta fallida, el error lo dice; los fallos silenciados del asistente se registran.
 - Accesibilidad del asistente (INS-66): contraste de al menos 4,5:1 en el botón principal y los textos tenues, bordes de controles visibles, barras de progreso y medidor de memoria con `role="progressbar"`, foco del control segmentado sin recortar y letra mínima de 12 px.
 - Fuentes del asistente: solo los subconjuntos `latin` y `latin-ext` de Cinzel e Inter en woff2 (`app/src/fuentes.css`):
   de 54 archivos y 1,5 MB a 12 y 260 KB (INS-67).
