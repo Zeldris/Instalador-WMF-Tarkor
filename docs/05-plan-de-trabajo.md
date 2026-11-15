@@ -68,7 +68,7 @@ Cierra con el plan como roadmap, una sola versión en la app, `CHANGELOG.md` y `
 
 | Id | Tarea | Estado |
 |---|---|---|
-| FLU-10 | Roadmap por versiones (este documento), `roadmapFiles` en `.claude/gw.json`, versión única en `app/src-tauri/tauri.conf.json` copiada por script a `package.json` y `Cargo.toml`, `CHANGELOG.md` Keep a Changelog y `release.yml` por tag sin binarios | en curso (2026-11-15: hecho todo salvo el tag `v0.1.0` sobre `9fce3d1`, que espera confirmación de la usuaria) |
+| FLU-10 | Roadmap por versiones (este documento), `roadmapFiles` en `.claude/gw.json`, versión única en `app/src-tauri/tauri.conf.json` copiada por script a `package.json` y `Cargo.toml`, `CHANGELOG.md` Keep a Changelog y `release.yml` por tag sin binarios | hecho (2026-11-15; roadmap por versiones, versión única, CHANGELOG y release.yml; tag v0.1.0 sobre 9fce3d1) |
 | FLU-11 | Corregir plan y bitácora sobre el PR #1 del juego: está cerrado sin fusionar, no «a medias» | hecho (2026-11-15; `INS-21`…`INS-27` pasan a descartados, la bitácora y [`02`](02-migracion-postgres-a-sqlite.md) apuntan a `INS-60`) |
 
 ## `0.3` «Base de datos»
