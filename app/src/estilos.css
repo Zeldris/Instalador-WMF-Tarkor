@@ -1,12 +1,7 @@
 /* Tokens copiados de frontend/src/index.css del juego (tema de Helek Sirik) para que el asistente
    parezca Tarkor desde el primer segundo (docs/11, "Principios"). Si cambian allí, cambiar aquí.
-   Fuentes empaquetadas en local (@fontsource): la app no depende de Google Fonts. */
-@import '@fontsource/cinzel/400.css';
-@import '@fontsource/cinzel/600.css';
-@import '@fontsource/cinzel/700.css';
-@import '@fontsource/inter/400.css';
-@import '@fontsource/inter/500.css';
-@import '@fontsource/inter/600.css';
+   Fuentes empaquetadas en local (fuentes.css, de @fontsource): la app no depende de Google Fonts. */
+@import './fuentes.css';
 
 :root {
   color-scheme: dark;

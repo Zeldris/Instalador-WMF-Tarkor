@@ -23,6 +23,8 @@ y el tag `vX.Y.Z` crea el release con esas notas (`.github/workflows/release.yml
 
 ### Cambiado
 
+- Fuentes del asistente: solo los subconjuntos `latin` y `latin-ext` de Cinzel e Inter en woff2 (`app/src/fuentes.css`):
+  de 54 archivos y 1,5 MB a 12 y 260 KB (INS-67).
 - El plan de trabajo pasa a ser un roadmap por versiones (`0.1` a `1.0`), que lee `roadmap.py` (FLU-10).
 
 ## [0.1.0] - 2026-11-14

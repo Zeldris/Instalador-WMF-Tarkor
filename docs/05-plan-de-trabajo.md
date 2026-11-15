@@ -103,7 +103,7 @@ Cierra con la marca de Tarkor en el asistente, accesible y con fuentes ligeras, 
 |---|---|---|
 | INS-56 | La marca de Tarkor en el asistente (de `UX-40` del juego): tokens `gold-*`, `stone-*`, `night-*` y `crystal-deep` en `estilos.css`, «TARKOR» en `.title-gold`, filo de oro, `h1` en Cinzel 700, azul solo para estados, fondo de madera. Espera a que `claude/marca-interfaz` del juego llegue a su `main`; iconos en `app/src-tauri/icons/` cuando existan las imágenes (E14). Absorbe la prop. 9: oro, tokens de escala, estilos en línea, errores y cargas comunes | pendiente |
 | INS-66 | Accesibilidad: contraste del botón principal y textos tenues, bordes, `progressbar`, foco del `.seg`, tamaños para la Deck (prop. 7) | pendiente |
-| INS-67 | Fuentes: solo `latin` y `latin-ext` en woff2 (~200 KB) (prop. 8) | pendiente |
+| INS-67 | Fuentes: solo `latin` y `latin-ext` en woff2 (~200 KB) (prop. 8) | hecho (2026-11-15; app/src/fuentes.css con 12 @font-face woff2 latin y latin-ext; de 54 archivos a 12 (260 KB); test_fuentes.py) |
 | INS-58 | Colocar las imágenes de [`13`](13-hoja-de-estilos-e-imagenes.md) cuando el generador las entregue (iconos, imágenes del NSIS, portada, hierro del riel, 1 MB como mucho). Antes, dos pasos de la usuaria (`13` §6): la sesión en GVIG (encargo sin rama, pendiente) y copiar la entrega a `entrega/`. Verlas en Windows al 100 % y 150 % y en la Deck queda con `INS-8`, `INS-51` e `INS-52` | pendiente |
 
 ## `0.6` «Publicar»
