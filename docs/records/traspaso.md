@@ -31,7 +31,7 @@ cada commit.**
 
 1. Fusionar el PR #1 del repo del juego (fase 2): dos tests intermitentes de
    `routes/turn.integration.test.ts` y endurecer `lib/prisma.test.ts` (detalle en el
-   [plan](../05-plan-de-trabajo.md#dónde-lo-dejamos-2026-09-28)).
+   [plan](../05-plan-de-trabajo.md)).
 2. Fase 3 (modo empaquetado del juego, `INS-31`…`INS-37`) y fase 4 (`INS-41`…`INS-47`, e `INS-56`: la marca de Tarkor en el asistente cuando el juego fusione `UX-40`; `INS-58`: colocar las imágenes de [`13`](../13-hoja-de-estilos-e-imagenes.md) cuando el generador las entregue).
 3. Pendientes leves de la revisión de `INS-48` (no vuelven a revisarse en su PR): `bloqueado` no descuenta lo
    ya descargado en Ajustes; no se impide mover la carpeta con una descarga en marcha (el asistente hoy no lo

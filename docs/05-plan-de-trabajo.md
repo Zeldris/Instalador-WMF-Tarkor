@@ -1,329 +1,150 @@
-# Plan de implementación
+# Plan de trabajo: roadmap por versiones
 
-**Estado: en marcha desde el 2026-09-28.** Sustituye al checklist anterior. Ordenado por riesgo: lo
-que puede tumbar el plan (empaquetar el backend, Ollama portable, velocidad en la Deck) se prueba
-primero, antes de invertir en la migración de la base de datos.
+Este documento es el roadmap del instalador: una sección por versión, con su tabla de tareas. Lo lee
+`.claude/gw/scripts/roadmap.py` (`show`, `list`, `done`), que entiende `` ## `X.Y` «Nombre» `` y las tablas
+`| Id | Tarea | Estado |`. Decidido con la usuaria el 2026-11-15 (propuesta en
+[`versiones.md`](records/auditoria-2026-11-15/versiones.md); las diez propuestas de la auditoría, en su
+[README](records/auditoria-2026-11-15/README.md)).
 
-Dónde se trabaja cada fase:
+Reglas:
 
-- **Este repo (público):** envoltorio Tauri, asistente de primer arranque, gestión de sidecars.
-- **Repo del juego (privado):** migración a SQLite, recorte de funcionalidad, cambios pequeños para
-  el modo empaquetado, CI de build.
+- Cada tarea lleva un id (`INS-n` del instalador, `FLU-n` del flujo de trabajo) y está en una versión, o en
+  «Después, sin versión». Un id sale en una sola fila de todo el archivo. Las tareas se nombran en commits y en la
+  [bitácora](records/traspaso.md).
+- Solo la última menor publicada recibe parches; lo nuevo va a la siguiente menor libre.
+- PR por tanda a `main`, sin ramas `version/`. Cada PR rellena `[Unreleased]` de `CHANGELOG.md` y, al cerrar la
+  versión, se pone el tag `vX.Y.Z`.
+- Estado: `pendiente`, `en curso` o `hecho (AAAA-MM-DD; nota)`.
 
-Marcar cada punto al terminarlo. Cada tarea tiene su identificador `INS-<fase><n>` (la fase 0 va
-sin el 0: `INS-1` es la antigua 0.1, y por eso no admite más de nueve tareas: lo nuevo entra en la
-fase que toque), que nombran los commits y la [bitácora](records/traspaso.md);
-las del flujo de trabajo llevan `FLU-n` y van en su [sección](#flujo-de-trabajo).
+Dónde se trabaja: este repo (público) lleva el envoltorio Tauri, el asistente y los sidecars; el repo del juego
+(privado), la migración a SQLite, el recorte de funcionalidad y el modo empaquetado.
 
-## Dónde lo dejamos (2026-09-28)
+## `0.1` «Asistente»
 
-**Hecho y en `main` de este repo:** fases `INS-1`…`INS-6` (asistente, detección de equipo, catálogo de
-perfiles, motor de IA real, backend compilado a bytecode), con pruebas de punta a punta.
+Lo ya fusionado en `main` (fases 0, 1 y 4 hechas, con pruebas de punta a punta). Tag retroactivo `v0.1.0` sobre `9fce3d1`.
 
-**A medias — fase 2 en el repo del juego**, rama `claude/instalador-empaquetado`,
-[PR #1](https://github.com/Zeldris/World-Maker-Fantasy/pull/1), **sin fusionar**:
+| Id | Tarea | Estado |
+|---|---|---|
+| INS-1 | Proyecto Tauri v2 en `app/` con el asistente (React + Vite + TypeScript) y los tokens visuales del juego ([`11`](11-diseno-del-frontal.md)) | hecho (2026-09-28; fase 0) |
+| INS-2 | Detección de equipo en Rust (`sysinfo`) y cálculo de perfiles de [`09`](09-deteccion-de-equipo-y-perfiles.md), con tests | hecho (2026-09-28; fase 0) |
+| INS-3 | `config.json` en la carpeta de datos: al abrir, asistente si no está completado | hecho (2026-09-28; fase 0) |
+| INS-3b | Catálogo de modelos y perfiles en JSON (con perfil Mínimo) y ajustes de Ollama por equipo ([`12`](12-catalogo-y-rendimiento.md)) | hecho (2026-09-28; fase 0) |
+| INS-4 | Gestor de sidecars en Rust: puerto libre, arranque y parada, health-check, un reinicio automático | hecho (2026-09-28; fase 0) |
+| INS-5 | Ollama portable: descarga fijada con SHA256, arranque aislado, modelos con progreso vía `/api/pull` | hecho (2026-09-28; fase 0) |
+| INS-6 | Prueba de empaquetado del backend a bytecode con Postgres (`herramientas/empaquetar-backend.mjs`); repetirla sobre SQLite y probar Prisma sin motor nativo queda para tras `INS-60` | hecho (2026-09-28; fase 0, con la repetición sobre SQLite pendiente) |
+| INS-13 | Perfiles pequeños: se ofrecen Mínimo y Ligero con modelos Apache 2.0, avisando del resultado (calidad a confirmar en `INS-8`) | hecho (2026-09-28; fase 1) |
+| INS-14 | Perfiles por encima del máximo seguro: elegibles con aviso y confirmación en la tarjeta (`09`, `11`) | hecho (2026-10-25; en el asistente y en Ajustes) |
+| INS-21 | Proveedor de base de datos por variable de entorno y `schema.sqlite.prisma` en el build, con test de sincronía | hecho (2026-09-28; repo del juego, PR #1 cerrado sin fusionar: se rehace en `INS-60`) |
+| INS-22 | Embeddings en JSON y similitud coseno en JS | hecho (2026-09-28; repo del juego, PR #1 sin fusionar) |
+| INS-23 | `lockRowForUpdate()` con mutex en memoria para SQLite | hecho (2026-09-28; repo del juego, PR #1 sin fusionar) |
+| INS-24 | Los 16 campos de lista a `Json`; `push` reescritos con `anadirNpcRetirado` | hecho (2026-09-28; repo del juego, PR #1 sin fusionar) |
+| INS-25 | `mode: 'insensitive'` y `skipDuplicates` | hecho (2026-09-28; repo del juego, PR #1 sin fusionar) |
+| INS-26 | Batería de tests del backend pasando contra SQLite | hecho (2026-09-28; repo del juego, PR #1 sin fusionar) |
+| INS-27 | Script de build de la base de datos plantilla (migrada, catálogo, lore indexado) | hecho (2026-09-28; repo del juego, PR #1 sin fusionar) |
+| INS-31 | Frontend: URL del backend en tiempo de ejecución (`apiBaseUrl()`, contrato `window.__TARKOR__.apiUrl` de [`04`](04-empaquetado-tauri.md)) | hecho (2026-10-26; en `main` del juego, `b76c66b2`, 8 tests) |
+| INS-32 | Frontend: fuentes Cinzel e Inter en local | hecho (2026-10-26; ya en `main` del juego por `BAS-1`, `4a150259`; sin cambios allí) |
+| INS-33 | Frontend: sin `ImagePromptSlot` ni admin en el juego empaquetado; «Crear desde cero» deshabilitada | hecho (2026-10-27; en `main` del juego, `aae4a755`, `esEmpaquetado()`, 9 tests) |
+| INS-34 | Backend: build sin rutas ni servicios de curación (esbuild `define`, `import()` dinámico) | hecho (2026-10-27; en `main` del juego, `c7f0e5f9`; `empaquetar-backend.mjs` vigila el `metafile`) |
+| INS-42 | Asistente real de punta a punta: descargas y comprobaciones reales, calentar el narrador, autopausa por red (trozos A, B y C) | hecho (2026-10-26; autopausa con `useEsperaRed`, `calentar_narrador`, ofrece perfil más ligero sin memoria) |
+| INS-43 | Ajustes → Rendimiento de la IA (uso vía `/api/ps`) y pantalla de motor detenido | hecho (2026-10-25; núcleo, comandos, hilo de vigilancia, E2E `rendimiento`; Windows pendiente de `INS-8`) |
+| INS-44 | NSIS: castellano, instalación por usuario, desinstalador con las dos casillas | hecho (2026-11-11; plantilla `installer.nsi`, `--desinstalar`, job `instalador-windows`; verlo en pantalla pendiente de `INS-8`) |
+| INS-45 | AppImage y `.deb` en Ubuntu 22.04, con «Borrar datos del juego» en Ajustes | hecho (2026-11-11; job `paquetes-linux`, diálogo `BorrarDatos`; Deck y escritorio limpio pendientes de `INS-8`) |
+| INS-47 | Pantalla «Licencias de terceros» generada en el build (`cargo-about` y npm) | hecho (2026-11-12; `licencias-terceros.mjs`, `THIRD-PARTY-NOTICES.txt`, 24 licencias y 368 paquetes) |
+| INS-48 | Carpeta del motor y los modelos elegible y movible (`OLLAMA_MODELS`), con espacio frente a libre | hecho (2026-10-25; `carpetaIa`, `cambiar_carpeta_ia`; SD de la Deck y Windows pendientes de `INS-8`) |
+| INS-49 | «Reparar»: comprobar la suma del motor y pedir de nuevo los modelos | hecho (2026-10-25; `motor::reparar`, `modelos.rs`; Windows y Deck pendientes de `INS-8`) |
+| INS-57 | Hoja de estilos del instalador con sus peticiones de imágenes ([`13`](13-hoja-de-estilos-e-imagenes.md)) | hecho (2026-11-11; cuatro dudas resueltas por la usuaria, §6) |
+| INS-59 | Tras borrar solo la IA, al volver a abrir empieza el asistente (`desinstalar::borrar` reescribe `config.json`) | hecho (2026-11-12; cinco tests; Windows y Linux pendientes de `INS-8`) |
+| FLU-1 | Traer de Tarkor su flujo de trabajo y sus skills, adaptados al instalador | hecho (2026-10-21; con `/code-review` y [retro](records/retro-2026-10-21-flujo.md)) |
+| FLU-3 | `ci-local.py`: corre en local los pasos de los jobs de Ubuntu del CI | hecho (2026-10-22; con `--apuntar` deja el resultado en [`ci-local.md`](records/ci-local.md)) |
+| FLU-4 | `/gw-update` a Galivelop-workflow v0.3.0 | hecho (2026-10-25; el CI conserva sus jobs) |
+| FLU-5 | `cargo fmt` del workspace en commits aparte y `cargo fmt --all --check` en `check` y CI | hecho (2026-10-26; `app/rustfmt.toml`, `.git-blame-ignore-revs`) |
+| FLU-6 | `app/rust-toolchain.toml` fija Rust 1.94.1 | hecho (2026-10-26; el CI con la versión fijada no ha corrido por falta de cuota; Windows con `INS-8`) |
+| FLU-7 | `/gw-update` a Galivelop-workflow v0.5.0 (rutas en inglés, `commitNext`, sin firmas; CI en `check.yml` y `app.yml`) | hecho (2026-11-04; `app.yml` sin correr en GitHub por falta de cuota) |
+| FLU-8 | `/gw-update` a Galivelop-workflow v0.5.1 | hecho (2026-11-11; fusionado por el PR #13, retro `retro-2026-11-11-flu8.md`) |
 
-- Código hecho: el backend funciona sobre Postgres y sobre SQLite. En local, la batería completa
-  pasa igual en los dos (2710/2711; el fallo es un test ya intermitente en `main`).
-- CI nuevo (Postgres+pgvector y SQLite). Primera ejecución: SQLite 2710/2711; Postgres falló al
-  crear la extensión (`prisma db execute` sin `--schema`), ya corregido en el último commit.
-  **Falta ver ese CI en verde.**
-- Pendiente antes de fusionar:
-  1. Dos tests de `routes/turn.integration.test.ts` fallan a veces con la batería completa, en
-     Postgres y en SQLite: "OrdenProduccion … racion-carne-ahumada" y "P3.2 … retoma solo el
-     viaje" (sondea 15 s a que termine un viaje reanudado). Pasan siempre al correr el fichero
-     solo. Buscar la causa (orden entre ficheros o tiempos), no reintentarlos.
-  2. `lib/prisma.test.ts`: endurecer el test para que la transacción "tardía" coincida con otra
-     abierta (con el test actual, la versión anterior del arreglo también pasaría).
-- Nota para el día a día del juego: tras cambiar `schema.prisma` hay que correr
-  `npm run schema:sqlite` (un test y el CI lo exigen).
+## `0.2` «Versiones»
 
-**Siguiente:** cerrar lo de arriba y fusionar; después fase 3 (modo empaquetado del juego) y
-fase 4 (backend dentro de la app y CI de releases). `INS-7`, `INS-8` y la fase 5 necesitan probar en la
-Steam Deck o en Windows: `cargo run --release -p tarkor-nucleo --example motor equilibrado`
-(ver `app/README.md`).
+Cierra con el plan como roadmap, una sola versión en la app, `CHANGELOG.md` y `release.yml` por tag (sin binarios todavía).
 
-## Fase 0 — Esqueleto y prueba de concepto
+| Id | Tarea | Estado |
+|---|---|---|
+| FLU-10 | Roadmap por versiones (este documento), `roadmapFiles` en `.claude/gw.json`, versión única en `app/src-tauri/tauri.conf.json` copiada por script a `package.json` y `Cargo.toml`, `CHANGELOG.md` Keep a Changelog y `release.yml` por tag sin binarios | en curso |
+| FLU-11 | Corregir plan y bitácora sobre el PR #1 del juego: está cerrado sin fusionar, no «a medias» | pendiente |
 
-Objetivo: demostrar que el patrón completo funciona en Windows y en la Steam Deck.
+## `0.3` «Base de datos»
 
-- [x] **INS-1** Proyecto Tauri v2 en `app/` con el asistente (React + Vite + TypeScript) usando los
-  tokens visuales del juego. Pantallas según [`11`](11-diseno-del-frontal.md).
-- [x] **INS-2** Detección de equipo en Rust (`sysinfo`, gráfica por plataforma) y cálculo de perfiles
-  de [`09`](09-deteccion-de-equipo-y-perfiles.md), con tests unitarios.
-- [x] **INS-3** `config.json` en la carpeta de datos: al abrir, asistente si no está completado.
-- [x] **INS-3b** Catálogo de modelos y perfiles en JSON (con perfil Mínimo para que cualquiera pueda
-  probar) y ajustes de rendimiento de Ollama calculados por equipo (ver
-  [`12`](12-catalogo-y-rendimiento.md)).
-- [x] **INS-4** Gestor de sidecars en Rust: puerto libre, arrancar y parar procesos, esperar al
-  health-check, un reinicio automático, parada garantizada al cerrar.
-- [x] **INS-5** Ollama portable: descarga de la versión fijada (SHA256), arranque aislado
-  (`OLLAMA_HOST`, `OLLAMA_MODELS`), descarga de modelos con progreso vía `/api/pull`.
-- [x] **INS-6** Prueba de empaquetado del backend compilado a bytecode (camino A de
-  [`10`](10-proteccion-del-codigo-y-build.md)): funciona con el backend real contra Postgres
-  (lecturas, crear partida, `FOR UPDATE`). Herramienta en `herramientas/empaquetar-backend.mjs`.
-  Pendiente para después de la fase 2: repetirla sobre SQLite y probar Prisma sin motor nativo
-  (`queryCompiler` + adaptador SQLite).
-- [ ] **INS-7** Narrador con `system` + `options` por petición sobre `llama3.1:8b`: comparar con
-  `tarkor-narrador-llama31` (ver [`03`](03-ollama-y-modelos-ia.md)). Decidido con la usuaria el
-  2026-11-11: el narrador de Equilibrado y Máximo es `llama3.1:8b`, el mismo que el juego, en lugar de
-  `qwen2.5:7b` (catálogo, `03`, `09`, `12`; Máximo ya no cabe en la Deck, ver `09`).
-- [ ] **INS-8** Prueba en la Steam Deck y en un Windows limpio: tiempos de descarga, memoria real
-  de cada perfil, tokens por segundo, Vulkan frente a ROCm en la Deck, calidad de narración de
-  Mínimo y Ligero. Ajustar el catálogo con lo medido.
+Cierra con la fase 2 (SQLite) rehecha sobre el `main` actual del juego, las tareas de modo empaquetado del juego
+hechas y el inventario [`06`](06-inventario-exclusiones.md) al día.
 
-## Fase 1 — Decisiones pendientes
+| Id | Tarea | Estado |
+|---|---|---|
+| INS-60 | Rehacer la fase 2 (SQLite) sobre `main` actual del juego: el PR #1 está cerrado sin fusionar y han aparecido `hasSome`, jsonb con operador de existencia, `pg_advisory_xact_lock` y más; con test de humo contra SQLite en el CI del juego (prop. 1) | pendiente |
+| INS-61 | `INS-35`/`INS-36` más rutas empaquetadas: Modelfile y `uploads` (prop. 2) | pendiente |
+| INS-62 | Inventario `06` al día: variables nuevas (`IA_REGISTRO`/`IA_CASOS` desactivadas), defectos de `env.ts`, `sync-item-catalog`, imágenes de 464 MB (prop. 3) | pendiente |
+| INS-35 | Backend: `SYSTEM` del narrador incrustado en build; narrador con modelo base más `system` por petición tras `TARKOR_NARRADOR_BASE=1`; leer `TARKOR_NUM_THREAD`, `TARKOR_NUM_BATCH` y `TARKOR_NUM_CTX_NARRADOR` (`12`). Encargo: [issue #93](https://github.com/Zeldris/World-Maker-Fantasy/issues/93) del juego (2026-11-11). `TARKOR_MODELOS_SIN_PENSAR` sobra: el juego ya manda `think: false` | pendiente |
+| INS-36 | Backend: CORS restringido y escucha solo en `127.0.0.1` en modo empaquetado; `TARKOR_IMAGENES_DIR` y versión fijada en el build. Encargo: el mismo issue #93 (2026-11-11) | pendiente |
+| INS-37 | Menú del juego: «Rendimiento de la IA» solo si `window.__TARKOR__.abrirAjustes` es una función (contrato de `04`, 2026-11-04). Falta hacerlo en el juego e inyectar la función en `INS-41` | pendiente |
 
-Se pueden resolver en paralelo a la fase 0. Ver la tabla del [README](../README.md).
+## `0.4` «Solidez»
 
-- [ ] **INS-11** Firma de código en Windows.
-- [ ] **INS-12** Licencia del juego (propuesta: todos los derechos reservados) y de este repo. Hecha la del
-  repo (2026-11-05): MIT, con `LICENSE` en la raíz y `license` en `package.json` y los `Cargo.toml` (ver `08`).
-  Falta la del juego.
-- [x] **INS-13** Perfiles pequeños: se ofrecen Mínimo y Ligero con modelos Apache 2.0, avisando del
-  resultado (calidad a confirmar en `INS-8`).
-- [x] **INS-14** (2026-10-25) Perfiles por encima del máximo seguro: se pueden elegir con aviso y
-  confirmación en la tarjeta, sin interruptor (ver `09` y `11`). Implementado el mismo día en el
-  asistente y en Ajustes (`Tarjetas`, `pideConfirmar`/`bloqueado` en `app/src/tipos.ts`).
-- [ ] **INS-15** Confirmar licencias de modelos e imágenes. Revisada la de `llama3.1:8b` (2026-11-11, ver
-  `08`). Hecha la pantalla del instalador (2026-11-11): «Licencias y avisos» desde el paso 2 y Ajustes, con
-  «Built with Llama», el aviso de Meta, la política de uso (copiar enlace) y los textos completos de Llama 3.1,
-  MIT (Ollama) y Apache 2.0 en `app/src/licencias/` (`pantallaLicencias.tsx`, ver `11`). Falta: la misma
-  pantalla en el juego, las licencias de las imágenes y comprobar las de los modelos al publicar.
+Cierra con el E2E en el CI, dependencias vigiladas y el código del núcleo sin pánicos ni errores tragados.
 
-## Fase 2 — Migración a SQLite (repo del juego) — código hecho, PR #1 sin fusionar
+| Id | Tarea | Estado |
+|---|---|---|
+| INS-63 | E2E (`app/e2e`) en el CI (prop. 4) | pendiente |
+| INS-64 | Dependabot más `cargo audit` y `npm audit` (prop. 5) | pendiente |
+| INS-65 | Ayudante de mutex sin pánico, partir `lib.rs` y no tragar errores (`carpetas.rs`, `App.tsx:38`) (prop. 6) | pendiente |
 
-Ver [`02`](02-migracion-postgres-a-sqlite.md). Sin romper el modo de desarrollo con Postgres.
+## `0.5` «Marca»
 
-- [x] **INS-21** Proveedor de base de datos por variable de entorno y generación de
-  `schema.sqlite.prisma` en el build, con test de sincronía.
-- [x] **INS-22** Embeddings en JSON + similitud coseno en JS (`retrieval.ts`, `worldFacts.ts`).
-- [x] **INS-23** `lockRowForUpdate()` con mutex en memoria cuando el proveedor es SQLite.
-- [x] **INS-24** Los 16 campos de lista a `Json` (sin capa de conversión: un `Json` con un array se
-  lee y escribe igual); los `push` reescritos con `anadirNpcRetirado`.
-- [x] **INS-25** `mode: 'insensitive'` y `skipDuplicates`.
-- [x] **INS-26** Batería de tests del backend pasando contra SQLite.
-- [x] **INS-27** Script de build de la base de datos plantilla (migrada + catálogo + lore indexado).
+Cierra con la marca de Tarkor en el asistente, accesible y con fuentes ligeras, y las imágenes colocadas.
 
-## Fase 3 — Modo empaquetado del juego (repo del juego)
+| Id | Tarea | Estado |
+|---|---|---|
+| INS-56 | La marca de Tarkor en el asistente (de `UX-40` del juego): tokens `gold-*`, `stone-*`, `night-*` y `crystal-deep` en `estilos.css`, «TARKOR» en `.title-gold`, filo de oro, `h1` en Cinzel 700, azul solo para estados, fondo de madera. Espera a que `claude/marca-interfaz` del juego llegue a su `main`; iconos en `app/src-tauri/icons/` cuando existan las imágenes (E14). Absorbe la prop. 9: oro, tokens de escala, estilos en línea, errores y cargas comunes | pendiente |
+| INS-66 | Accesibilidad: contraste del botón principal y textos tenues, bordes, `progressbar`, foco del `.seg`, tamaños para la Deck (prop. 7) | pendiente |
+| INS-67 | Fuentes: solo `latin` y `latin-ext` en woff2 (~200 KB) (prop. 8) | pendiente |
+| INS-58 | Colocar las imágenes de [`13`](13-hoja-de-estilos-e-imagenes.md) cuando el generador las entregue (iconos, imágenes del NSIS, portada, hierro del riel, 1 MB como mucho). Antes, dos pasos de la usuaria (`13` §6): la sesión en GVIG (encargo sin rama, pendiente) y copiar la entrega a `entrega/`. Verlas en Windows al 100 % y 150 % y en la Deck queda con `INS-8`, `INS-51` e `INS-52` | pendiente |
 
-Ver [`06`](06-inventario-exclusiones.md).
+## `0.6` «Publicar»
 
-- [x] **INS-31** (2026-10-26) Frontend: URL del backend en tiempo de ejecución (`api.ts`). Hecho en el repo del
-  juego, rama `claude/ins-31-url-backend` ([PR #78](https://github.com/Zeldris/World-Maker-Fantasy/pull/78)),
-  **en `main` del juego** (`b76c66b2`, sin PR y con CI local por la cuota agotada, `QA-215`; retro `QA-259`…`QA-261`
-  aplicada allí): `apiBaseUrl()` con el contrato
-  `window.__TARKOR__.apiUrl` de [`04`](04-empaquetado-tauri.md); todas las URLs de `api.ts` pasan por ella; 8 tests.
-- [x] **INS-32** (2026-10-26) Frontend: fuentes Cinzel e Inter en local. Ya estaba hecho en `main` del juego por
-  su tarea `BAS-1` (`4a150259`, 2026-10-25): `frontend/src/assets/fonts/fonts.css` con Cinzel e Inter variables
-  (latin y latin-ext, de `@fontsource-variable` 5.3.0) y sus `LICENSE-*.txt` (OFL, ver `08`); en `frontend` no
-  queda ninguna petición a Google Fonts. Sin cambios en el juego.
-- [x] **INS-33** (2026-10-27) Frontend: quitar `ImagePromptSlot`; deshabilitar "Crear desde cero" como "en
-  construcción"; revisar el texto de `ComingSoon.tsx`. Decidido por la usuaria (2026-10-26): en el juego
-  empaquetado (`window.__TARKOR__` presente) desaparece todo lo de admin: el enlace de `Home.tsx`, las rutas
-  `/admin/*` y `ImagePromptSlot` en cualquier sitio (ya estaba tras el modo desarrollador, `CFG-33` del juego); en
-  desarrollo sigue igual. «Crear desde cero» deshabilitada y el texto de `ComingSoon.tsx` («en construcción para
-  futuras versiones») cambian en todas partes. **En `main` del juego** (`aae4a755`, sin PR, CI local, `QA-215`;
-  retro aprobada por la usuaria, `QA-262`…`QA-265`): `esEmpaquetado()` en `frontend/src/lib/empaquetado.ts`, que
-  comparte la lectura de `window.__TARKOR__` con `apiBaseUrl()`; 9 tests nuevos que fallan sin el arreglo; `tsc`,
-  `oxlint` y vitest (798) en verde. El juego no tiene E2E de frontend.
-- [x] **INS-34** (2026-10-27) Backend: build sin rutas ni servicios de curación (ruta de image-prompt, orquestador
-  cloud, `LiveTeacherCapture`, scripts). **En `main` del juego** (`c7f0e5f9`, sin PR, CI local, `QA-215`; retro
-  aprobada por la usuaria, `QA-266`): esbuild sustituye `process.env.TARKOR_EMPAQUETADO` por `"1"` (`define`) y la
-  ruta `POST /world/:slug/image-prompt` y la captura en vivo se cargan con `import()` dinámico en la rama que queda
-  muerta (plegarla exige `minify` o `minifySyntax`); `empaquetado.test.ts` y `world.test.ts` fallan sin el arreglo.
-  Aquí, `herramientas/empaquetar-backend.mjs` lleva el `define` y se para si el `metafile` trae `lib/aiProviders/`,
-  `imagePromptGenerator`, `liveTeacherCapture` o scripts de curación (pasa con la rama, para con el `main` anterior).
-  CI local: 3958 tests de backend y 798 de frontend; el test de navegador de `tools/qa`, que allí se saltó por la
-  descarga de Chromium, pasado desde aquí (382 tests de `tools/qa`).
-- [ ] **INS-35** Backend: `SYSTEM` del narrador incrustado en build; narrador con modelo base +
-  `system` por petición detrás de variable de entorno; leer `TARKOR_NUM_THREAD`,
-  `TARKOR_NUM_BATCH` y `TARKOR_NUM_CTX_NARRADOR` (ver `12`). Encargo: issue [#93](https://github.com/Zeldris/World-Maker-Fantasy/issues/93) del juego (2026-11-11), con
-  `INS-36`; el modo base va detrás de `TARKOR_NARRADOR_BASE=1`. `TARKOR_MODELOS_SIN_PENSAR` sobra: el juego ya
-  manda `think: false` en todas las peticiones.
-- [ ] **INS-36** Backend: CORS restringido y escucha solo en `127.0.0.1` en modo empaquetado; rutas de
-  imágenes y datos por variable de entorno (`TARKOR_IMAGENES_DIR`) y versión fijada en el build. Encargo: el issue
-  [#93](https://github.com/Zeldris/World-Maker-Fantasy/issues/93) del juego, con `INS-35` (2026-11-11).
-- [ ] **INS-37** Menú del juego: enlace a Ajustes → Rendimiento de la IA. Contrato fijado (2026-11-04, `04`):
-  «Rendimiento de la IA» en el menú solo si `window.__TARKOR__.abrirAjustes` es una función, y la llama al pulsarlo.
-  Falta: hacerlo en el juego (encargo a una sesión del juego) e inyectar la función en `INS-41`.
+Cierra con el release publicado: instaladores y `SHA256SUMS`, firma y actualizador decididos, licencias confirmadas.
 
-## Fase 4 — Empaquetado completo y CI
+| Id | Tarea | Estado |
+|---|---|---|
+| INS-11 | Firma de código en Windows. Incluye la prop. 10: decidir firma y actualizador | pendiente |
+| INS-41 | Integrar el build del juego (frontend, backend en bytecode, plantilla) en la app de Tauri. Pendiente: variante «El motor del juego se ha detenido» (`11`) cuando `MotorDetenido` diga qué proceso es | pendiente |
+| INS-46 | Workflow de GitHub Actions que publica releases con instaladores y `SHA256SUMS` (`release.yml` pasa a llevar binarios) | pendiente |
+| INS-12 | Licencia del juego (propuesta: todos los derechos reservados) y de este repo. Hecha la del repo (2026-11-05): MIT, `LICENSE` y `license` en `package.json` y `Cargo.toml` (`08`). Falta la del juego | pendiente |
+| INS-15 | Confirmar licencias de modelos e imágenes. Revisada la de `llama3.1:8b` (2026-11-11, `08`); hecha la pantalla «Licencias y avisos» del instalador (2026-11-11, `11`). Falta: la misma pantalla en el juego, las licencias de las imágenes y comprobar las de los modelos al publicar | pendiente |
 
-Ver [`04`](04-empaquetado-tauri.md) y [`10`](10-proteccion-del-codigo-y-build.md).
+## `1.0` «Prueba real»
 
-- [ ] **INS-41** Integrar el build del juego (frontend + backend en bytecode + plantilla) en la app de
-  Tauri. Pendiente: pantalla del motor detenido: variante "El motor del juego se ha detenido" (docs/11), cuando
-  `MotorDetenido` diga qué proceso es.
-- [x] **INS-42** (2026-10-26) Asistente real de punta a punta: descargas y comprobaciones de verdad; calentar el
-  narrador al arrancar. Incluye la autopausa al perder la red con reanudación sola y la velocidad
-  de la narración de prueba (ronda de diseño del 2026-10-25). Si calentar el narrador o una narración fallan por
-  falta de memoria (`serve` sigue vivo y la pantalla del motor detenido no sale), ofrecer el perfil más ligero
-  (hallazgo de la revisión de `INS-43`).
-  Hecho del trozo A (2026-10-26, autopausa): el núcleo clasifica los errores de Ollama
-  (`Error::es_de_red`, `sin_memoria`; `motor::Error::es_de_red`), Tauri devuelve `ErrorIa {mensaje, red, sinMemoria}` en
-  `instalar_motor` y `descargar_modelos`, y la Descarga espera con «Esperando conexión» y reintenta sola a los 5, 10,
-  20, 40 y 60 s (con «Pausar» y «Reintentar ahora»); E2E con `FALSO_CORTES_PULL`.
-  Hecho del trozo B (2026-10-26): comando `calentar_narrador` (Tauri) y `calentarNarrador` en la
-  `Api`; al entrar en el juego se arranca el motor si no corre y se calienta el narrador («Preparando el narrador…» /
-  «El narrador está listo»), con el aviso y «Cambiar a un perfil más ligero» si falta memoria y una línea discreta en
-  otro error; la Comprobación sugiere un perfil más ligero bajo 3 palabras/s (`PALABRAS_LENTAS`); tests de vitest y
-  E2E (`asistente`, `rendimiento`). Revisión del trozo B: el umbral de lento se mide sin redondear (y una medida de 0 no
-  sugiere nada) y `asegurar_motor` arranca el motor solo si no corre bajo un candado común con `arrancar_motor`, para que
-  dos arranques a la vez no se pisen.
-  Hecho del trozo C (2026-10-26): la misma autopausa al cambiar de perfil en Ajustes y en Reparar. `cambiar_perfil` y
-  `reparar` devuelven `ErrorIa` (el corte llega con `red: true`), el gancho común `useEsperaRed` (`app/src/esperaRed.ts`:
-  escalera de esperas, cuenta atrás, «Reintentar ahora» y limpieza al desmontar) lo usan la Descarga, Ajustes y Reparar,
-  y «Pausar» cancela también la espera; tests de vitest, y el E2E `rendimiento` corta el primer pull del cambio de perfil
-  (`FALSO_CORTES_PULL`). Con el trozo C, `INS-42` queda cerrada.
-- [x] **INS-43** (2026-10-25) Ajustes → Rendimiento de la IA (con uso de la gráfica vía `/api/ps`) y pantalla de
-  motor detenido. Decidido el 2026-10-25 (ver `11`): frase de dónde corre la IA y memoria real; cambiar de perfil
-  descarga, reinicia el motor y ofrece borrar lo que sobra; "Copiar informe" con "Ver detalles"; un hilo de Rust
-  vigila el motor y avisa con un evento. Hecho: núcleo (`ollama::resumen_uso`, `sobrantes`, `informe.rs` con
-  `anonimizar`, marca de arranque en el registro y `sin_memoria` desde ella), comandos `uso_ia`, `cambiar_perfil`,
-  `modelos_sobrantes`, `borrar_modelos`, `informe`, `motor_detenido` y `reintentar_motor`, hilo de vigilancia con
-  el evento `motor-detenido`; frontal: línea de uso cada 5 s, cambio de perfil con progreso y pausa, borrar
-  sobrantes, `CopiarInforme` y la pantalla del motor detenido (Reintentar, "Cambiar a un perfil más ligero");
-  tests de vitest y E2E `app/e2e/rendimiento.e2e.mjs`. Pendiente de `INS-8`: en Windows, la vigilancia y el
-  reinicio del motor, el informe con rutas de Windows (`anonimizar`) y la línea de uso con una gráfica real.
-- [x] **INS-44** NSIS: castellano, instalación por usuario, desinstalador con las dos casillas. Decidido el
-  2026-11-11 (ver `04`): plantilla NSIS propia (`app/src-tauri/windows/installer.nsi`), copia de la de Tauri
-  2.12.0 con la casilla de Tauri cambiada por las dos de `07`; los ganchos (`installerHooks`) no pueden añadir
-  una casilla a la página de confirmación. Lo borra `tarkor.exe --desinstalar [--partidas] [--ia]`, llamado antes
-  de quitar los archivos (lee `carpetaIa` de `config.json`); el tamaño de la casilla, de
-  `tarkor.exe --info-desinstalar <ini>`. Pasos: (a) núcleo y opciones del ejecutable; (b) plantilla y test
-  que para si cambia la versión de `@tauri-apps/cli`; (c) CI de Windows que construye el `.exe`, instala en
-  silencio, siembra datos y desinstala con `/BORRARPARTIDAS` y `/BORRARIA`.
-  La plantilla instala en `%LOCALAPPDATA%\Programs\Tarkor` (`07`; la de Tauri usaría `%LOCALAPPDATA%\Tarkor`,
-  que es de la IA y los registros). Hecho el 2026-11-11: (a), (b) y (c), el job `instalador-windows` de
-  `app.yml` con `tools/qa/desinstalar-windows.ps1`, en verde a la primera (el `.exe` queda como artefacto). Pendiente de `INS-8`: verlo en pantalla (casillas, tamaño).
-- [x] **INS-45** AppImage (+ `.deb` opcional) compilado en Ubuntu 22.04. Incluye «Borrar datos del juego» en
-  Ajustes (Linux, `07`), con el mismo borrado del núcleo que el desinstalador de `INS-44`; el CI de Linux
-  construye el `.AppImage` y el `.deb`. Diseño del diálogo decidido el 2026-11-11 (ver `07`): dos casillas, «Borrar»
-  desactivado sin ninguna, para el motor, borra y cierra.
-  Hecho el 2026-11-11: el job `paquetes-linux` de `app.yml` construye el `.AppImage` y el `.deb` en Ubuntu 22.04 y
-  comprueba que los dos arrancan (en verde a la primera; los dos quedan como artefacto); órdenes `plataforma`,
-  `info_borrado`, `borrar_datos` y `cerrar_app`, y el diálogo `BorrarDatos` en Ajustes con vitest y el paso 7 de
-  `rendimiento.e2e.mjs`. Pendiente de `INS-8`: probar el `.AppImage` en la Steam Deck y en un escritorio limpio.
-- [ ] **INS-46** Workflow de GitHub Actions en el repo privado que publica releases con `SHA256SUMS`
-  en este repo.
-- [x] **INS-47** (2026-11-12) Pantalla "Licencias de terceros" generada en el build.
-  Decidido con la usuaria (2026-11-12): las licencias de las dependencias de Rust que entran en el binario
-  (Linux y Windows) las saca `cargo-about`, que además se para ante una licencia no aceptada; las de npm de
-  producción, un script propio que lee `node_modules`. Se enseñan como `chrome://credits`: una sección «Licencias
-  de terceros» al final de la página de licencias, agrupada por licencia y desplegable (paquete, versión y texto,
-  sin repetir textos iguales), generada en el build y no versionada. El mismo contenido va a un
-  `THIRD-PARTY-NOTICES.txt` que `INS-46` publica con cada versión, junto al `NOTICE` de Llama (`08`).
-  Hecho el 2026-11-12: `app/herramientas/licencias-terceros.mjs` (lo corre `npm run build`) junta cargo-about (versión fijada en
-  `VERSION_CARGO_ABOUT` de ese archivo)
-  (`app/about.toml`: licencias aceptadas y los dos destinos) y las dependencias de producción de `package-lock.json`, y
-  escribe `app/src/licencias/generadas/terceros.json` y `app/dist-licencias/THIRD-PARTY-NOTICES.txt` (los dos
-  ignorados). Hoy: 24 licencias y 368 paquetes (360 crates y 8 de npm), ~590 KB (`terceros.json`, en su propio fragmento del bundle, cargado al abrir la sección). La sección `LicenciasDeTerceros`
-  solo pinta un grupo al abrirlo; sin el archivo (dev, vitest) dice que no se generó, y el build de producción para si falta. El CI instala cargo-about en
-  los tres jobs que compilan, e `instalar-entorno.sh` en local. Entran también las dependencias de build (más de lo
-  estricto, nunca menos). Los dos plugins de Tauri de npm no traen archivo de licencia: van con el texto estándar.
-- [ ] **INS-56** La marca de Tarkor en el asistente (de `UX-40` del juego, decidido con la usuaria el
-  2026-11-11): tokens `gold-*`, `stone-*`, `night-*` y `crystal-deep` en `app/src/estilos.css`; «TARKOR» del riel en
-  `.title-gold` (Cinzel 900), filo de oro en el paso activo y el riel, `.gold-hairline`, `h1` en Cinzel 700; el azul
-  (`accent-*`) solo para estados. **Fondo de madera**, como dentro del juego. Espera a que la rama
-  `claude/marca-interfaz` del juego (`docs/producto/diseno-interfaz-marca.md`) llegue a su `main`. Aparte, cuando
-  existan las imágenes (fila E14 de ese documento): iconos de la app en `app/src-tauri/icons/`. Qué imágenes y dónde
-  va cada una: [`13`](13-hoja-de-estilos-e-imagenes.md) e `INS-58`.
-- [x] **INS-57** (2026-11-11) Hoja de estilos del instalador con sus peticiones de imágenes, a partir de la hoja de
-  Tarkor del generador (`galivelop-image-generator`, `docs/marcas/tarkor/`). Hecho:
-  [`13-hoja-de-estilos-e-imagenes.md`](13-hoja-de-estilos-e-imagenes.md): las piezas ya pedidas allí que el
-  instalador solo coloca (`E14`, `#17`, `E7`, `#9`, `#2`, `#3`, `#5`, `E13`, `E4`, `E5`, `E3`) y las nuevas (`I1`
-  lateral e `I2` cabecera del instalador de Windows, `I3` portada del asistente, `I4` hierro del riel, `I6` cápsula
-  vertical para la Deck), con medida, prompt, peso, criterio de aceptación y la referencia de diseño de cada una.
-  Sus cuatro dudas, resueltas por la usuaria el 2026-11-11 (§6): icono sobre noche; la portada `I3` se pide,
-  enmarcada y solo en «Bienvenida» y «Listo»; el pedido llega a GVIG con una sesión allí; la entrega la copia ella.
-- [ ] **INS-58** Colocar las imágenes de [`13`](13-hoja-de-estilos-e-imagenes.md) cuando el generador las entregue.
-  Antes, dos pasos de la usuaria (`13` §6): abrir en GVIG la sesión que lee `13` y añade el bloque «Instalador» y el
-  perfil `lateral` (encargo en GVIG: sin rama todavía, **pendiente**), y copiar la entrega a `entrega/` en la raíz
-  de este repo. Luego:
-  iconos (`E14`) en `app/src-tauri/icons/`; `sidebarImage`, `headerImage` e iconos del instalador en
-  `bundle.windows.nsis` de `tauri.conf.json` (BMP de 24 bits en `app/src-tauri/windows/`); portada, hierro del riel,
-  estados y barra de progreso en `app/src/imagenes/`, 1 MB entre todas como mucho. Va con `INS-56` o después.
-  Pendiente de `INS-8`, `INS-51` e `INS-52`: verlas en Windows al 100 % y al 150 %, y en la biblioteca de la Deck.
-- [x] **INS-59** (2026-11-12) Tras borrar solo la IA (casilla del desinstalador de Windows o «Borrar datos del
-  juego» en Linux), al volver a abrir Tarkor empieza el asistente en vez de la vista de juego con «El motor de IA no
-  está instalado». Decidido por la usuaria el 2026-11-11 (ver `07`, «Desinstalación»). Hecho: `desinstalar::borrar`,
-  al borrar una IA borrable (aunque se quede a medias) con las partidas conservadas, reescribe `config.json` con `asistenteCompletado` a false,
-  sin `modelosDescargados` y con el paso del asistente en «Elige perfil» (4) como mucho; si la IA no es borrable
-  o no había `config.json`, no lo toca. Cinco tests en `desinstalar.rs`. Pendiente de `INS-8`: verlo en Windows
-  tras reinstalar y en Linux con «Borrar datos del juego».
-- [x] **INS-48** (2026-10-25) Carpeta del motor y los modelos elegible antes de descargar y movible desde Ajustes
-  (`OLLAMA_MODELS`); espacio necesario frente a libre en cada tarjeta, con la descarga bloqueada si no
-  cabe (ver `07` y `11`). Hecho: `carpetaIa` en `config.json`, `nucleo/src/carpetas.rs`
-  (`espacio_libre_mb`, `mover_carpeta`: renombra o copia y borra), `perfiles::evaluar` con el disco
-  de la carpeta aparte, comando `cambiar_carpeta_ia` (`<elegida>/Tarkor IA`, para y rearranca el
-  motor) y selector nativo (`tauri-plugin-dialog` 2). Pendiente de `INS-8`: mover a la tarjeta SD de
-  la Deck y entre discos en Windows (el test de copia fallida solo corre en Unix).
-- [x] **INS-49** (2026-10-25) "Reparar": volver a comprobar la suma del motor y pedir de nuevo los modelos, desde
-  Ajustes y desde la comprobación final. Hecho: `motor::instalar` guarda la suma de cada archivo en `.completo`
-  y `motor::reparar` las comprueba y reinstala si falla alguna; `nucleo/src/modelos.rs` suma las capas de cada
-  manifiesto de Ollama y borra las dañadas; comando `reparar` (para el motor, repara, borra capas, rearranca y
-  pide los modelos del perfil) y componente `Reparar` en Ajustes y en las filas «Motor de IA» y «Modelos» de la
-  comprobación. Pendiente de `INS-8`: reparar en Windows (archivos bloqueados por el motor) y en la Deck.
+Cierra con todo probado en una Steam Deck y en Windows limpios (lo que depende del equipo de la usuaria).
 
-## Fase 5 — Prueba real
+| Id | Tarea | Estado |
+|---|---|---|
+| INS-7 | Narrador con `system` y `options` por petición sobre `llama3.1:8b`, comparado con `tarkor-narrador-llama31` ([`03`](03-ollama-y-modelos-ia.md)). Decidido el 2026-11-11: el narrador de Equilibrado y Máximo es `llama3.1:8b` en lugar de `qwen2.5:7b` (catálogo, `03`, `09`, `12`) | pendiente |
+| INS-8 | Prueba en la Steam Deck y en un Windows limpio: descargas, memoria real por perfil, tokens por segundo, Vulkan frente a ROCm, calidad de Mínimo y Ligero; ajustar el catálogo. Comando: `cargo run --release -p tarkor-nucleo --example motor equilibrado` (`app/README.md`) | pendiente |
+| INS-51 | En la Steam Deck (modo escritorio y como juego ajeno a Steam), con sus imágenes de biblioteca (bloque D de `13`): dónde las lee Steam y si el instalador puede copiarlas | pendiente |
+| INS-52 | En un Windows 10 y un Windows 11 limpios, sin Node ni Ollama | pendiente |
+| INS-53 | En un equipo de 8 GB: el perfil Ligero debe ser jugable | pendiente |
+| INS-54 | Actualizar de una versión a otra sin perder partidas | pendiente |
+| INS-55 | Desinstalar conservando y sin conservar partidas | pendiente |
 
-- [ ] **INS-51** En la Steam Deck (modo escritorio y como juego ajeno a Steam). Con sus imágenes de biblioteca
-  (bloque D de [`13`](13-hoja-de-estilos-e-imagenes.md)): dónde las lee Steam y si el instalador puede copiarlas.
-- [ ] **INS-52** En un Windows 10 y un Windows 11 limpios, sin Node ni Ollama.
-- [ ] **INS-53** En un equipo de 8 GB: el perfil Ligero debe ser jugable.
-- [ ] **INS-54** Actualizar de una versión a otra sin perder partidas.
-- [ ] **INS-55** Desinstalar conservando y sin conservar partidas.
+## Después, sin versión
 
-## Flujo de trabajo
+Tareas del flujo de trabajo ([`AGENTS.md`](../AGENTS.md), [bitácora](records/traspaso.md), [runbook](runbooks/skills-y-modelos.md)) que no cierran ninguna versión del instalador.
 
-Cómo trabaja Claude en este repo: [`AGENTS.md`](../AGENTS.md), la [bitácora](records/traspaso.md), los
-ganchos, `.claude/gw/scripts`, `tools/qa` y las skills ([runbook](runbooks/skills-y-modelos.md)).
+| Id | Tarea | Estado |
+|---|---|---|
+| FLU-2 | Piloto de [Galivelop-workflow](https://github.com/Zeldris/galivelop-workflow) v0.2.0 (scripts, skills, ganchos, `AGENTS.md`, una sola CI). Hecho: aplicado con el check en verde, `doctor.py` sin FAIL, revisión y [retro](records/retro-2026-10-22-piloto-galivelop.md). Falta: la CI de GitHub en verde (sin cuota; mientras, `FLU-3`) y el [registro del piloto](records/piloto-galivelop-workflow.md) cerrado | en curso |
+| FLU-9 | `/gw-update` a Galivelop-workflow v0.6.0 (pasando por la 0.5.2): scripts, skills, ganchos, `check.yml`, agente `gw-worker`, ganchos `PreToolUse` de Read y `Stop`; `AGENTS.md` fusionado a mano; `REVIEW.md` con dos reglas nuevas. Parche local en `test_measure.py` (la 0.6.1 lo sobrescribe). Falta: CI en verde y las tres fases antes de `main` | en curso |
 
-- [x] **FLU-1** (2026-10-21) Traer de Tarkor su flujo de trabajo y sus skills, adaptados al instalador: `CLAUDE.md`,
-  [`REVIEW.md`](../REVIEW.md), bitácora, ganchos de sesión y de antes de subir, `tools/qa` con sus
-  tests (job `qa` de la CI) y las skills de `.claude/skills/` con sus notas para el instalador.
-  Hecho, con `/code-review` (dos rondas), `/opt-tokens` y la
-  [retro](records/retro-2026-10-21-flujo.md), cuyas cuatro propuestas se aplicaron.
-- [ ] 🚧 **FLU-2** (2026-10-22) Piloto de [Galivelop-workflow](https://github.com/Zeldris/galivelop-workflow) v0.2.0:
-  sus scripts (`.claude/gw/scripts/`), skills, ganchos, `AGENTS.md` con `CLAUDE.md` que lo importa, y una sola CI
-  (Linux, Windows y `qa` con el pre-commit de la rama base). Lo propio del instalador queda en `.claude/gw.json`,
-  `.claude/gw/*.md`, `tools/qa/{en-app,tests-app}.sh`, `tools/dev/instalar-entorno.sh` y `tools/banco/`. Hecho:
-  aplicado con el check en verde, la prueba del paso 6 de `aplicar.md` y `doctor.py` sin FAIL; revisión de código
-  y [retro](records/retro-2026-10-22-piloto-galivelop.md). Falta: la CI de GitHub en verde (agotada; mientras,
-  `FLU-3`) y el [registro del piloto](records/piloto-galivelop-workflow.md) cerrado.
-- [x] **FLU-3** (2026-10-22) `ci-local.py` (retro del piloto; hoy en `.claude/gw/scripts/`): con la CI de GitHub agotada, corre en local
-  los pasos de los jobs de Ubuntu del CI (los lee del workflow, no los copia) y, con `--apuntar`, deja
-  fecha, commit y resultado en [`ci-local.md`](records/ci-local.md). El job de Windows sale como «sin cubrir».
-- [x] **FLU-4** (2026-10-25) `/gw-update` a Galivelop-workflow v0.3.0: scripts, esquema, skills y ganchos al día;
-  el CI conserva sus jobs (el cambio de `ciInstall` no le toca) y `REVIEW.md` gana dos reglas de la plantilla.
-- [x] **FLU-5** (2026-10-26, retro de `INS-42`) `cargo fmt` del workspace en commits aparte (`a27489f` y `9b0035c`, a
-  120 columnas y `use_small_heuristics = "Max"` en `app/rustfmt.toml`, el estilo del resto del repo) y `cargo fmt --all --check` en `check` de
-  `.claude/gw.json` y en el CI (con `rustfmt` y `clippy` declarados en el toolchain). Los commits de formato van
-  en `.git-blame-ignore-revs`, que `tools/dev/instalar-entorno.sh` activa.
-- [x] **FLU-6** (2026-10-26, retro de `FLU-5`) `app/rust-toolchain.toml` fija Rust 1.94.1 (con `rustfmt`, `clippy` y
-  el destino de Windows) para que local, el pre-push y el CI formateen y avisen igual; el CI y
-  `tools/dev/instalar-entorno.sh` lo instalan con `rustup toolchain install` desde `app/`. Subir de versión es un
-  commit a mano (con el `rust-version` de `[workspace.package]` en `app/Cargo.toml`, que heredan los miembros y
-  compara `tools/qa/tests/test_version_rust.py`).
-  **Pendiente:** el CI de GitHub con la versión fijada no ha corrido (sin cuota); lo comprueba la próxima subida con
-  cuota, en la pestaña Actions, y el job de Windows con `INS-8`.
-- [x] **FLU-7** (2026-11-04) `/gw-update` a Galivelop-workflow v0.5.0, con las rutas en inglés (`docs/records/`,
-  `reviewed.txt`), `commitNext` y commits sin firmas del agente (`agentSignatures: false`). El CI se parte en
-  `check.yml` (del flujo: el `check` de `.claude/gw.json`) y `app.yml` (del instalador: `npm test`, el build,
-  `cargo test` en Linux y Windows y la compilación para Windows); el job `qa` y los tests de los scripts de las skills
-  salen del CI del proyecto (los prueba el repo del flujo). `tools/qa` deja `ci-local.py` y sus tests, que ya trae el
-  flujo; `instalar-entorno.sh` instala con `sudo -n` si no es root. `REVIEW.md` etiqueta cada regla con
-  `(check: …)` o `(criterio)`. **Pendiente:** el CI de GitHub sigue sin cuota; `app.yml` no ha corrido allí.
-- [x] **FLU-8** (2026-11-11) `/gw-update` a Galivelop-workflow v0.5.1 (parche): scripts, skills, ganchos y
-  `check.yml` al día; `worktree.baseRef: "head"` en `settings.json`. `REVIEW.md` gana la regla de `## Tests` (un doble
-  pide también una prueba de humo contra el real) y el docstring de `test_herramientas_con_test.py` usa los nombres
-  nuevos de los scripts. Retro antes de `main` (P1 a P3, `docs/records/retro-2026-11-11-flu8.md`); fusionado en
-  `main` por el PR #13 (2026-11-11), con la confirmación de la usuaria y el CI en verde.
-- [ ] **FLU-9** (2026-11-14) `/gw-update` a Galivelop-workflow v0.6.0 (pasando por la 0.5.2): scripts, skills, ganchos,
-  `check.yml`, el agente `gw-worker` y dos ganchos nuevos en `settings.json` (`PreToolUse` de Read y `Stop`, que
-  apunta las métricas de tokens). `AGENTS.md` fusionado a mano (pre-push por rama con `branchCheck`, trailers
-  `Findings:`/`Retries:`, `close-row`, revisión por bloques con `review-scope.py`); `REVIEW.md` gana dos reglas
-  (`< /dev/null` en un `while read`, probar con los ganchos instalados); `gw-opt-ai.md`, «Script de parada». Parche
-  local en `.claude/skills/gw-opt-tokens/scripts/test_measure.py` (con la estructura de un proyecto no encontraba
-  `config.py`), para proponerlo al flujo; la 0.6.1 lo sobrescribe. Falta: CI en verde y las tres fases antes de `main`.
+## Notas
+
+- **Pendiente de máquina concreta:** `INS-7`, `INS-8` y la `1.0` necesitan la Steam Deck o un Windows limpio.
+  Lo marcado «pendiente de `INS-8`» en las filas de `0.1` (Windows, Deck, escritorio limpio) se comprueba allí.
+- **Juego:** tras cambiar `schema.prisma` hay que correr `npm run schema:sqlite` (un test y el CI lo exigen).
+- **CI de GitHub:** sin cuota desde octubre; `app.yml` y el CI con Rust 1.94.1 no han corrido allí (`FLU-6`, `FLU-7`).
+  Mientras, `ci-local.py` (`FLU-3`) y el check en local.
