@@ -73,6 +73,8 @@ for prueba in "${pruebas[@]}"; do
       export TARKOR_OLLAMA_URL="http://127.0.0.1:$puerto_falso" E2E_FALSO=1
       # La primera descarga de un modelo se corta como sin internet: el asistente espera y reintenta solo (INS-42).
       export FALSO_CORTES_PULL="${FALSO_CORTES_PULL:-1}"
+      # E2E_ESPERA_ERROR_RED: el registro de modelos responde 403 a toda descarga (red que lo bloquea), sin cortes antes.
+      if [ -n "${E2E_ESPERA_ERROR_RED:-}" ]; then export FALSO_RED_BLOQUEADA=1 FALSO_CORTES_PULL=0; fi
     elif [ "$nombre" = "rendimiento" ]; then
       # Los modelos del perfil Mínimo ya están en disco: la primera descarga es la del cambio de perfil en Ajustes, que se
       # corta como sin internet y espera y reintenta sola (INS-42, trozo C).
