@@ -1,6 +1,6 @@
 # Propuesta: trabajar por versiones (2026-11-15)
 
-Pendiente de confirmar por la usuaria. Pedido: «a partir de ahora todo versionado, gestionado por release como
+**Confirmada por la usuaria el 2026-11-15** (ver «Decisiones» al final). Pedido: «a partir de ahora todo versionado, gestionado por release como
 galivelop-workflow y galivelop-image-generator»; rehacer la fase 2 y meter las 10 propuestas del
 [README](README.md) en el plan.
 
@@ -42,3 +42,7 @@ propio, para no duplicar.
 2. ¿Ramas `version/0.X.0` con PR por tarea hacia ella (workflow) o PR por tanda a `main` y versión al cerrar
    (generador)? Propuesta: la del generador, más simple para un solo frente.
 3. Tocar `.claude/gw.json` (`roadmapFiles`, `plan`, `refsSources`): es configuración del flujo.
+
+**Respuestas (2026-11-15):** 1) el reparto y los nombres valen tal cual; 2) PR por tanda a `main`, con
+`CHANGELOG` `[Unreleased]` y tag al cerrar la versión (como el generador), sin ramas `version/`; 3) se puede tocar
+`.claude/gw.json` (`roadmapFiles`, `plan`, `refsSources`).
