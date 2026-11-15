@@ -1,10 +1,17 @@
 # FLU-10: el tag vX.Y.Z crea el release de GitHub con las notas de esa versión en CHANGELOG.md.
 # Sin binarios todavía: los instaladores y SHA256SUMS llegan con INS-46 (versión 0.6 del roadmap).
+# A mano (Actions → Release → Run workflow, desde main) para un tag cuyo commit no trae este archivo, como el
+# retroactivo v0.1.0: las notas salen del CHANGELOG.md de main.
 name: Release
 
 on:
   push:
     tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag ya subido (vX.Y.Z)'
+        required: true
 
 permissions:
   contents: write
@@ -12,14 +19,36 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
-      - name: Notas de la versión
-        # Falla si el tag no coincide con app/src-tauri/tauri.conf.json o si CHANGELOG.md no tiene su sección.
+        with:
+          fetch-depth: 0
+      - name: El tag está en main
+        # Un release es público: solo de código ya revisado y fusionado.
         run: |
-          python3 tools/dev/version.py comprobar
-          python3 tools/dev/version.py notas "$GITHUB_REF_NAME" > "$RUNNER_TEMP/notas.md"
-      - name: Crear el release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notas.md" --verify-tag
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "Lánzalo desde main, no desde $GITHUB_REF"; exit 1
+          fi
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "refs/tags/$TAG^{commit}" origin/main \
+            || { echo "$TAG no está en main"; exit 1; }
+      - name: Notas de la versión
+        # Por tag: falla si no coincide con app/src-tauri/tauri.conf.json. Siempre: si CHANGELOG.md no tiene su sección.
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            python3 tools/dev/version.py notas --historico "$TAG" > "$RUNNER_TEMP/notas.md"
+          else
+            python3 tools/dev/version.py comprobar
+            python3 tools/dev/version.py notas "$TAG" > "$RUNNER_TEMP/notas.md"
+          fi
+      - name: Crear o actualizar el release
+        # Relanzar el job no falla: si el release ya existe, se actualizan sus notas.
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release edit "$TAG" --notes-file "$RUNNER_TEMP/notas.md"
+          else
+            gh release create "$TAG" --title "$TAG" --notes-file "$RUNNER_TEMP/notas.md" --verify-tag
+          fi

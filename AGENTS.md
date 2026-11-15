@@ -148,8 +148,9 @@ Instalador de escritorio de Tarkor (Tauri v2, Windows y Linux). El flujo viene d
 (`World-Maker-Fantasy`): los `QA-xx` que se citan son de su historial.
 
 - Instalar: `bash tools/dev/instalar-entorno.sh`. Código, cómo se arranca y cómo se prueba: [`app/README.md`](app/README.md).
-- **Tareas:** `INS-n` (el [plan](docs/05-plan-de-trabajo.md)) y `FLU-n` (el flujo de trabajo). Ninguna tarea sin fase:
-  toda tarea nueva entra en una fase del plan con su id; al cerrarla, su casilla `- [x]` con fecha y qué se hizo.
+- **Tareas:** `INS-n` (el [plan](docs/05-plan-de-trabajo.md)) y `FLU-n` (el flujo de trabajo). Ninguna tarea sin versión:
+  toda tarea nueva entra en una versión del roadmap con su id; al cerrarla, su fila pasa a `hecho (fecha; qué se hizo)`
+  con `python3 .claude/gw/scripts/roadmap.py done <id> --note "…"`.
 - **Dónde está cada cosa:** diseño en `docs/01`…`docs/13` (índice en el [README](README.md)); skills y modelos en
   [`docs/runbooks/skills-y-modelos.md`](docs/runbooks/skills-y-modelos.md).
 - **Diseño:** una ronda de diseño (una pantalla del asistente, un perfil, cómo se descarga o se actualiza algo) se
