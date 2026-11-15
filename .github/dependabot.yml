@@ -1,0 +1,22 @@
+# INS-64: Dependabot vigila las dependencias del asistente (npm), del núcleo y la app (cargo) y las acciones del CI.
+# Una petición por ecosistema y semana, agrupando lo menor, para no llenar de PR la cola; lo de seguridad va aparte.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /app
+    schedule:
+      interval: weekly
+    groups:
+      menores:
+        update-types: [minor, patch]
+  - package-ecosystem: cargo
+    directory: /app
+    schedule:
+      interval: weekly
+    groups:
+      menores:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

@@ -92,7 +92,7 @@ Cierra con el E2E en el CI, dependencias vigiladas y el código del núcleo sin 
 | Id | Tarea | Estado |
 |---|---|---|
 | INS-63 | E2E (`app/e2e`) en el CI (prop. 4) | pendiente |
-| INS-64 | Dependabot más `cargo audit` y `npm audit` (prop. 5) | pendiente |
+| INS-64 | Dependabot más `cargo audit` y `npm audit` (prop. 5) | hecho (2026-11-15; dependabot.yml (npm, cargo, acciones), job auditoria con cargo audit y npm audit; 12 avisos de RustSec arreglados, zip 9 y ruzstd 0.9; la extracción de zip 9 en Windows, por ver en el CI y en INS-8) |
 | INS-65 | Ayudante de mutex sin pánico, partir `lib.rs` y no tragar errores (`carpetas.rs`, `App.tsx:38`) (prop. 6) | pendiente |
 
 ## `0.5` «Marca»

@@ -14,7 +14,7 @@ cada commit.**
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #16 (2026-11-12, `5d3fcf3`): `INS-44`, `INS-45` e `INS-57` (borrar datos al desinstalar en Windows y Linux, hoja de estilos), con la confirmación de la usuaria y el CI de GitHub en verde. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 (SQLite) no está en el juego: su PR #1 se cerró sin fusionar y se rehace en `INS-60`. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-15: PR #19 fusionado en main (8ae9862), CI en verde; FLU-9 y FLU-10 cerradas. Leves pendientes: version.py ([ en workspace.package, JSON anidado, CRLF, fuente única); 5 referencias de diseño, «Texto usado por», normalizarExpresion, flex en details; instalar-entorno.sh. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-15: en la nube, sin otros repos: INS-64 hecha; sigue INS-67, INS-66, INS-65, INS-63. Lo del juego y de máquinas concretas, «para revisar en local» en Siguiente paso. |
 | **Tests** | 2026-11-12: núcleo `cargo test -p tarkor-nucleo` 149 y el check del proyecto en verde. Asistente `vitest` y E2E con el Ollama falso: último verde el 2026-10-25 (`vitest` 27 entonces). |
 
 ## Dónde está todo (para saber qué sigue)
@@ -28,6 +28,8 @@ cada commit.**
    revisión [`REVIEW.md`](../../REVIEW.md).
 
 ## Siguiente paso y los que vienen (en orden)
+
+**Para revisar en local** (2026-11-15, decisión de la usuaria: en la nube solo lo que no toca otros repos): `INS-60`, `INS-61`, `INS-62`, `INS-35`, `INS-36` e `INS-37` necesitan el repo del juego; `INS-56` espera a `UX-40` del juego; `INS-7` e `INS-8`, la Steam Deck o un Windows. En la nube se sigue con la `0.4` («Solidez»: `INS-64`, `INS-63`, `INS-65`) y lo del instalador de la `0.5` (`INS-66`, `INS-67`).
 
 1. `INS-60`: rehacer la fase 2 (SQLite) sobre el `main` actual del juego; el PR #1 se cerró sin fusionar
    (detalle en el [plan](../05-plan-de-trabajo.md)).

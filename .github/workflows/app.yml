@@ -48,6 +48,22 @@ jobs:
       - name: El núcleo y la app compilan para Windows
         run: cargo check -p tarkor-nucleo -p tarkor --target x86_64-pc-windows-gnu --all-targets
 
+  # INS-64: avisos de seguridad de las dependencias. `cargo audit` falla con una vulnerabilidad (no con los avisos de
+  # crates sin mantener o «unsound» de la pila de GTK que trae Tauri) y `npm audit` con una alta o crítica en lo que se
+  # empaqueta (sin las de desarrollo).
+  auditoria:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - run: cargo audit
+      - run: npm audit --omit=dev --audit-level=high
+
   windows:
     runs-on: windows-latest
     defaults:

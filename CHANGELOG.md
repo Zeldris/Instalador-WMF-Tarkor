@@ -15,6 +15,12 @@ y el tag `vX.Y.Z` crea el release con esas notas (`.github/workflows/release.yml
 - Este registro de cambios y el release de GitHub por tag `vX.Y.Z`, de momento sin binarios (FLU-10).
 - Auditoría de requisitos del juego con diez propuestas de tareas (FLU-9).
 
+### Seguridad
+
+- Dependencias del núcleo y la app al día frente a los avisos de RustSec: `rustls`, `rustls-webpki`, raíces de
+  certificados, `tokio`, `rustix`; `zip` 2 → 9 y `ruzstd` 0.8 → 0.9 en la extracción del motor (INS-64).
+- Dependabot semanal (npm, cargo y acciones) y job `auditoria` en el CI con `cargo audit` y `npm audit` (INS-64).
+
 ### Cambiado
 
 - El plan de trabajo pasa a ser un roadmap por versiones (`0.1` a `1.0`), que lee `roadmap.py` (FLU-10).
