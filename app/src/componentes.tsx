@@ -74,7 +74,7 @@ export function Medidor({ evaluacion }: { evaluacion: Evaluacion }) {
   return (
     <div className="medidor">
       <p>{t.medidor(fmt(disponible))}</p>
-      <div className="pista" role="img" aria-label={t.medidor(fmt(disponible))}>
+      <div className="pista" role="progressbar" aria-label={t.medidor(fmt(disponible))} aria-valuemin={0} aria-valuemax={tope} aria-valuenow={Math.min(disponible, tope)} aria-valuetext={`${fmt(disponible)} GB`}>
         <div className="relleno" style={{ width: pct(disponible) }} />
         {evaluacion.perfiles.map((p) => (
           <div key={p.id} className={`marca-perfil${p.memoriaGb > disponible ? ' fuera' : ''}`} style={{ left: pct(p.memoriaGb) }}>
