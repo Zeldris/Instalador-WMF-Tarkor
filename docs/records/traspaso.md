@@ -10,11 +10,11 @@ cada commit.**
 
 | | |
 |---|---|
-| **Actualizado** | 2026-11-15 |
+| **Actualizado** | 2026-11-16 |
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #16 (2026-11-12, `5d3fcf3`): `INS-44`, `INS-45` e `INS-57` (borrar datos al desinstalar en Windows y Linux, hoja de estilos), con la confirmación de la usuaria y el CI de GitHub en verde. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 (SQLite) no está en el juego: su PR #1 se cerró sin fusionar y se rehace en `INS-60`. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-15: en la nube, sin otros repos: INS-63…INS-67 hechas y revisión de bloque cerrada (8 hallazgos arreglados, 2 leves al punto 22). Falta: fase 2 (gw-opt-tokens y retro, a presentar a la usuaria) y fase 3 antes de main. Lo del juego y de máquinas concretas, «para revisar en local» en Siguiente paso. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | 2026-11-16: en la nube: INS-63…INS-67 hechas, revisión de bloque cerrada (Findings: 8, trailer bien puesto en el commit de la retro), fase 2 hecha (opt-tokens y retro aprobadas por la usuaria; actionlint en el check). Falta: fase 3 (reviewed.sh) y PR a main con confirmación de la usuaria. |
 | **Tests** | 2026-11-12: núcleo `cargo test -p tarkor-nucleo` 149 y el check del proyecto en verde. Asistente `vitest` y E2E con el Ollama falso: último verde el 2026-10-25 (`vitest` 27 entonces). |
 
 ## Dónde está todo (para saber qué sigue)

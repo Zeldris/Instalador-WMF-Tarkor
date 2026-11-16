@@ -52,6 +52,12 @@ fi
 
 (cd app && npm install --no-audit --no-fund --loglevel=error) \
   || echo "AVISO: npm install falló (¿red?); sin él no corren tsc ni vitest."
+# Retro de INS-63: `actionlint` valida .github/workflows/ en el `check` (un `app.yml` inválido dejó el CI sin jobs).
+# actionlint-py trae el binario; la versión se fija aquí.
+ver_actionlint=1.7.12.25
+[ "$(pip show actionlint-py 2>/dev/null | sed -n 's/^Version: //p')" = "$ver_actionlint" ] \
+  || python3 -m pip install -q --disable-pip-version-check "actionlint-py==$ver_actionlint" \
+  || echo "AVISO: no se pudo instalar actionlint-py $ver_actionlint; el check no valida los workflows."
 # La versión de Rust, con rustfmt, clippy y el destino de Windows, la fija app/rust-toolchain.toml (FLU-6); se instala
 # antes de `cargo fetch`, que si no la bajaría él y un fallo saldría como de red. `rustup toolchain install` sin
 # argumentos pide rustup 1.28; uno anterior la instala con `rustup show`, que sale con 0 aunque no instale nada, y
