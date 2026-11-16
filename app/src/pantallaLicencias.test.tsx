@@ -1,8 +1,8 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { catalogo } from './catalogo'
 import { ejemplo, fijarErrorCopiar, textoCopiado } from './ejemplo'
-import { LICENCIA_LLAMA, Licencias, LicenciasDeTerceros, modelosPorLicencia, textosLicencia } from './pantallaLicencias'
+import { LICENCIA_LLAMA, SEGUNDOS_COPIADO, Licencias, LicenciasDeTerceros, modelosPorLicencia, textosLicencia } from './pantallaLicencias'
 import type { LicenciasTerceros } from './tipos'
 import { licencias as t } from './textos'
 
@@ -42,6 +42,25 @@ describe('Licencias y avisos', () => {
     expect(textoCopiado()).toBe('https://llama.meta.com/llama3_1/use-policy')
     fireEvent.click(screen.getByRole('button', { name: 'Volver' }))
     expect(volver).toHaveBeenCalledOnce()
+  })
+
+  it('«Copiado» vuelve a «Copiar enlace» a los pocos segundos', async () => {
+    render(<Licencias volver={() => {}} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Copiar enlace' }))
+    expect(await screen.findByText('Copiado')).toBeTruthy()
+    await waitFor(() => expect(screen.queryByText('Copiado')).toBeNull(), { timeout: (SEGUNDOS_COPIADO + 2) * 1000 })
+    expect(screen.getByRole('button', { name: 'Copiar enlace' })).toBeTruthy()
+  }, (SEGUNDOS_COPIADO + 5) * 1000)
+
+  it('al desmontar con «Copiado» a la vista limpia el temporizador', async () => {
+    const limpiar = vi.spyOn(globalThis, 'clearTimeout')
+    const { unmount } = render(<Licencias volver={() => {}} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Copiar enlace' }))
+    await screen.findByText('Copiado')
+    limpiar.mockClear()
+    unmount()
+    expect(limpiar).toHaveBeenCalled()
+    limpiar.mockRestore()
   })
 
   it('si no se puede copiar el enlace, dice que se copie a mano', async () => {

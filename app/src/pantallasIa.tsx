@@ -6,9 +6,10 @@ import { api, ErrorIa } from './api'
 import { Marco, Reparar } from './componentes'
 import { useEsperaRed } from './esperaRed'
 import * as tx from './textos'
-import type { Config, Evaluacion, ProgresoMotor } from './tipos'
+import type { Config, Evaluacion, PerfilId, ProgresoMotor } from './tipos'
 import { perfilDe } from './tipos'
 import { fmt } from './formato'
+import { modelosDe } from './catalogo'
 
 type EstadoFila = 'cola' | 'bajando' | 'verificando' | 'extrayendo' | 'listo'
 interface Fila {
@@ -61,7 +62,7 @@ export function Descarga({ ir, config, evaluacion, actualizar, esperas }: Props)
     void (async () => {
       try {
         const info = await api.estadoMotor()
-        const modelos = [...new Set([p.narrador, p.cronista, p.sugerencias, p.embeddings])]
+        const modelos = modelosDe(p)
         setFilas((previas) => {
           const antes = new Map((previas ?? []).map((f) => [f.id, f]))
           return [
@@ -125,6 +126,7 @@ export function Descarga({ ir, config, evaluacion, actualizar, esperas }: Props)
 
   const total = (filas ?? []).reduce((a, f) => a + f.gb, 0)
   const hecho = (filas ?? []).reduce((a, f) => a + f.gb * f.parte, 0)
+  const pctTotal = total ? (hecho / total) * 100 : 0
   const segundos = (Date.now() - inicio.current.t) / 1000
   const velocidad = segundos > 3 ? hecho / segundos : 0
   const quedan = velocidad > 0 ? Math.max(1, Math.ceil((total - hecho) / velocidad / 60)) : null
@@ -148,7 +150,7 @@ export function Descarga({ ir, config, evaluacion, actualizar, esperas }: Props)
         <div className="descarga">
           <b>{t.total}</b>
           <span className="mono peq">{fmt(hecho)} / {fmt(total)} GB{fase === 'trabajando' && quedan ? ` · ${t.quedan(quedan)}` : ''}</span>
-          <div className="progreso" role="progressbar" aria-label={t.total} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(total ? (hecho / total) * 100 : 0)}><div style={{ width: `${total ? (hecho / total) * 100 : 0}%` }} /></div>
+          <div className="progreso" role="progressbar" aria-label={t.total} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pctTotal)}><div style={{ width: `${pctTotal}%` }} /></div>
         </div>
         <div className="filete" />
         {(filas ?? []).map((f) => {
@@ -188,7 +190,7 @@ type EstadoComp = 'pendiente' | 'curso' | 'ok' | 'omitida' | 'fallo'
  */
 export const PALABRAS_LENTAS = 3
 
-export function Comprobacion({ ir, hayMasLigero }: { ir: (paso: number) => void; /** Hay un perfil de menos memoria al que bajar. */ hayMasLigero: boolean }) {
+export function Comprobacion({ ir, masLigero, elegirPerfil }: { ir: (paso: number) => void; /** El perfil de menos memoria al que bajar; null si no hay. */ masLigero: PerfilId | null; /** Elige ese perfil y vuelve a la pantalla de perfiles. */ elegirPerfil: (perfil: PerfilId) => void }) {
   const t = tx.comprobacion
   const [estados, setEstados] = useState<EstadoComp[]>(() => t.pasos.map(() => 'pendiente'))
   const [detalles, setDetalles] = useState<string[]>(() => t.pasos.map(() => ''))
@@ -242,11 +244,11 @@ export function Comprobacion({ ir, hayMasLigero }: { ir: (paso: number) => void;
               <span className={`icono ${estados[i]}`}>{estados[i] === 'ok' ? '✓' : estados[i] === 'fallo' ? '!' : estados[i] === 'omitida' ? '–' : ''}</span>
               <span>{paso.nombre}</span>
             </div>
-            <Detalle estado={estados[i]} id={paso.id} detalle={detalles[i]} hayMasLigero={hayMasLigero} ir={ir} />
+            <Detalle estado={estados[i]} id={paso.id} detalle={detalles[i]} masLigero={masLigero} elegirPerfil={elegirPerfil} />
             {estados[i] === 'fallo' && (
               <div className="fila">
                 <button type="button" className="btn pri" disabled={reparando} onClick={reintentar}>{t.reintentar}</button>
-                <button type="button" className="btn" disabled={reparando} onClick={() => ir(4)}>{t.masLigero}</button>
+                {masLigero !== null && <button type="button" className="btn" disabled={reparando} onClick={() => elegirPerfil(masLigero)}>{t.masLigero}</button>}
                 <button type="button" className="btn" onClick={copiar}>{t.copiar}</button>
                 <span className="peq tenue" aria-live="polite">{copiado}</span>
               </div>
@@ -259,7 +261,7 @@ export function Comprobacion({ ir, hayMasLigero }: { ir: (paso: number) => void;
   )
 }
 
-function Detalle({ estado, id, detalle, hayMasLigero, ir }: { estado: EstadoComp; id: string; detalle: string; hayMasLigero: boolean; ir: (paso: number) => void }) {
+function Detalle({ estado, id, detalle, masLigero, elegirPerfil }: { estado: EstadoComp; id: string; detalle: string; masLigero: PerfilId | null; elegirPerfil: (perfil: PerfilId) => void }) {
   const t = tx.comprobacion
   if (estado === 'fallo') return <div className="error" role="alert">{detalle}</div>
   if (estado === 'omitida') return <p className="peq tenue">{detalle}</p>
@@ -270,7 +272,7 @@ function Detalle({ estado, id, detalle, hayMasLigero, ir }: { estado: EstadoComp
   const palabrasPorSegundo = tokensPorSegundo * 0.7
   const palabras = Math.max(1, Math.round(palabrasPorSegundo))
   // Se compara sin redondear (2,6 palabras/s es lenta aunque se muestre «3»); una medida inválida (≤ 0) no sugiere nada.
-  const lenta = tokensPorSegundo > 0 && palabrasPorSegundo < PALABRAS_LENTAS && hayMasLigero
+  const lenta = tokensPorSegundo > 0 && palabrasPorSegundo < PALABRAS_LENTAS && masLigero !== null
   return (
     <>
       <p className="cita">«{texto}»</p>
@@ -278,7 +280,7 @@ function Detalle({ estado, id, detalle, hayMasLigero, ir }: { estado: EstadoComp
       {lenta && (
         <div className="fila">
           <p className="peq">{t.lenta}</p>
-          <button type="button" className="btn" onClick={() => ir(4)}>{t.masLigero}</button>
+          <button type="button" className="btn" onClick={() => elegirPerfil(masLigero)}>{t.masLigero}</button>
         </div>
       )}
     </>
