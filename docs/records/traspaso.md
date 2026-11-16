@@ -29,7 +29,7 @@ cada commit.**
 
 ## Siguiente paso y los que vienen (en orden)
 
-**A `main`** (2026-11-16, confirmado por la usuaria): PR de `claude/installer-docs-review-09e7vs` (INS-63…INS-67, con sus fases 1-3); se fusiona solo con el CI en verde.
+**En `main`** (2026-11-16): PR #20 (INS-63…INS-67) fusionado con el CI en verde, con la confirmación de la usuaria.
 
 **Para revisar en local** (2026-11-15, decisión de la usuaria: en la nube solo lo que no toca otros repos): `INS-60`, `INS-61`, `INS-62`, `INS-35`, `INS-36` e `INS-37` necesitan el repo del juego; `INS-56` espera a `UX-40` del juego; `INS-7` e `INS-8`, la Steam Deck o un Windows. En la nube se sigue con la `0.4` («Solidez»: `INS-64`, `INS-63`, `INS-65`) y lo del instalador de la `0.5` (`INS-66`, `INS-67`).
 
