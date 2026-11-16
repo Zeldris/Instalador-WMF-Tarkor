@@ -176,6 +176,41 @@ mod tests {
         p
     }
 
+    fn estado() -> Estado {
+        let base = std::path::PathBuf::from("/nada/tarkor-pruebas");
+        Estado {
+            rutas: tarkor_nucleo::config::Rutas { ia: base.join("ia"), registros: base.join("registros"), datos: base },
+            catalogo: tarkor_nucleo::catalogo::Catalogo::incrustado(),
+            origen_catalogo: tarkor_nucleo::catalogo::Origen::Incrustado,
+            motor: std::sync::Mutex::new(None),
+            url_motor: std::sync::Mutex::new(None),
+            ollama_externo: None,
+            cancelar: Cancelar::default(),
+            cerrando: std::sync::atomic::AtomicBool::new(false),
+            reparacion: std::sync::Mutex::new(None),
+            ocupado: std::sync::atomic::AtomicBool::new(false),
+            detenido: std::sync::Mutex::new(None),
+            ultimo_motivo_parada: std::sync::Mutex::new(None),
+            arranque: Candado::default(),
+        }
+    }
+
+    #[test]
+    fn la_salida_no_espera_a_un_arranque_largo_y_lo_deja_marcado() {
+        let estado = estado();
+        let descarga = estado.cancelar.nueva();
+        // Un arranque en marcha (hasta 30 s) tiene el turno: la salida no espera más que su plazo.
+        let arrancando = tauri::async_runtime::block_on(estado.arranque.coger());
+        let inicio = std::time::Instant::now();
+        parar_al_salir(&estado);
+        assert!(inicio.elapsed() < PLAZO_SALIDA + Duration::from_secs(2), "la salida no espera 30 s");
+        assert!(estado.cerrando.load(Ordering::SeqCst), "el arranque que acabe después para su motor");
+        assert!(descarga.load(Ordering::SeqCst), "las descargas en marcha se cancelan");
+        drop(arrancando);
+        // Con la app cerrándose, ningún arranque llega a poner motor (comprueba `cerrando` antes y después).
+        assert!(estado.motor.bloquear().is_none());
+    }
+
     #[test]
     fn con_perfil_pedido_no_se_arranca_con_el_guardado() {
         // `cambiar_perfil` con el motor caído: aunque el guardado no sirva, arranca con el nuevo.
