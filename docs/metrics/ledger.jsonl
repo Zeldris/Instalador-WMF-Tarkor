@@ -114,3 +114,4 @@
 {"agent":"general-purpose","branch":"claude/installer-docs-review-09e7vs","cacheRead":2403340,"cacheWrite":172402,"date":"2026-11-15","input":52,"model":"claude-opus-5-5","output":21406,"recorded":"2026-11-15T23:28:43Z","refs":[],"session":"69dc0027"}
 {"agent":"gw-worker","branch":"claude/installer-docs-review-09e7vs","cacheRead":206715,"cacheWrite":31325,"date":"2026-11-15","input":18,"model":"claude-sonnet-5-5","output":5839,"recorded":"2026-11-15T23:28:43Z","refs":[],"session":"69dc0027"}
 {"agent":"main","branch":"claude/installer-docs-review-09e7vs","cacheRead":1285827,"cacheWrite":49875,"date":"2026-11-15","input":27,"model":"claude-opus-5-5","output":7261,"recorded":"2026-11-15T23:28:43Z","refs":[],"session":"69dc0027"}
+{"agent":"main","branch":"claude/installer-docs-review-09e7vs","cacheRead":526410,"cacheWrite":25616,"date":"2026-11-15","input":14,"model":"claude-opus-5-5","output":4349,"recorded":"2026-11-15T23:40:32Z","refs":[],"session":"ad80fab0"}
