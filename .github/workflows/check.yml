@@ -85,7 +85,7 @@ jobs:
         if: needs.versions.outputs.node == 'true'
         with:
           node-version: lts/*
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         if: hashFiles('pyproject.toml', 'requirements*.txt') != ''
         with:
           python-version: ${{ matrix.python }}
