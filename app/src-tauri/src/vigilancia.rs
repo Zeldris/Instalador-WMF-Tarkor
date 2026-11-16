@@ -24,12 +24,15 @@ pub(crate) fn avisar_parada(app: &tauri::AppHandle, motivo: String) {
 /// Un paso de la vigilancia (cada 2 s): si el motor propio se ha detenido de verdad, avisa una vez.
 /// Si el motor no está en el `Mutex` (nunca arrancó, es externo o una operación lo ha quitado a
 /// propósito: Reparar, Mover, cambio de perfil, reintento) no hay nada que vigilar ni que avisar.
-/// Se decide con el `Mutex` del motor cogido, para no cruzarse con un reintento.
+/// Se decide con el turno de arranque cogido (`Candado::intentar`): si alguien arranca o para el motor, este paso se
+/// salta, y mientras la vigilancia relanza el motor un `asegurar` espera al turno y luego lo ve en marcha, en vez de
+/// verlo parado y arrancar otro.
 ///
 /// Un reinicio automático tras una caída (`Proceso::vigilar`) puede tardar hasta 30 s con el
 /// `Mutex` cogido; `cliente()` no lo usa (lee `url_motor`) y el relanzado conserva el puerto.
 pub(crate) fn vigilar_una_vez(app: &tauri::AppHandle) {
     let estado = app.state::<Estado>();
+    let Some(_turno) = estado.arranque.intentar() else { return };
     let mut motor = estado.motor.bloquear();
     let Some(proceso) = motor.as_mut() else { return };
     let visto = proceso.vigilar();

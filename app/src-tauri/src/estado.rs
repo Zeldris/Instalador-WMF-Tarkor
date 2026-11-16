@@ -4,7 +4,8 @@
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
+use std::time::Duration;
 use tarkor_nucleo::catalogo::Perfil;
 use tarkor_nucleo::catalogo::{Catalogo, Origen};
 use tarkor_nucleo::config::{Config, Rutas};
@@ -23,7 +24,14 @@ pub(crate) struct Estado {
     /// nunca durante un arranque. Siempre pasa por `sacar_motor` y `poner_motor`.
     pub(crate) url_motor: Mutex<Option<String>>,
     pub(crate) ollama_externo: Option<String>,
-    pub(crate) cancelar: Arc<AtomicBool>,
+    /// Las banderas de cancelar de las tareas en marcha: cada tarea coge la suya (`Cancelar::nueva`) y «Pausar»
+    /// (`cancelar_descargas`) las levanta todas. Ninguna tarea baja la de otra.
+    pub(crate) cancelar: Cancelar,
+    /// La app se está cerrando: un arranque que acabe ahora para su motor en vez de dejarlo puesto (`RunEvent::Exit`).
+    pub(crate) cerrando: AtomicBool,
+    /// Lo que hizo una «Reparar» cortada por la red después de la comprobación local, para que el reintento no la
+    /// repita ni pierda lo reparado.
+    pub(crate) reparacion: Mutex<Option<ReparacionHecha>>,
     /// «Reparar», «Mover», cambiar de perfil o borrar modelos en marcha: tocan el motor o la carpeta
     /// de la IA, así que no pueden ir a la vez.
     pub(crate) ocupado: AtomicBool,
@@ -43,6 +51,7 @@ pub(crate) struct Estado {
 
 pub(crate) mod arranque {
     use std::future::Future;
+    use std::time::{Duration, Instant};
     use tauri::async_runtime::Mutex;
 
     /// El candado de `Estado::arranque`.
@@ -51,8 +60,9 @@ pub(crate) mod arranque {
 
     /// Un candado cogido. Solo lo da `Candado::coger`; `sacar_motor` y `poner_motor` (y con ellos `arrancar_con_turno`)
     /// lo piden y comprueban con `es_de` que sea el de `Estado::arranque`: cambiar el motor sin ese candado no compila,
-    /// y con otro cae en el `assert`. Fuera quedan la vigilancia (relanza el mismo proceso dentro de `Estado::motor`) y
-    /// la salida (lo para al cerrar). La guarda va como `dyn` para no nombrar el tipo de tokio.
+    /// y con otro cae en el `assert`. La vigilancia (relanza el mismo proceso dentro de `Estado::motor`) y la salida
+    /// (lo para al cerrar) también lo cogen, con `intentar` y `coger_antes_de`: no esperan a un arranque largo. La
+    /// guarda va como `dyn` para no nombrar el tipo de tokio.
     pub struct Turno<'a> {
         candado: &'a Candado,
         _guarda: Box<dyn Send + Sync + 'a>,
@@ -67,6 +77,27 @@ pub(crate) mod arranque {
     impl Candado {
         pub async fn coger(&self) -> Turno<'_> {
             Turno { candado: self, _guarda: Box::new(self.0.lock().await) }
+        }
+
+        /// El turno si está libre ahora, sin esperar (la vigilancia: si alguien arranca o para el motor, ese paso
+        /// se lo salta).
+        pub fn intentar(&self) -> Option<Turno<'_>> {
+            let guarda = self.0.try_lock().ok()?;
+            Some(Turno { candado: self, _guarda: Box::new(guarda) })
+        }
+
+        /// El turno, esperando como mucho `plazo` (síncrono: la salida de la app no corre en tokio).
+        pub fn coger_antes_de(&self, plazo: Duration) -> Option<Turno<'_>> {
+            let fin = Instant::now() + plazo;
+            loop {
+                if let Some(t) = self.intentar() {
+                    return Some(t);
+                }
+                if Instant::now() >= fin {
+                    return None;
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
         }
 
         /// El turno solo si hay que arrancar: con el candado cogido pregunta `en_marcha`, y si ya corre lo suelta. La
@@ -85,6 +116,63 @@ pub(crate) mod arranque {
     }
 }
 pub(crate) use arranque::{Candado, Turno};
+
+/// Las banderas de cancelar (`Estado::cancelar`). Antes era una sola que cada tarea ponía a `false` al empezar: una
+/// tarea nueva deshacía la pausa de otra que aún no la había visto.
+#[derive(Default)]
+pub(crate) struct Cancelar(Mutex<Vec<Weak<AtomicBool>>>);
+
+impl Cancelar {
+    /// Una bandera para una tarea que empieza: sin cancelar, y sin tocar la de las demás.
+    pub(crate) fn nueva(&self) -> Arc<AtomicBool> {
+        let bandera = Arc::new(AtomicBool::new(false));
+        let mut vivas = self.0.bloquear();
+        vivas.retain(|b| b.strong_count() > 0);
+        vivas.push(Arc::downgrade(&bandera));
+        bandera
+    }
+
+    /// «Pausar»: cancela todas las tareas en marcha.
+    pub(crate) fn todas(&self) {
+        for b in self.0.bloquear().iter().filter_map(Weak::upgrade) {
+            b.store(true, Ordering::SeqCst);
+        }
+    }
+}
+
+/// Lo hecho por una «Reparar» antes de que la red la cortara (`Estado::reparacion`).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct ReparacionHecha {
+    pub(crate) ia: PathBuf,
+    pub(crate) modelos: Vec<String>,
+    pub(crate) motor_reinstalado: bool,
+    pub(crate) capas_repuestas: usize,
+}
+
+impl ReparacionHecha {
+    /// Lo hecho, si el reintento es de la misma carpeta y los mismos modelos; si no, se comprueba todo otra vez.
+    pub(crate) fn para(guardada: Option<Self>, ia: &std::path::Path, modelos: &[String]) -> Option<Self> {
+        guardada.filter(|h| h.ia == ia && h.modelos == modelos)
+    }
+}
+
+/// Reintentos de `version()` antes de dar por caído un motor que tiene URL: un fallo suelto (el motor ocupado
+/// cargando un modelo, un antivirus en Windows) no vale para reiniciar un motor sano.
+pub(crate) const INTENTOS_VERSION: u32 = 3;
+pub(crate) const ESPERA_VERSION: Duration = Duration::from_millis(300);
+
+/// `prueba` hasta que conteste o se acaben los `intentos`, con `espera` entre uno y otro.
+pub(crate) fn contesta_alguna_vez(intentos: u32, espera: Duration, mut prueba: impl FnMut() -> bool) -> bool {
+    for i in 0..intentos {
+        if prueba() {
+            return true;
+        }
+        if i + 1 < intentos {
+            std::thread::sleep(espera);
+        }
+    }
+    false
+}
 
 /// Registro del motor de IA, dentro de `Rutas::registros`.
 pub(crate) const REGISTRO_MOTOR: &str = "motor-ia.log";
@@ -134,6 +222,13 @@ impl Estado {
         self.cliente().and_then(|c| c.version().map_err(|e| e.to_string())).is_ok()
     }
 
+    /// Como `en_marcha`, pero un fallo suelto no lo da por parado: lo usa `asegurar` antes de reiniciar el motor.
+    /// Sin URL (motor sacado o nunca arrancado) contesta en seguida, sin reintentos.
+    pub(crate) fn sigue_en_marcha(&self) -> bool {
+        let Ok(cliente) = self.cliente() else { return false };
+        contesta_alguna_vez(INTENTOS_VERSION, ESPERA_VERSION, || cliente.version().is_ok())
+    }
+
     pub(crate) fn cliente(&self) -> Result<Cliente, String> {
         if let Some(url) = &self.ollama_externo {
             return Ok(Cliente::new(url.clone()));
@@ -180,7 +275,7 @@ impl<T> Bloquear<T> for Mutex<T> {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ErrorIa {
     mensaje: String,
-    red: bool,
+    pub(crate) red: bool,
     sin_memoria: bool,
 }
 
@@ -226,6 +321,7 @@ impl From<ErrorIa> for String {
 mod tests {
     use super::*;
     use std::future::Future;
+    use std::path::Path;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
     #[test]
@@ -276,6 +372,59 @@ mod tests {
         };
         tauri::async_runtime::block_on(unir(uno(), uno()));
         assert_eq!(arranques.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn una_tarea_nueva_no_deshace_la_pausa_de_otra() {
+        let cancelar = Cancelar::default();
+        let descarga = cancelar.nueva();
+        cancelar.todas();
+        let cambio_de_perfil = cancelar.nueva();
+        assert!(descarga.load(Ordering::SeqCst), "la pausa de la descarga sigue en pie");
+        assert!(!cambio_de_perfil.load(Ordering::SeqCst), "la tarea nueva empieza sin cancelar");
+        cancelar.todas();
+        assert!(cambio_de_perfil.load(Ordering::SeqCst), "«Pausar» llega también a la nueva");
+    }
+
+    #[test]
+    fn un_fallo_suelto_de_version_no_da_el_motor_por_caido() {
+        let mut veces = 0;
+        assert!(contesta_alguna_vez(3, Duration::ZERO, || {
+            veces += 1;
+            veces >= 2
+        }));
+        let mut veces = 0;
+        assert!(!contesta_alguna_vez(3, Duration::ZERO, || {
+            veces += 1;
+            false
+        }));
+        assert_eq!(veces, 3, "caído de verdad: se prueba un número limitado de veces");
+    }
+
+    #[test]
+    fn el_reintento_de_reparar_recupera_lo_hecho() {
+        let hecha = ReparacionHecha {
+            ia: PathBuf::from("/ia"),
+            modelos: vec!["a".into()],
+            motor_reinstalado: true,
+            capas_repuestas: 2,
+        };
+        assert_eq!(ReparacionHecha::para(Some(hecha.clone()), Path::new("/ia"), &["a".into()]), Some(hecha.clone()));
+        assert_eq!(ReparacionHecha::para(Some(hecha.clone()), Path::new("/otra"), &["a".into()]), None);
+        assert_eq!(ReparacionHecha::para(Some(hecha), Path::new("/ia"), &["b".into()]), None, "otro perfil");
+    }
+
+    #[test]
+    fn la_vigilancia_no_entra_mientras_alguien_tiene_el_turno() {
+        let candado = Candado::default();
+        let arrancando = tauri::async_runtime::block_on(candado.coger());
+        assert!(candado.intentar().is_none(), "con un arranque en marcha, la vigilancia se salta el paso");
+        let inicio = std::time::Instant::now();
+        assert!(candado.coger_antes_de(Duration::from_millis(100)).is_none());
+        assert!(inicio.elapsed() < Duration::from_secs(2), "la salida no espera más del plazo");
+        drop(arrancando);
+        assert!(candado.intentar().is_some());
+        assert!(candado.coger_antes_de(Duration::ZERO).is_some());
     }
 
     /// `join` de dos futuros sin añadir `futures` al crate.

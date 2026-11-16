@@ -6,7 +6,7 @@ use crate::motor_ciclo::*;
 use crate::vigilancia::*;
 use serde::Serialize;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use tarkor_nucleo::carpetas::mover_carpeta;
 use tarkor_nucleo::config::{Config, Rutas};
 use tarkor_nucleo::ollama::{self, tiene, Cliente, ProgresoModelo};
@@ -110,10 +110,9 @@ pub(crate) async fn descargar_modelos(
     canal: Channel<ProgresoModelo>,
 ) -> Result<Vec<String>, ErrorIa> {
     let estado = app.state::<Estado>();
-    estado.cancelar.store(false, Ordering::Relaxed);
     let perfil = estado.perfil(&estado.config())?.clone();
     let cliente = estado.cliente()?;
-    let cancelar = estado.cancelar.clone();
+    let cancelar = estado.cancelar.nueva();
     tauri::async_runtime::spawn_blocking(move || {
         let modelos: Vec<String> = perfil.modelos().into_iter().map(String::from).collect();
         descargar_faltantes(&cliente, &modelos, &cancelar, &canal)?;
@@ -156,17 +155,19 @@ pub(crate) async fn cambiar_perfil(
     if antes.perfil.as_deref() == Some(perfil.as_str()) {
         return Ok(antes);
     }
-    estado.cancelar.store(false, Ordering::Relaxed);
+    // Su propia bandera: no deshace la pausa de otra descarga (`Cancelar::nueva`).
+    let cancelar = estado.cancelar.nueva();
     let modelos: Vec<String> = nuevo.modelos().into_iter().map(String::from).collect();
     if estado.ollama_externo.is_none() {
         // Tras una doble caída el `Proceso` sigue en el `Mutex` con el hijo muerto (o no hay
         // motor): sin motor vivo la descarga fallaría con un error de conexión, y «Cambiar a un
-        // perfil más ligero» no serviría justo cuando se ofrece. Arrancar borra el aviso. Comprobar y arrancar van
-        // bajo el candado de arranque, que se suelta antes de descargar (puede tardar horas).
-        asegurar(&app).await?;
+        // perfil más ligero» no serviría justo cuando se ofrece. Arranca con el perfil nuevo: el viejo puede ser el que
+        // no cabía. Arrancar borra el aviso. Comprobar y arrancar van bajo el candado de arranque, que se suelta antes
+        // de descargar (puede tardar horas).
+        asegurar_con(&app, Some(&nuevo)).await?;
     }
     let cliente = estado.cliente()?;
-    let (cancelar, lista) = (estado.cancelar.clone(), modelos.clone());
+    let lista = modelos.clone();
     // Sin pasar por `to_string`: así el frontal sabe si el corte fue de red y espera para reintentar (`INS-42`).
     tauri::async_runtime::spawn_blocking(move || descargar_faltantes(&cliente, &lista, &cancelar, &canal))
         .await
@@ -277,6 +278,10 @@ pub(crate) struct Reparacion {
 /// motor y pide todos los modelos del perfil con `/api/pull`, que solo baja lo que falta. Con un
 /// Ollama externo solo se pide de nuevo cada modelo: ni su motor ni su carpeta son de la app.
 /// Si falla después de parar el motor, lo vuelve a arrancar antes de devolver el error.
+///
+/// Si la red corta la descarga después de la comprobación local, lo reparado se guarda (`Estado::reparacion`): el
+/// reintento no vuelve a parar el motor ni a calcular las sumas, y su resultado cuenta lo que ya se reparó (no dice
+/// «Todo estaba en orden» si se reinstaló el motor o se repusieron capas).
 #[tauri::command]
 pub(crate) async fn reparar(
     app: tauri::AppHandle,
@@ -285,24 +290,25 @@ pub(crate) async fn reparar(
 ) -> Result<Reparacion, ErrorIa> {
     let estado = app.state::<Estado>();
     let _ocupado = Ocupado::tomar(&estado.ocupado)?;
-    estado.cancelar.store(false, Ordering::Relaxed);
+    let cancelar = estado.cancelar.nueva();
     let config = estado.config();
     let perfil = estado.perfil(&config)?.clone();
     let modelos: Vec<String> = perfil.modelos().into_iter().map(String::from).collect();
+    let ia = config.ia_efectiva(&estado.rutas);
     let (mut motor_reinstalado, mut capas_repuestas) = (false, 0);
-    if estado.ollama_externo.is_none() {
+    let hecha = ReparacionHecha::para(estado.reparacion.bloquear().take(), &ia, &modelos);
+    if let Some(h) = &hecha {
+        // Reintento tras un corte de red: lo local ya está comprobado; solo hace falta motor para descargar.
+        (motor_reinstalado, capas_repuestas) = (h.motor_reinstalado, h.capas_repuestas);
+        asegurar(&app).await?;
+    } else if estado.ollama_externo.is_none() {
         // Parar, reparar y volver a arrancar, sin que `asegurar_motor` arranque un motor en mitad de la reparación.
         let turno = estado.arranque.coger().await;
         // Parado, ningún archivo está en uso: en Windows no se podría reponer ni borrar.
         if let Some(mut p) = estado.sacar_motor(&turno) {
             p.parar();
         }
-        let (ia, m, cancelar, lista) = (
-            config.ia_efectiva(&estado.rutas),
-            estado.catalogo.motor.clone(),
-            estado.cancelar.clone(),
-            modelos.clone(),
-        );
+        let (ia, m, cancelar, lista) = (ia.clone(), estado.catalogo.motor.clone(), cancelar.clone(), modelos.clone());
         let canal_modelos = canal.clone();
         let comprobado = tauri::async_runtime::spawn_blocking(move || -> Result<(bool, usize), ErrorIa> {
             // `motor::Error::Red` (bajar el motor) llega con `red: true`; el resto, como texto.
@@ -335,9 +341,8 @@ pub(crate) async fn reparar(
         arrancado?;
     }
     let cliente = estado.cliente()?;
-    let cancelar = estado.cancelar.clone();
     let lista = modelos.clone();
-    tauri::async_runtime::spawn_blocking(move || -> Result<(), ErrorIa> {
+    let descargado = tauri::async_runtime::spawn_blocking(move || -> Result<(), ErrorIa> {
         for m in &lista {
             cliente.descargar_modelo(m, &cancelar, &mut |p| {
                 // Si el frontal ya no escucha el canal (ventana cerrada), el progreso se pierde sin más: la tarea sigue.
@@ -347,6 +352,15 @@ pub(crate) async fn reparar(
         Ok(())
     })
     .await
-    .map_err(ErrorIa::from)??;
+    .map_err(ErrorIa::from)
+    .and_then(|r| r);
+    if let Err(e) = &descargado {
+        if e.red {
+            // El frontal espera a que vuelva internet y reintenta: que no repita ni olvide lo hecho.
+            *estado.reparacion.bloquear() =
+                Some(ReparacionHecha { ia, modelos: modelos.clone(), motor_reinstalado, capas_repuestas });
+        }
+    }
+    descargado?;
     Ok(Reparacion { motor_reinstalado, capas_repuestas, modelos })
 }

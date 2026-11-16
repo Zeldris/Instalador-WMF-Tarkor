@@ -13,10 +13,10 @@ mod vigilancia;
 use comandos_basicos::*;
 use comandos_datos::*;
 use comandos_ia::*;
-use estado::{Bloquear, Candado, Estado};
+use estado::{Cancelar, Candado, Estado};
 use motor_ciclo::*;
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::time::Duration;
 use tarkor_nucleo::catalogo::Catalogo;
 use tarkor_nucleo::config::Rutas;
@@ -38,7 +38,9 @@ pub fn run() {
             url_motor: Mutex::new(None),
             // Para pruebas y desarrollo: usar un Ollama ya en marcha en vez de instalar uno.
             ollama_externo: std::env::var("TARKOR_OLLAMA_URL").ok(),
-            cancelar: Arc::new(AtomicBool::new(false)),
+            cancelar: Cancelar::default(),
+            cerrando: AtomicBool::new(false),
+            reparacion: Mutex::new(None),
             ocupado: AtomicBool::new(false),
             detenido: Mutex::new(None),
             ultimo_motivo_parada: Mutex::new(None),
@@ -86,9 +88,7 @@ pub fn run() {
     app.run(|app, evento| {
         // Al cerrar, el motor se para siempre (docs/08: nada queda funcionando en segundo plano).
         if let RunEvent::Exit = evento {
-            if let Some(mut p) = app.state::<Estado>().motor.bloquear().take() {
-                p.parar();
-            }
+            parar_al_salir(&app.state::<Estado>());
         }
     });
 }

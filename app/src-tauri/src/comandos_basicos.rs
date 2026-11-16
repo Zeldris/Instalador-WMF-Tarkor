@@ -3,7 +3,6 @@
 use crate::estado::*;
 use serde::Serialize;
 use std::collections::BTreeMap;
-use std::sync::atomic::Ordering;
 use tarkor_nucleo::carpetas::espacio_libre_mb;
 use tarkor_nucleo::catalogo::{Catalogo, Origen};
 use tarkor_nucleo::config::{Config, Rutas};
@@ -96,5 +95,5 @@ pub(crate) async fn estado_motor(app: tauri::AppHandle) -> Res<InfoMotor> {
 /// Pausa cualquier descarga en curso. Lo descargado se conserva para continuar.
 #[tauri::command]
 pub(crate) fn cancelar_descargas(estado: State<'_, Estado>) {
-    estado.cancelar.store(true, Ordering::Relaxed);
+    estado.cancelar.todas();
 }
