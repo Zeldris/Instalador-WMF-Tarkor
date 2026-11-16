@@ -148,7 +148,7 @@ export function Descarga({ ir, config, evaluacion, actualizar, esperas }: Props)
         <div className="descarga">
           <b>{t.total}</b>
           <span className="mono peq">{fmt(hecho)} / {fmt(total)} GB{fase === 'trabajando' && quedan ? ` · ${t.quedan(quedan)}` : ''}</span>
-          <div className="progreso"><div style={{ width: `${total ? (hecho / total) * 100 : 0}%` }} /></div>
+          <div className="progreso" role="progressbar" aria-label={t.total} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(total ? (hecho / total) * 100 : 0)}><div style={{ width: `${total ? (hecho / total) * 100 : 0}%` }} /></div>
         </div>
         <div className="filete" />
         {(filas ?? []).map((f) => {
@@ -164,7 +164,7 @@ export function Descarga({ ir, config, evaluacion, actualizar, esperas }: Props)
             <div key={f.id} className={`descarga${ok ? ' ok' : ''}`}>
               <span>{f.nombre} {f.gb > 0 && <span className="peq tenue mono">{fmt(f.gb)} GB</span>}</span>
               <span className="estado">{estado}</span>
-              <div className="progreso"><div style={{ width: `${f.parte * 100}%` }} /></div>
+              <div className="progreso" role="progressbar" aria-label={f.nombre} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(f.parte * 100)}><div style={{ width: `${f.parte * 100}%` }} /></div>
             </div>
           )
         })}

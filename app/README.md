@@ -74,9 +74,11 @@ export TARKOR_OLLAMA_URL=http://127.0.0.1:11499
 xvfb-run -a sh -c 'node e2e/ollama-falso.mjs 11499 & F=$!; tauri-driver & D=$!; trap "kill $D $F" EXIT; sleep 2; node e2e/asistente.e2e.mjs /usr/bin/tarkor capturas'
 ```
 
-Sin `TARKOR_OLLAMA_URL` la app instala y arranca el motor real (1,4 GB). En una red que bloquea
-el registro de modelos, `E2E_ESPERA_ERROR_RED=1` comprueba que el error se explica y se puede
-reintentar.
+Sin `TARKOR_OLLAMA_URL` la app instala y arranca el motor real (1,4 GB). `E2E_ESPERA_ERROR_RED=1`
+comprueba que el error de una red que bloquea el registro de modelos se explica y se puede reintentar:
+`tools/qa/e2e.sh` pone entonces `FALSO_RED_BLOQUEADA=1` en el Ollama falso (toda descarga, 403); a mano,
+vale el motor real en una red así. La espera de la alerta es de 60 s con el Ollama falso y de 10 min con el
+motor real (su instalación va antes).
 
 ### Ajustes → Rendimiento de la IA y motor detenido (`INS-43`)
 

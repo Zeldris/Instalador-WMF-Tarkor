@@ -1,12 +1,7 @@
 /* Tokens copiados de frontend/src/index.css del juego (tema de Helek Sirik) para que el asistente
    parezca Tarkor desde el primer segundo (docs/11, "Principios"). Si cambian allí, cambiar aquí.
-   Fuentes empaquetadas en local (@fontsource): la app no depende de Google Fonts. */
-@import '@fontsource/cinzel/400.css';
-@import '@fontsource/cinzel/600.css';
-@import '@fontsource/cinzel/700.css';
-@import '@fontsource/inter/400.css';
-@import '@fontsource/inter/500.css';
-@import '@fontsource/inter/600.css';
+   Fuentes empaquetadas en local (fuentes.css, de @fontsource): la app no depende de Google Fonts. */
+@import './fuentes.css';
 
 :root {
   color-scheme: dark;
@@ -36,15 +31,15 @@ p { margin: 0; }
   padding: 26px 18px; display: flex; flex-direction: column; gap: 26px; border-right: 1px solid var(--iron-900);
 }
 .marca { font-family: var(--serif); font-weight: 700; letter-spacing: .18em; font-size: 22px; }
-.marca small { display: block; font-family: var(--sans); font-weight: 500; letter-spacing: .08em; font-size: 11px; color: var(--accent2-400); text-transform: uppercase; margin-top: 2px; }
+.marca small { display: block; font-family: var(--sans); font-weight: 500; letter-spacing: .08em; font-size: 12px; color: var(--accent2-400); text-transform: uppercase; margin-top: 2px; }
 .pasos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.pasos li { display: flex; gap: 10px; align-items: center; padding: 7px 8px; border-radius: 6px; color: var(--wood-400); font-size: 14px; }
-.pasos .n { width: 22px; height: 22px; border-radius: 50%; border: 1px solid currentColor; display: grid; place-items: center; font-family: var(--mono); font-size: 11px; flex: none; }
+.pasos li { display: flex; gap: 10px; align-items: center; padding: 7px 8px; border-radius: 6px; color: var(--wood-300); font-size: 14px; }
+.pasos .n { width: 22px; height: 22px; border-radius: 50%; border: 1px solid currentColor; display: grid; place-items: center; font-family: var(--mono); font-size: 12px; flex: none; }
 .pasos li.hecho { color: var(--moss-400); }
 .pasos li.hecho .n { background: color-mix(in srgb, var(--moss-500) 25%, transparent); }
 .pasos li.actual { color: var(--accent-300); background: color-mix(in srgb, var(--accent-500) 12%, transparent); }
-.pasos li.actual .n { border-color: var(--accent-400); background: var(--accent-600); color: var(--wood-100); }
-.riel .pie { margin-top: auto; font-size: 12px; color: var(--wood-500); }
+.pasos li.actual .n { border-color: var(--accent-400); background: var(--accent-400); color: var(--iron-900); }
+.riel .pie { margin-top: auto; font-size: 12px; color: var(--wood-300); }
 
 .principal {
   display: flex; flex-direction: column; min-width: 0; min-height: 0;
@@ -64,10 +59,10 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
 
 .barra { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 16px 38px; border-top: 1px solid var(--iron-700); background: color-mix(in srgb, var(--iron-800) 70%, transparent); }
 .hueco { flex: 1; }
-.btn { font: inherit; font-weight: 600; font-size: 14px; border-radius: 6px; padding: 10px 18px; cursor: pointer; border: 1px solid var(--wood-600); background: transparent; color: var(--wood-100); }
+.btn { font: inherit; font-weight: 600; font-size: 14px; border-radius: 6px; padding: 10px 18px; cursor: pointer; border: 1px solid var(--wood-400); background: transparent; color: var(--wood-100); }
 .btn:hover:not(:disabled) { background: var(--wood-700); }
-.btn.pri { background: var(--accent-600); border-color: var(--accent-500); color: #fff; }
-.btn.pri:hover:not(:disabled) { background: var(--accent-500); }
+.btn.pri { background: var(--accent-500); border-color: var(--accent-400); color: var(--iron-900); }
+.btn.pri:hover:not(:disabled) { background: var(--accent-400); }
 .btn:disabled { opacity: .4; cursor: not-allowed; }
 :focus-visible { outline: 2px solid var(--accent-300); outline-offset: 2px; }
 
@@ -83,17 +78,17 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
 
 .ficha { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 0; }
 .ficha div { border: 1px solid var(--iron-700); border-radius: 8px; padding: 10px 12px; }
-.ficha dt { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--wood-400); }
+.ficha dt { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--wood-300); }
 .ficha dd { margin: 2px 0 0; font-family: var(--mono); font-size: 15px; }
 
 .medidor { display: flex; flex-direction: column; gap: 8px; }
 .pista { position: relative; height: 14px; border-radius: 7px; background: var(--iron-800); border: 1px solid var(--iron-700); margin-bottom: 18px; }
 .relleno { position: absolute; inset: 0 auto 0 0; border-radius: 7px; background: linear-gradient(90deg, var(--accent-600), var(--accent-400)); }
 .marca-perfil { position: absolute; top: -6px; bottom: -6px; width: 2px; background: var(--wood-200); }
-.marca-perfil span { position: absolute; top: 22px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 11px; color: var(--wood-300); }
+.marca-perfil span { position: absolute; top: 22px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 12px; color: var(--wood-300); }
 .marca-perfil.fuera { background: var(--danger-400); }
 .marca-perfil.fuera span { color: var(--danger-400); }
-.escala { display: flex; justify-content: space-between; font-size: 11px; color: var(--wood-500); }
+.escala { display: flex; justify-content: space-between; font-size: 12px; color: var(--wood-300); }
 
 .tarjetas { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
 .resultado { font-size: 12.5px; line-height: 1.45; color: var(--wood-300); flex: 1; }
@@ -108,11 +103,11 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
 .espacio { margin: 0; display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; }
 .espacio .nw { white-space: nowrap; }
 .espacio.sin { color: var(--danger-400); }
-.enlace { font: inherit; font-size: 13px; background: none; border: 0; padding: 0; color: var(--accent-300); text-decoration: underline; cursor: pointer; }
+.enlace { font: inherit; font-size: 13px; background: none; border: 0; padding: 8px 4px; min-height: 36px; color: var(--accent-300); text-decoration: underline; cursor: pointer; }
 .enlace:disabled { opacity: .5; cursor: wait; }
 .carpeta .fila, .reparar .fila { gap: 8px; }
 .etiquetas { display: flex; gap: 6px; flex-wrap: wrap; min-height: 22px; }
-.etiqueta { font-size: 11px; font-weight: 600; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; border: 1px solid; }
+.etiqueta { font-size: 12px; font-weight: 600; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; border: 1px solid; }
 .etiqueta.rec { color: var(--accent-300); border-color: var(--accent-500); }
 .etiqueta.max { color: var(--wood-200); border-color: var(--wood-500); }
 .etiqueta.fuera { color: var(--danger-400); border-color: var(--danger-600); }
@@ -125,8 +120,9 @@ h2 { font-family: var(--serif); font-size: 15px; font-weight: 600; letter-spacin
 .aviso { border: 1px solid color-mix(in srgb, var(--cost-500) 60%, transparent); background: color-mix(in srgb, var(--cost-500) 10%, transparent); color: var(--cost-400); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
 .error { border: 1px solid color-mix(in srgb, var(--danger-500) 60%, transparent); background: color-mix(in srgb, var(--danger-500) 10%, transparent); border-radius: 8px; padding: 12px 14px; font-size: 14px; display: flex; flex-direction: column; gap: 8px; }
 .fila { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-.seg { display: inline-flex; border: 1px solid var(--wood-600); border-radius: 6px; overflow: hidden; }
-.seg button { font: inherit; font-size: 13px; padding: 7px 14px; background: transparent; color: var(--wood-200); border: 0; cursor: pointer; }
+.seg { display: inline-flex; border: 1px solid var(--wood-400); border-radius: 6px; overflow: hidden; }
+.seg button { font: inherit; font-size: 13px; padding: 7px 14px; min-height: 36px; background: transparent; color: var(--wood-200); border: 0; cursor: pointer; }
+.seg button:focus-visible { outline-offset: -2px; }
 .seg button[aria-pressed="true"] { background: var(--wood-600); color: var(--wood-100); }
 .interruptor { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--wood-300); cursor: pointer; }
 details summary { cursor: pointer; color: var(--accent-300); font-size: 13px; }
@@ -145,7 +141,7 @@ details summary { cursor: pointer; color: var(--accent-300); font-size: 13px; }
 .comprobaciones { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .comprobaciones > li { border: 1px solid var(--iron-700); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
 .cab { display: flex; gap: 10px; align-items: center; }
-.icono { width: 20px; height: 20px; border-radius: 50%; flex: none; display: grid; place-items: center; font-size: 12px; font-weight: 700; border: 1px solid var(--wood-600); color: var(--wood-500); }
+.icono { width: 20px; height: 20px; border-radius: 50%; flex: none; display: grid; place-items: center; font-size: 12px; font-weight: 700; border: 1px solid var(--wood-600); color: var(--wood-300); }
 .icono.curso { border-color: var(--accent-400); border-top-color: transparent; animation: girar .8s linear infinite; }
 .icono.ok { background: var(--moss-500); border-color: var(--moss-500); color: var(--wood-950); }
 .icono.fallo { background: var(--danger-600); border-color: var(--danger-600); color: #fff; }

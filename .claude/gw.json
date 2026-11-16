@@ -17,6 +17,7 @@
     "bash tools/qa/en-app.sh cargo clippy -q --workspace --all-targets -- -D warnings",
     "python3 .claude/gw/scripts/md-links.py",
     "python3 tools/qa/sin-find-forzado.py",
+    "actionlint -shellcheck=",
     "python3 -m unittest discover -s tools/qa/tests",
     "python3 -m unittest discover -s tools/banco",
     "python3 -m unittest discover -s .claude/skills/gw-media-content/scripts",

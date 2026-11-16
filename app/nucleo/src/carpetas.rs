@@ -177,12 +177,23 @@ fn mover_con(
         }
     }
     if let Err(e) = copiar(origen, destino) {
-        if estaba {
-            let _ = fs::remove_dir_all(destino).and_then(|_| fs::create_dir(destino));
-        } else {
-            let _ = fs::remove_dir_all(destino);
-        }
-        return Err(format!("No se pudo copiar a {}: {e}. La carpeta actual sigue como estaba.", destino.display()));
+        // Se deshace la copia a medias. Si eso también falla no se esconde: el error principal sigue siendo el de la
+        // copia, y se le suma que quedan restos en el destino para que el jugador pueda borrarlos a mano.
+        let restos = match fs::remove_dir_all(destino) {
+            Err(l) => format!(" Quedaron restos de la copia en {} ({l}); puedes borrarlos a mano.", destino.display()),
+            Ok(()) if estaba => match fs::create_dir(destino) {
+                Ok(()) => String::new(),
+                Err(l) => format!(
+                    " Se limpió la copia, pero no se pudo recrear la carpeta vacía {} ({l}); créala a mano.",
+                    destino.display()
+                ),
+            },
+            Ok(()) => String::new(),
+        };
+        return Err(format!(
+            "No se pudo copiar a {}: {e}. La carpeta actual sigue como estaba.{restos}",
+            destino.display()
+        ));
     }
     Ok(fs::remove_dir_all(origen).err().map(|e| {
         format!(

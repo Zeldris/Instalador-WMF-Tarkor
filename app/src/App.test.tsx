@@ -328,6 +328,25 @@ describe('asistente de primer arranque', () => {
       expect(await screen.findByText(new RegExp(`^Perfil ${recomendadoDe(e).nombre}\\.`))).toBeTruthy()
     })
 
+    it('las barras de la descarga son progressbar con nombre y rango (INS-66)', async () => {
+      const e = evaluarEjemplo(equipoEjemplo)
+      render(<Descarga ir={() => {}} config={huerfana()} evaluacion={e} actualizar={() => {}} />)
+      const total = await screen.findByRole('progressbar', { name: 'Total' })
+      expect(total.getAttribute('aria-valuemin')).toBe('0')
+      expect(total.getAttribute('aria-valuemax')).toBe('100')
+      expect(total.getAttribute('aria-valuenow')).not.toBeNull()
+      expect((await screen.findAllByRole('progressbar')).length).toBeGreaterThan(1)
+    })
+
+    it('el medidor de memoria es un meter con rango (INS-66)', async () => {
+      const e = evaluarEjemplo(equipoEjemplo)
+      render(<ElegirPerfil ir={() => {}} config={huerfana()} evaluacion={e} rutas={null} cambiarCarpeta={async () => {}} actualizar={() => {}} />)
+      const medidor = await screen.findByRole('meter')
+      expect(medidor.getAttribute('aria-valuemin')).toBe('0')
+      expect(Number(medidor.getAttribute('aria-valuemax'))).toBeGreaterThan(0)
+      expect(medidor.getAttribute('aria-valuenow')).not.toBeNull()
+    })
+
     it('Perfil no se cae, marca el recomendado y guarda el recomendado, no el id que no existe', async () => {
       const e = evaluarEjemplo(equipoEjemplo)
       const guardados: unknown[] = []
@@ -392,6 +411,19 @@ describe('asistente de primer arranque', () => {
       render(<App />)
       expect(await screen.findByText('El motor de IA se ha detenido')).toBeTruthy()
       expect(screen.getByText(aviso.motivo)).toBeTruthy()
+    })
+
+    it('si falla la suscripción al evento, el fallo se registra con contexto y no se traga', async () => {
+      await conAsistenteHecho()
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const escucha = vi.spyOn(ejemplo, 'alMotorDetenido').mockRejectedValue(new Error('sin eventos'))
+      try {
+        render(<App />)
+        await waitFor(() => expect(error).toHaveBeenCalledWith(expect.stringContaining('motor detenido'), expect.any(Error)))
+      } finally {
+        escucha.mockRestore()
+        error.mockRestore()
+      }
     })
 
     it('el evento abre la pantalla y la escucha se limpia al desmontar', async () => {

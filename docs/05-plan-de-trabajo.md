@@ -68,7 +68,7 @@ Cierra con el plan como roadmap, una sola versión en la app, `CHANGELOG.md` y `
 
 | Id | Tarea | Estado |
 |---|---|---|
-| FLU-10 | Roadmap por versiones (este documento), `roadmapFiles` en `.claude/gw.json`, versión única en `app/src-tauri/tauri.conf.json` copiada por script a `package.json` y `Cargo.toml`, `CHANGELOG.md` Keep a Changelog y `release.yml` por tag sin binarios | en curso (2026-11-15: hecho todo salvo el tag `v0.1.0` sobre `9fce3d1`, que espera confirmación de la usuaria) |
+| FLU-10 | Roadmap por versiones (este documento), `roadmapFiles` en `.claude/gw.json`, versión única en `app/src-tauri/tauri.conf.json` copiada por script a `package.json` y `Cargo.toml`, `CHANGELOG.md` Keep a Changelog y `release.yml` por tag sin binarios | hecho (2026-11-15; roadmap por versiones, versión única, CHANGELOG y release.yml; tag v0.1.0 sobre 9fce3d1) |
 | FLU-11 | Corregir plan y bitácora sobre el PR #1 del juego: está cerrado sin fusionar, no «a medias» | hecho (2026-11-15; `INS-21`…`INS-27` pasan a descartados, la bitácora y [`02`](02-migracion-postgres-a-sqlite.md) apuntan a `INS-60`) |
 
 ## `0.3` «Base de datos»
@@ -91,9 +91,9 @@ Cierra con el E2E en el CI, dependencias vigiladas y el código del núcleo sin 
 
 | Id | Tarea | Estado |
 |---|---|---|
-| INS-63 | E2E (`app/e2e`) en el CI (prop. 4) | pendiente |
-| INS-64 | Dependabot más `cargo audit` y `npm audit` (prop. 5) | pendiente |
-| INS-65 | Ayudante de mutex sin pánico, partir `lib.rs` y no tragar errores (`carpetas.rs`, `App.tsx:38`) (prop. 6) | pendiente |
+| INS-63 | E2E (`app/e2e`) en el CI (prop. 4) | hecho (2026-11-15; job e2e en app.yml (tauri-driver bajo xvfb), con la variante del error de red sobre un registro bloqueado falso; verde en el CI de 7d794cd) |
+| INS-64 | Dependabot más `cargo audit` y `npm audit` (prop. 5) | hecho (2026-11-15; dependabot.yml (npm, cargo, acciones), job auditoria con cargo audit y npm audit; 12 avisos de RustSec arreglados, zip 9 y ruzstd 0.9; la extracción de zip 9 en Windows, por ver en el CI y en INS-8) |
+| INS-65 | Ayudante de mutex sin pánico, partir `lib.rs` y no tragar errores (`carpetas.rs`, `App.tsx:38`) (prop. 6) | hecho (2026-11-15; lib.rs (1131 líneas) partido en 7 módulos sin cambiar comandos ni eventos; trait Bloquear sustituye los 15 lock().unwrap(); carpetas.rs avisa de los restos si falla la limpieza; los catch silenciados del frontal registran el fallo) |
 
 ## `0.5` «Marca»
 
@@ -102,8 +102,8 @@ Cierra con la marca de Tarkor en el asistente, accesible y con fuentes ligeras, 
 | Id | Tarea | Estado |
 |---|---|---|
 | INS-56 | La marca de Tarkor en el asistente (de `UX-40` del juego): tokens `gold-*`, `stone-*`, `night-*` y `crystal-deep` en `estilos.css`, «TARKOR» en `.title-gold`, filo de oro, `h1` en Cinzel 700, azul solo para estados, fondo de madera. Espera a que `claude/marca-interfaz` del juego llegue a su `main`; iconos en `app/src-tauri/icons/` cuando existan las imágenes (E14). Absorbe la prop. 9: oro, tokens de escala, estilos en línea, errores y cargas comunes | pendiente |
-| INS-66 | Accesibilidad: contraste del botón principal y textos tenues, bordes, `progressbar`, foco del `.seg`, tamaños para la Deck (prop. 7) | pendiente |
-| INS-67 | Fuentes: solo `latin` y `latin-ext` en woff2 (~200 KB) (prop. 8) | pendiente |
+| INS-66 | Accesibilidad: contraste del botón principal y textos tenues, bordes, `progressbar`, foco del `.seg`, tamaños para la Deck (prop. 7) | hecho (2026-11-15; contraste ≥4,5:1 con tokens (botón principal 7,4:1, textos tenues wood-300), bordes wood-400, progressbar en descargas y medidor, foco del .seg, letra 12 px y objetivos de 36 px; los leves 7, 8, 10 y 11 de la auditoría siguen en marca-y-estilos.md) |
+| INS-67 | Fuentes: solo `latin` y `latin-ext` en woff2 (~200 KB) (prop. 8) | hecho (2026-11-15; app/src/fuentes.css con 12 @font-face woff2 latin y latin-ext; de 54 archivos a 12 (260 KB); test_fuentes.py) |
 | INS-58 | Colocar las imágenes de [`13`](13-hoja-de-estilos-e-imagenes.md) cuando el generador las entregue (iconos, imágenes del NSIS, portada, hierro del riel, 1 MB como mucho). Antes, dos pasos de la usuaria (`13` §6): la sesión en GVIG (encargo sin rama, pendiente) y copiar la entrega a `entrega/`. Verlas en Windows al 100 % y 150 % y en la Deck queda con `INS-8`, `INS-51` e `INS-52` | pendiente |
 
 ## `0.6` «Publicar»

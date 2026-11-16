@@ -16,6 +16,9 @@ antes de la `/retro`; todo en español, y solo lo que confirme la usuaria entra 
 - **`bash .claude/gw/scripts/merge-branch.sh <rama> "<mensaje>"`** (`QA-135`): fusiona la rama de un subagente y corre
   el check.
 - **Revisión por arreglo** (`QA-126`): `/code-review` corto del diff de cada subagente antes de fusionarlo.
+- **El diff de un subagente, por archivo** (opt-tokens de `INS-63`): `git diff --stat` primero y luego el diff de cada
+  archivo que importe, no el diff entero de golpe (uno de 3,4k arrastró 185k). El `/code-review` corto de arriba es el
+  contrapeso para no dejarse un archivo sin mirar.
 - **Pre-push con tests de lo que cambia** (`QA-88`): `relatedTests` de `.claude/gw.json` llama a
   `tools/qa/tests-app.sh` (`vitest related` para `app/src`, `cargo test -p tarkor-nucleo` para el núcleo y el
   catálogo); no hace falta pasar todo tras cada cambio.
@@ -89,6 +92,8 @@ antes de la `/retro`; todo en español, y solo lo que confirme la usuaria entra 
   `INS-44`/`INS-45`, arrastró ~397k.
 - **Mirar el CI** (opt-tokens del 2026-11-11): `list_workflow_runs` con `perPage: 2` y el filtro de la rama; cada
   resultado trae el mensaje de commit entero (~1,6k). Siete consultas más anchas arrastraron ~284k.
+  Los trabajos de una ejecución (`list_workflow_jobs`) solo si falló, y su log con `tail_lines: 60` (opt-tokens de
+  `INS-63`: una consulta de trabajos arrastró 166k y las 8 de `actions_list`, 371k).
 - **El registro de la sesión** pesa cientos de MB: medirlo con `measure.py` de la skill, nunca leerlo.
 
 ## Ajustes en vigor
@@ -126,3 +131,7 @@ antes de la `/retro`; todo en español, y solo lo que confirme la usuaria entra 
   6,4M (el de las pantallas, 32 llamadas a 110k: pasó el tope de 30). El reparto se quedó en la sesión principal:
   cinco arreglos de la revisión hechos en ella, la bitácora leída 40 veces. Acordado: una tarea por rama, todos los
   arreglos al mismo subagente, bitácora por tramos y CI de dos en dos.
+- **2026-11-15, `INS-63`…`INS-67` con su revisión de bloque** (desde `8ae9862`): sesión principal 137 llamadas,
+  contexto medio 113k (suelo 93k, techo 143k), 2 compactaciones, 15,4M de entrada; 2 subagentes Sonnet, 57 llamadas
+  y 3,2M. Contexto fijo de arranque ~78k de ~90k (sistema y MCP). Acordado: CI por trabajos solo si falló, diff de
+  subagente por archivo y `roadmap.py show --detail` propuesto al flujo.

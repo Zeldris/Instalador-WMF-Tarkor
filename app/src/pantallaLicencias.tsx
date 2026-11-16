@@ -19,7 +19,7 @@ const generadas = import.meta.glob<LicenciasTerceros>('./licencias/generadas/ter
 export async function cargarTerceros(): Promise<LicenciasTerceros | null> {
   const cargar = Object.values(generadas)[0]
   if (!cargar) return null
-  try { return await cargar() } catch { return null }
+  try { return await cargar() } catch (e) { console.error('No se pudieron cargar las licencias de terceros:', e); return null }
 }
 
 /** Id de la licencia de Llama en el catálogo (pide «Built with Llama» y su aviso). */

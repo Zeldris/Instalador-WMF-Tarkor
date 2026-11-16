@@ -136,9 +136,10 @@ async function recorrido() {
   await buscar(titulo('Descargando'))
   await captura('descarga')
   if (process.env.E2E_ESPERA_ERROR_RED) {
-    // Motor real en una red que bloquea el registro de modelos: el motor se instala y arranca,
-    // y la descarga del modelo muestra un error explicado con opción de reintentar.
-    const error = await texto('//div[@role="alert"]', 600000)
+    // Red que bloquea el registro de modelos (tools/qa/e2e.sh pone FALSO_RED_BLOQUEADA=1 en el Ollama falso, o el
+    // motor real en una red así): la descarga del modelo muestra un error explicado con opción de reintentar.
+    // Con el Ollama falso (E2E_FALSO) basta 1 min; con el motor real, primero se instala (1,4 GB): hasta 10 min.
+    const error = await texto('//div[@role="alert"]', process.env.E2E_FALSO ? 60000 : 600000)
     comprobar(error.startsWith('La red de este equipo no deja descargar'), `error de red explicado: "${error.slice(0, 70)}…"`)
     await buscar(boton('Reintentar'))
     await captura('error-red')

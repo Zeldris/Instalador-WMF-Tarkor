@@ -12,6 +12,8 @@
 //    FALSO_PASO_MS alarga el progreso de `/api/pull` (80 ms por paso por defecto).
 //    FALSO_CORTES_PULL=n hace que las n primeras `/api/pull` respondan con el error de «sin internet»
 //    del registro (no such host), como Ollama sin red; las siguientes, con normalidad.
+//    FALSO_RED_BLOQUEADA=1 hace que todas las `/api/pull` respondan 403 del registro, como una red (cortafuegos,
+//    proxy) que no deja llegar al servidor de modelos: la variante E2E_ESPERA_ERROR_RED de asistente.e2e.mjs.
 
 import { createServer } from 'node:http'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -23,6 +25,7 @@ const puerto = propio ? Number(puertoPropio) : Number(process.argv[2] ?? 11499)
 const esperar = (ms) => new Promise((ok) => setTimeout(ok, ms))
 const pasoMs = Number(process.env.FALSO_PASO_MS ?? 80)
 let cortesPull = Number(process.env.FALSO_CORTES_PULL ?? 0)
+const redBloqueada = process.env.FALSO_RED_BLOQUEADA === '1'
 // Tamaños en disco (bytes) parecidos a los reales; el resto, 500 MB.
 const TAMANOS = { 'llama3.1:8b': 4.9e9, 'qwen2.5:7b': 4.7e9, 'qwen2.5:1.5b-instruct': 1.0e9, 'qwen3.5:2b': 2.7e9, 'nomic-embed-text:latest': 2.74e8 }
 const tamano = (m) => TAMANOS[m] ?? 5e8
@@ -67,6 +70,10 @@ createServer(async (req, res) => {
     const { model } = await cuerpo(req)
     res.writeHead(200, { 'content-type': 'application/x-ndjson' })
     res.write(JSON.stringify({ status: 'pulling manifest' }) + '\n')
+    if (redBloqueada) {
+      res.write(JSON.stringify({ error: `pull model manifest: 403 Forbidden` }) + '\n')
+      return res.end()
+    }
     if (cortesPull > 0) {
       cortesPull--
       res.write(JSON.stringify({ error: `pull model manifest: Get "https://registry.ollama.ai/v2/library/${model.split(':')[0]}/manifests/${model.split(':')[1] ?? 'latest'}": dial tcp: lookup registry.ollama.ai: no such host` }) + '\n')
