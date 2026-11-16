@@ -55,13 +55,19 @@ fn leer_final(ruta: &Path, n: usize) -> std::io::Result<String> {
     let mut f = File::open(ruta)?;
     let largo = f.metadata()?.len();
     let desde = largo.saturating_sub(MAX_LECTURA);
-    f.seek(SeekFrom::Start(desde))?;
+    // Un byte de más por delante: dice si el corte cae justo al principio de una línea.
+    let previo = desde.saturating_sub(1);
+    f.seek(SeekFrom::Start(previo))?;
     let mut bytes = Vec::new();
-    f.take(MAX_LECTURA).read_to_end(&mut bytes)?;
+    f.take(MAX_LECTURA + (desde - previo)).read_to_end(&mut bytes)?;
+    let corte_en_linea = desde > 0 && bytes.first() != Some(&b'\n');
+    if desde > 0 {
+        bytes.remove(0);
+    }
     let texto = String::from_utf8_lossy(&bytes);
     let mut lineas: Vec<&str> = texto.lines().collect();
-    // Si se empezó a mitad del archivo, la primera línea está cortada.
-    if desde > 0 && !lineas.is_empty() {
+    // Si se empezó a mitad de una línea, esa primera está cortada; si el corte cayó justo en su principio, entera.
+    if corte_en_linea && !lineas.is_empty() {
         lineas.remove(0);
     }
     let ini = lineas.len().saturating_sub(n);
@@ -117,7 +123,10 @@ fn sustituir(texto: &str, forma: &str, cambio: &str) -> String {
         let ini = resto + pos;
         let fin = ini + aguja.len();
         salida.push_str(&texto[resto..ini]);
-        if texto[fin..].chars().next().is_some_and(es_de_nombre) {
+        // Dentro de otra palabra, por la derecha («/home/ana2») o por la izquierda («x/home/ana»), no se toca.
+        if texto[fin..].chars().next().is_some_and(es_de_nombre)
+            || texto[..ini].chars().next_back().is_some_and(es_de_nombre)
+        {
             salida.push_str(&texto[ini..fin]);
         } else {
             salida.push_str(cambio);
@@ -281,6 +290,26 @@ mod tests {
     }
 
     #[test]
+    fn corte_justo_al_principio_de_una_linea_conserva_esa_linea() {
+        let dir = tempfile::tempdir().unwrap();
+        let f = dir.path().join("exacto.log");
+        // Líneas de 1024 bytes: MAX_LECTURA es múltiplo, así el corte cae justo en el principio de una.
+        let linea = |i: usize| format!("{i:04}{}\n", "x".repeat(1019));
+        let n = MAX_LECTURA as usize / 1024 + 5;
+        let texto: String = (0..n).map(linea).collect();
+        fs::write(&f, &texto).unwrap();
+        let desde = texto.len() as u64 - MAX_LECTURA;
+        assert_eq!(texto.as_bytes()[desde as usize - 1], b'\n', "el corte cae al principio de una línea");
+        let r = ultimas_lineas(&f, n);
+        assert_eq!(r.lines().count(), (MAX_LECTURA / 1024) as usize, "no pierde la línea del corte");
+        assert!(r.starts_with("0005"), "{}", &r[..8]);
+        // Un corte a mitad de línea sí descarta la cortada.
+        fs::write(&f, format!("{texto}zz\n")).unwrap();
+        let r = ultimas_lineas(&f, n);
+        assert!(r.starts_with("0006") && r.ends_with("\nzz"), "{}", &r[..8]);
+    }
+
+    #[test]
     fn anonimiza_la_carpeta_personal() {
         let casa = Path::new("/home/ana");
         assert_eq!(
@@ -289,6 +318,9 @@ mod tests {
         );
         // Otro usuario con el mismo comienzo no se toca.
         assert_eq!(anonimizar("/home/ana2/x", casa, Path::new("")), "/home/ana2/x");
+        // Ni dentro de otra palabra por la izquierda.
+        assert_eq!(anonimizar("/mnt/home/ana/x y a/home/ana", casa, Path::new("")), "/mnt/home/ana/x y a/home/ana");
+        assert_eq!(anonimizar("ruta=/home/ana/x", casa, Path::new("")), "ruta=~/x");
         // Con barra final en la carpeta, igual.
         assert_eq!(anonimizar("/home/ana/x", Path::new("/home/ana/"), Path::new("")), "~/x");
         // Sin carpeta personal conocida no se cambia nada (ni se rompe).

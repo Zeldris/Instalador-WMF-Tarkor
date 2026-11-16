@@ -56,9 +56,13 @@ fn clasificar(e: &str) -> Clase {
     } else if m.contains("forbidden") || contiene_numero(&m, "403") || m.contains("proxy") || m.contains("certificate")
     {
         Clase::RedBloqueada
-    } else if ["dial tcp", "no such host", "connection", "timeout", "unreachable", "max retries exceeded"]
-        .iter()
-        .any(|p| m.contains(p))
+    } else if es_corte_local(&m) {
+        // El motor local (runner) cerró la conexión: no es internet, y esperar la red no lo arregla.
+        Clase::Otro
+    } else if contiene_palabra(&m, "eof")
+        || ["dial tcp", "no such host", "connection", "timeout", "unreachable", "max retries exceeded"]
+            .iter()
+            .any(|p| m.contains(p))
     {
         Clase::SinRed
     } else if m.contains("no space") {
@@ -66,6 +70,13 @@ fn clasificar(e: &str) -> Clase {
     } else {
         Clase::Otro
     }
+}
+
+/// Corte de conexión («forcibly closed» o `EOF`) entre este equipo y él mismo (127.0.0.1, localhost, ::1): lo
+/// ha cerrado el runner del motor, no la red.
+fn es_corte_local(m: &str) -> bool {
+    let corte = m.contains("forcibly closed") || contiene_palabra(m, "eof");
+    corte && ["127.0.0.1", "localhost", "[::1]"].iter().any(|l| m.contains(l))
 }
 
 /// `p` aparece como palabra suelta: sin letras, dígitos ni `_` pegados («oom» sí, «room» o «bloom» no).
@@ -144,6 +155,13 @@ pub struct Cargado {
 }
 
 const MB: u64 = 1024 * 1024;
+const GB: u64 = 1024 * MB;
+
+/// Bytes en «GB» como los muestra todo el instalador: binarios (1024³, lo que llama GB el explorador de
+/// archivos de Windows). Los textos «GB» salen de aquí, no de otra división.
+pub fn gb(bytes: u64) -> f64 {
+    bytes as f64 / GB as f64
+}
 
 /// Dónde corre la IA ahora mismo, con todos los modelos cargados juntos (docs/11, «Dónde corre la IA»).
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -551,6 +569,14 @@ mod tests {
         }
         assert!(!o("write /x: no space left on device / no room left").es_de_red());
         assert_eq!(clasificar("no room left"), Clase::Otro);
+        assert_eq!(clasificar("unexpected EOF"), Clase::SinRed);
+        assert_eq!(clasificar("Get \"https://registry.ollama.ai/x\": EOF"), Clase::SinRed);
+        assert_eq!(clasificar("geometry of the leofric"), Clase::Otro);
+        let local = "Post \"http://127.0.0.1:5001/completion\": read tcp 127.0.0.1:5002->127.0.0.1:5001: wsarecv: An existing connection was forcibly closed by the remote host.";
+        assert_eq!(clasificar(local), Clase::Otro);
+        assert_eq!(clasificar("Post \"http://localhost:5001/x\": EOF"), Clase::Otro);
+        let remoto = "read tcp 192.168.1.5:5002->104.21.0.1:443: wsarecv: An existing connection was forcibly closed by the remote host.";
+        assert_eq!(clasificar(remoto), Clase::SinRed);
         for m in ["runner killed by OOM", "oom-killer", "llama runner: oom.", "out of memory", "not enough memory"] {
             assert!(o(m).sin_memoria(), "{m}");
         }
@@ -628,6 +654,13 @@ mod tests {
             c.modelos_con_tamano().unwrap(),
             [("qwen2.5:7b".to_string(), 4_700_000_000), ("nomic-embed-text:latest".to_string(), 274_000_000)]
         );
+    }
+
+    #[test]
+    fn gb_es_binario() {
+        assert_eq!(gb(GB), 1.0);
+        assert_eq!(gb(3 * GB / 2), 1.5);
+        assert_ne!(gb(1_000_000_000), 1.0);
     }
 
     #[test]

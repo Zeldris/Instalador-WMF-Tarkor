@@ -55,7 +55,7 @@ pub fn texto_gb(bytes: u64) -> String {
     if bytes == 0 {
         return String::new();
     }
-    let gb = bytes as f64 / (1024.0 * 1024.0 * 1024.0);
+    let gb = crate::ollama::gb(bytes);
     let decimas = (gb * 10.0).round() / 10.0;
     if decimas == 0.0 {
         return "<0,1 GB".into();
@@ -131,10 +131,10 @@ pub fn borrar(rutas: &Rutas, config: &Config, partidas: bool, ia: bool) -> io::R
                 &mut error,
                 Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
-                    format!(
+                    IaNoBorrable(format!(
                         "no se borra la carpeta de la IA «{}»: no es la de por defecto ni se llama «{NOMBRE_IA_ELEGIDA}»",
                         ia_en_uso.display()
-                    ),
+                    )),
                 )),
             );
         }
@@ -170,9 +170,23 @@ fn sin_ia(config: &Config) -> Config {
     }
 }
 
+/// La carpeta de la IA elegida no se borra (no es la de por defecto ni se llama como la que crea Tarkor): el
+/// único error propio de `borrar` cuyo texto, con la ruta que ella eligió, se le puede enseñar tal cual.
+#[derive(Debug)]
+struct IaNoBorrable(String);
+
+impl std::fmt::Display for IaNoBorrable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for IaNoBorrable {}
+
 /// El mensaje que ve la usuaria cuando el borrado falla (sin rutas internas, salvo la de la IA que ella eligió).
+/// Cualquier otro error, aunque sea `InvalidInput`, da el genérico: su causa va al registro de quien llama.
 pub fn mensaje_error(e: &io::Error) -> String {
-    if e.kind() == io::ErrorKind::InvalidInput {
+    if e.get_ref().is_some_and(|causa| causa.is::<IaNoBorrable>()) {
         format!("{e}. Si quieres liberar ese espacio, bórrala a mano desde el explorador de archivos.")
     } else {
         "No se pudo borrar todo. Cierra los programas que usen las carpetas de Tarkor y vuelve a intentarlo.".into()
@@ -511,12 +525,26 @@ mod tests {
     fn mensajes_de_error_para_la_usuaria() {
         let rara = io::Error::new(
             io::ErrorKind::InvalidInput,
-            "no se borra la carpeta de la IA «/x/Docs»: no es la de por defecto",
+            IaNoBorrable("no se borra la carpeta de la IA «/x/Docs»: no es la de por defecto".into()),
         );
         let m = mensaje_error(&rara);
         assert!(m.contains("«/x/Docs»") && m.contains("bórrala a mano"), "{m}");
         let otro = mensaje_error(&io::Error::new(io::ErrorKind::PermissionDenied, "/secreto/ruta: denegado"));
         assert!(otro.contains("Cierra los programas") && !otro.contains("secreto"), "{otro}");
+    }
+
+    #[test]
+    fn un_invalid_input_ajeno_no_es_la_ia_no_borrable() {
+        let ajeno = io::Error::new(io::ErrorKind::InvalidInput, "/secreto/ruta: nombre no válido");
+        let m = mensaje_error(&ajeno);
+        assert!(m.contains("Cierra los programas") && !m.contains("secreto") && !m.contains("bórrala"), "{m}");
+        // El de verdad, el que da `borrar`, sí sale con su ruta.
+        let d = tempfile::tempdir().unwrap();
+        let r = Rutas { datos: d.path().join("datos"), ia: d.path().join("ia"), registros: d.path().join("reg") };
+        let c = Config { carpeta_ia: Some(d.path().join("Docs")), ..Config::default() };
+        fs::create_dir_all(d.path().join("Docs")).unwrap();
+        let e = borrar(&r, &c, false, true).unwrap_err();
+        assert!(mensaje_error(&e).contains("bórrala a mano"), "{e}");
     }
 
     #[cfg(unix)]

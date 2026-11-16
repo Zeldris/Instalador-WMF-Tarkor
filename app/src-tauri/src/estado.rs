@@ -93,6 +93,11 @@ pub(crate) const REGISTRO_MOTOR: &str = "motor-ia.log";
 pub(crate) struct Ocupado<'a>(&'a AtomicBool);
 
 impl<'a> Ocupado<'a> {
+    /// Hay una tarea larga en marcha (sin cogerla).
+    pub(crate) fn en_marcha(bandera: &AtomicBool) -> bool {
+        bandera.load(Ordering::SeqCst)
+    }
+
     pub(crate) fn tomar(bandera: &'a AtomicBool) -> Res<Self> {
         if bandera.swap(true, Ordering::SeqCst) {
             return Err(
@@ -194,6 +199,19 @@ impl From<ollama::Error> for ErrorIa {
 impl From<motor::Error> for ErrorIa {
     fn from(e: motor::Error) -> Self {
         ErrorIa { mensaje: e.to_string(), red: e.es_de_red(), sin_memoria: false }
+    }
+}
+
+/// Una tarea en segundo plano que no terminó (`spawn_blocking`).
+impl From<tauri::Error> for ErrorIa {
+    fn from(e: tauri::Error) -> Self {
+        ErrorIa::from(e.to_string())
+    }
+}
+
+impl From<tarkor_nucleo::modelos::Error> for ErrorIa {
+    fn from(e: tarkor_nucleo::modelos::Error) -> Self {
+        ErrorIa::from(e.to_string())
     }
 }
 

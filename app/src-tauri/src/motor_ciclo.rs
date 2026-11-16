@@ -30,7 +30,7 @@ pub(crate) async fn instalar_motor(app: tauri::AppHandle, canal: Channel<motor::
         .map_err(ErrorIa::from)
     })
     .await
-    .map_err(|e| ErrorIa::from(e.to_string()))?
+    .map_err(ErrorIa::from)?
 }
 
 /// Arranca Ollama con los ajustes del perfil y el equipo guardados (docs/12). Si ya estaba en

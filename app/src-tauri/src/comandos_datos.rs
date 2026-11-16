@@ -54,7 +54,11 @@ pub(crate) async fn borrar_datos(app: tauri::AppHandle, partidas: bool, ia: bool
     let app2 = app.clone();
     let borrado = tauri::async_runtime::spawn_blocking(move || {
         let estado = app2.state::<Estado>();
-        desinstalar::borrar(&estado.rutas, &estado.config(), partidas, ia).map_err(|e| desinstalar::mensaje_error(&e))
+        desinstalar::borrar(&estado.rutas, &estado.config(), partidas, ia).map_err(|e| {
+            // La causa real no se enseña (rutas internas), pero no se pierde: sale por la salida de errores.
+            eprintln!("tarkor: no se pudo borrar todo: {e}");
+            desinstalar::mensaje_error(&e)
+        })
     })
     .await
     .map_err(|e| e.to_string())

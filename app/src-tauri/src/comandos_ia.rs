@@ -120,7 +120,7 @@ pub(crate) async fn descargar_modelos(
         Ok(modelos)
     })
     .await
-    .map_err(|e| ErrorIa::from(e.to_string()))?
+    .map_err(ErrorIa::from)?
 }
 
 /// Carga el narrador del perfil en memoria al entrar en el juego (`INS-42`, docs/12), para que el primer turno no
@@ -133,7 +133,7 @@ pub(crate) async fn calentar_narrador(app: tauri::AppHandle) -> Result<(), Error
     let cliente = estado.cliente()?;
     tauri::async_runtime::spawn_blocking(move || cliente.calentar(&narrador))
         .await
-        .map_err(|e| ErrorIa::from(e.to_string()))?
+        .map_err(ErrorIa::from)?
         .map_err(ErrorIa::from)
 }
 
@@ -225,12 +225,17 @@ pub(crate) fn sobrantes_de(estado: &Estado) -> Res<Vec<(String, u64)>> {
 
 #[tauri::command]
 pub(crate) async fn modelos_sobrantes(app: tauri::AppHandle) -> Res<Vec<Sobrante>> {
+    // Con un cambio de perfil o una descarga en marcha, lo que baja ahora aún no es del perfil guardado: saldría
+    // «sobrando». Como en `borrar_modelos`, no se ofrece nada hasta que acabe.
+    if Ocupado::en_marcha(&app.state::<Estado>().ocupado) {
+        return Ok(Vec::new());
+    }
     let lista = tauri::async_runtime::spawn_blocking(move || sobrantes_de(&app.state::<Estado>()))
         .await
         .map_err(|e| e.to_string())??;
     Ok(lista
         .into_iter()
-        .map(|(modelo, bytes)| Sobrante { modelo, gb: (bytes as f64 / 1e9 * 100.0).round() / 100.0 })
+        .map(|(modelo, bytes)| Sobrante { modelo, gb: (ollama::gb(bytes) * 100.0).round() / 100.0 })
         .collect())
 }
 
@@ -314,11 +319,11 @@ pub(crate) async fn reparar(
                     total,
                 });
             })
-            .map_err(|e| ErrorIa::from(e.to_string()))?;
+            .map_err(ErrorIa::from)?;
             Ok((reinstalado, capas))
         })
         .await
-        .map_err(|e| ErrorIa::from(e.to_string()))
+        .map_err(ErrorIa::from)
         .and_then(|r| r);
         // Con lo que haya (el motor de antes si no se pudo reponer), el motor vuelve a arrancar.
         let arrancado = arrancar_con_turno(&app, &turno).await;
@@ -342,6 +347,6 @@ pub(crate) async fn reparar(
         Ok(())
     })
     .await
-    .map_err(|e| ErrorIa::from(e.to_string()))??;
+    .map_err(ErrorIa::from)??;
     Ok(Reparacion { motor_reinstalado, capas_repuestas, modelos })
 }

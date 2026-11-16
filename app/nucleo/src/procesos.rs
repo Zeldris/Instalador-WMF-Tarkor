@@ -20,8 +20,10 @@ pub fn puerto_libre() -> io::Result<u16> {
     Ok(TcpListener::bind(("127.0.0.1", 0))?.local_addr()?.port())
 }
 
-/// Espera hasta que `GET http://127.0.0.1:{puerto}{ruta}` responda 2xx o se agote el tiempo.
-pub fn esperar_http(puerto: u16, ruta: &str, limite: Duration) -> bool {
+/// Espera hasta que `GET http://127.0.0.1:{puerto}{ruta}` responda 2xx o se agote el tiempo. Solo lo usan las
+/// pruebas de `get_ok`; el motor espera su salud en `Proceso`.
+#[cfg(test)]
+fn esperar_http(puerto: u16, ruta: &str, limite: Duration) -> bool {
     let fin = Instant::now() + limite;
     while Instant::now() < fin {
         if get_ok(puerto, ruta) {
