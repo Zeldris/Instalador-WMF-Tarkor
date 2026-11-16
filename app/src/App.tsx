@@ -20,7 +20,12 @@ export default function App() {
   const [perfilAjustes, setPerfilAjustes] = useState<PerfilId | undefined>()
   const ultima = useRef<Config | null>(null)
   // Ajustes está cambiando de perfil: el aviso espera (si no, Ajustes se desmonta y pierde progreso, Pausar y error).
-  const [cambiando, setCambiando] = useState(false)
+  // Con el cambio esperando la red (`esperando`) no hay nada en marcha: el aviso se ve, y Ajustes sigue montado, oculto.
+  const [cambio, setCambio] = useState({ cambiando: false, esperando: false })
+  const { cambiando, esperando } = cambio
+  const alCambiar = useCallback((cambiando: boolean, esperando: boolean) => setCambio({ cambiando, esperando }), [])
+  // Cuenta los avisos que llegan: una lectura de `motor_detenido()` que salió antes de un aviso nuevo no lo borra.
+  const avisos = useRef(0)
   // Vista en la que estaba la app cuando llegó el aviso, y a dónde lleva «Volver» de Ajustes.
   const vistaRef = useRef<Vista>('asistente')
   vistaRef.current = vista
@@ -28,6 +33,7 @@ export default function App() {
   const [volverA, setVolverA] = useState<Vista>('juego')
   const ponerAviso = useCallback((a: MotorDetenido) => {
     if (antesDelAviso.current === null) antesDelAviso.current = vistaRef.current
+    avisos.current++
     setAviso(a)
   }, [])
 
@@ -43,10 +49,11 @@ export default function App() {
   useEffect(() => {
     if (cambiando) return
     let vivo = true
+    const leidos = avisos.current
     void api.motorDetenido().then((a) => {
       if (!vivo) return
       if (a) ponerAviso(a)
-      else { antesDelAviso.current = null; setAviso(null) }
+      else if (avisos.current === leidos) { antesDelAviso.current = null; setAviso(null) }
     }, () => {})
     return () => { vivo = false }
   }, [cambiando, ponerAviso])
@@ -117,22 +124,25 @@ export default function App() {
 
   const avisoError = error && <div className="error" role="alert" style={{ position: 'fixed', bottom: 16, left: 16, right: 16 }}>{error}</div>
 
-  if (aviso && !cambiando) {
-    const salir = () => { antesDelAviso.current = null; setAviso(null) }
-    return <>{avisoError}<PantallaMotorDetenido aviso={aviso}
+  const salir = () => { antesDelAviso.current = null; setAviso(null) }
+  const mostrarAviso = aviso !== null && !cambiando
+  const pantallaAviso = mostrarAviso && (
+    <PantallaMotorDetenido aviso={aviso}
       masLigero={masLigero}
       reintentado={salir}
       irAAjustes={(p) => {
         const antes = antesDelAviso.current ?? vista
         if (antes !== 'ajustes') setVolverA(antes)
         setPerfilAjustes(p); salir(); setVista('ajustes')
-      }} /></>
+      }} />
+  )
+  // Ajustes esperando la red sigue montado (oculto) bajo el aviso: si no, se perdería el reintento. Siempre en el mismo sitio, para no remontarlo.
+  if (vista === 'ajustes' && evaluacion && (esperando || !mostrarAviso)) {
+    return <>{avisoError}{pantallaAviso}<div style={{ display: mostrarAviso ? 'none' : 'contents' }} hidden={mostrarAviso}><Ajustes perfilInicial={perfilAjustes} config={config} evaluacion={evaluacion} rutas={rutas} cambiarCarpeta={cambiarCarpeta} actualizar={actualizar} reemplazarConfig={reemplazarConfig} reanalizar={analizar} alCambiar={alCambiar} volver={() => { setPerfilAjustes(undefined); setVista(volverA); setVolverA('juego') }} /></div></>
   }
+  if (mostrarAviso) return <>{avisoError}{pantallaAviso}</>
   if (vista === 'juego') {
     return <>{avisoError}<Juego abrirAjustes={() => setVista('ajustes')} masLigero={masLigero} irAAjustes={(p) => { setPerfilAjustes(p); setVolverA('juego'); setVista('ajustes') }} repetir={() => { setVista('asistente'); actualizar({ ...configInicial(), carpetaIa: config.carpetaIa, pasoAsistente: 1 }); setEvaluacion(null) }} /></>
-  }
-  if (vista === 'ajustes' && evaluacion) {
-    return <>{avisoError}<Ajustes perfilInicial={perfilAjustes} config={config} evaluacion={evaluacion} rutas={rutas} cambiarCarpeta={cambiarCarpeta} actualizar={actualizar} reemplazarConfig={reemplazarConfig} reanalizar={analizar} alCambiar={setCambiando} volver={() => { setPerfilAjustes(undefined); setVista(volverA); setVolverA('juego') }} /></>
   }
 
   // Sin evaluación no se puede pasar del paso 3.

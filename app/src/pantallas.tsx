@@ -6,9 +6,10 @@ import { textoEspera, useEsperaRed } from './esperaRed'
 import { Licencias } from './pantallaLicencias'
 import { BorrarDatos, CarpetaIa, CopiarInforme, ControlUsoCpu, DetallesTecnicos, Marco, Medidor, Pagina, Reparar, Tarjetas, textoModelo, useMoverCarpeta } from './componentes'
 import * as tx from './textos'
-import type { Config, Equipo, Evaluacion, PerfilId, Rutas, Sobrante, UsoIa } from './tipos'
+import type { Config, Equipo, Evaluacion, PerfilId, Reparacion, Rutas, Sobrante, UsoIa } from './tipos'
 import { aErrorIa, bloqueado, perfilDe } from './tipos'
 import { fmt, gbDeMb } from './formato'
+import { modelosDe } from './catalogo'
 
 interface Nav {
   ir: (paso: number) => void
@@ -263,9 +264,11 @@ function useCambiarPerfil(reemplazarConfig: (c: Config) => void) {
   const espera = useEsperaRed()
   // Mientras espera a la red el cambio sigue «en marcha»: Ajustes no deja tocar nada y se puede pausar o reintentar ya.
   const esperando = espera.segundos !== null
-  const cambiar = async (perfil: PerfilId) => {
+  // `reintento`: lo lanza la espera de red (sigue la escalera); a mano empieza de nuevo desde 5 s.
+  const cambiar = async (perfil: PerfilId, reintento = false) => {
     pausando.current = false
     espera.cancelar()
+    if (!reintento) espera.reiniciar()
     setCambiando(true)
     setError(null)
     setEstado(tx.ajustes.cambiando)
@@ -285,7 +288,7 @@ function useCambiarPerfil(reemplazarConfig: (c: Config) => void) {
       else if (e instanceof ErrorIa && e.red) {
         setEstado('')
         esperaPuesta = true
-        espera.programar(() => void cambiar(perfil))
+        espera.programar(() => void cambiar(perfil, true))
       } else { setEstado(''); setError(String(e)) }
     } finally {
       // Con la espera puesta, `cambiando` lo quita el reintento (que vuelve a ponerlo) o la pausa.
@@ -329,8 +332,11 @@ export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpe
   /** Sustituye el estado entero por el `Config` que ya guardó el núcleo (si no, un guardado posterior volvería al perfil viejo). */
   reemplazarConfig: (c: Config) => void
   reanalizar: () => Promise<void>
-  /** Avisa a la app de que está (o ya no) cambiando de perfil: mientras, no se tapa Ajustes con la pantalla del motor. */
-  alCambiar?: (cambiando: boolean) => void
+  /**
+   * Avisa a la app de si está cambiando de perfil: mientras `cambiando`, no se tapa Ajustes con la pantalla del motor.
+   * Con `esperando` (el cambio espera la red) el aviso sí se ve, y Ajustes sigue montado, oculto, para no perder el reintento.
+   */
+  alCambiar?: (cambiando: boolean, esperando: boolean) => void
   volver: () => void
 }) {
   const t = tx.ajustes
@@ -347,10 +353,19 @@ export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpe
   const [datosBorrados, setDatosBorrados] = useState(false)
   useEffect(() => { void api.plataforma().then((p) => setLinux(p === 'linux'), () => setLinux(false)) }, [])
   const ocupado = cambio.cambiando || cambio.borrando || reparando || carpeta.moviendo || borrandoDatos
-  useEffect(() => { alCambiar?.(cambio.cambiando) }, [alCambiar, cambio.cambiando])
-  useEffect(() => () => alCambiar?.(false), [alCambiar])
+  const esperandoRed = cambio.segundosEspera !== null
+  useEffect(() => { alCambiar?.(cambio.cambiando && !esperandoRed, esperandoRed) }, [alCambiar, cambio.cambiando, esperandoRed])
+  useEffect(() => () => alCambiar?.(false, false), [alCambiar])
   // Un perfil guardado que ya no está en la evaluación cuenta como el recomendado.
   const actual = perfilDe(evaluacion, config.perfil)
+  // Lo que acaba una reparación (a veces tras una espera de red) se aplica al perfil y a los modelos de ahora, no a los de cuando empezó.
+  const vigente = useRef({ actual, descargados: config.modelosDescargados })
+  vigente.current = { actual, descargados: config.modelosDescargados }
+  const guardarReparados = (r: Reparacion) => {
+    const { actual: ahora, descargados } = vigente.current
+    const suyos = modelosDe(ahora)
+    actualizar({ modelosDescargados: suyos.filter((m) => r.modelos.includes(m) || descargados.includes(m)) })
+  }
   // Un id que no está en la evaluación (un perfil que ya no existe) no deja nada preseleccionado.
   const nuevo = evaluacion.perfiles.find((x) => x.id === elegido)
   const extra = nuevo ? Math.max(0, nuevo.descargaGb - actual.descargaGb) : 0
@@ -394,7 +409,7 @@ export function Ajustes({ perfilInicial, config, evaluacion, rutas, cambiarCarpe
           onSeleccionar={(id) => { setConfirmado(false); setElegido(id) }} />
         {rutas && <CarpetaIa ruta={rutas.ia} accion={t.moverCarpeta} moviendo={carpeta.moviendo} error={carpeta.error} onMover={carpeta.mover} desactivado={cambio.cambiando || reparando} />}
         <ControlUsoCpu uso={config.usoCpu} hilos={config.equipo?.hilos ?? 4} onCambiar={(usoCpu) => actualizar({ usoCpu })} desactivado={ocupado} />
-        <Reparar alTerminar={(r) => actualizar({ modelosDescargados: r.modelos })} alReparar={setReparando} desactivado={cambio.cambiando} />
+        <Reparar alTerminar={guardarReparados} alReparar={setReparando} desactivado={cambio.cambiando} />
         <CopiarInforme />
         {linux && <BorrarDatos desactivado={ocupado && !borrandoDatos} alBorrar={() => setDatosBorrados(true)} alOcupar={setBorrandoDatos} />}
         {nuevo && nuevo.descargaGb < actual.descargaGb && <p className="peq tenue">{t.liberar(nuevo.nombre, fmt(actual.descargaGb - nuevo.descargaGb))}</p>}

@@ -41,6 +41,7 @@ export function useEsperaRed(esperas: readonly number[] = ESPERAS_RED_S): Espera
   const pendiente = useRef<(() => void) | null>(null)
   const fallos = useRef(0)
   const maxHecho = useRef(new Map<string, number>())
+  const ultimoHecho = useRef(new Map<string, number>())
   const montado = useRef(false)
   const escalera = useRef(esperas)
   escalera.current = esperas
@@ -55,6 +56,12 @@ export function useEsperaRed(esperas: readonly number[] = ESPERAS_RED_S): Espera
     setReintentoEn(null)
   }, [parar])
   const progreso = useCallback((pieza: string, hecho: number) => {
+    // Sin bytes (el manifiesto, antes de cada intento) no dice nada: ni progreso ni un reinicio.
+    if (hecho <= 0) return false
+    // Un `hecho` menor que el anterior es una descarga que empieza de nuevo (un 200 desde 0 sin Range, o un modelo
+    // borrado y vuelto a bajar): el máximo de la pieza se vacía y lo que baje desde ahí es progreso real.
+    if (hecho < (ultimoHecho.current.get(pieza) ?? 0)) maxHecho.current.delete(pieza)
+    ultimoHecho.current.set(pieza, hecho)
     if (hecho <= (maxHecho.current.get(pieza) ?? 0)) return false
     maxHecho.current.set(pieza, hecho)
     fallos.current = 0
