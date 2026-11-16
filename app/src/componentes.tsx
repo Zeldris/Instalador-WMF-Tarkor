@@ -201,11 +201,16 @@ export function Reparar({ alTerminar, alReparar, desactivado = false }: {
   const [error, setError] = useState<string | null>(null)
   const cancelando = useRef(false)
   const espera = useEsperaRed()
+  // El reintento tras un corte de red corre en un cierre de un render anterior: `alTerminar` se lee siempre de aquí.
+  const alTerminarActual = useRef(alTerminar)
+  alTerminarActual.current = alTerminar
   useEffect(() => { alReparar?.(reparando) }, [alReparar, reparando])
   useEffect(() => () => alReparar?.(false), [alReparar])
-  const empezar = async () => {
+  // `reintento`: lo lanza la espera de red (sigue la escalera); a mano (o tras Cancelar) empieza de nuevo desde 5 s.
+  const empezar = async (reintento = false) => {
     cancelando.current = false
     espera.cancelar()
+    if (!reintento) espera.reiniciar()
     setReparando(true)
     setError(null)
     setEstado(tr.motor.verificando)
@@ -224,13 +229,13 @@ export function Reparar({ alTerminar, alReparar, desactivado = false }: {
       )
       const partes = [...(r.motorReinstalado ? [tr.motorReinstalado] : []), ...(r.capasRepuestas > 0 ? [tr.capas(r.capasRepuestas)] : [])]
       setEstado(partes.length ? tr.hecho(partes) : tr.enOrden)
-      alTerminar?.(r)
+      alTerminarActual.current?.(r)
     } catch (e) {
       if (cancelando.current) setEstado(tr.cancelado)
       else if (e instanceof ErrorIa && e.red) {
         setEstado('')
         esperaPuesta = true
-        espera.programar(() => void empezar())
+        espera.programar(() => void empezar(true))
       } else {
         setEstado('')
         setError(String(e))
@@ -254,7 +259,7 @@ export function Reparar({ alTerminar, alReparar, desactivado = false }: {
   return (
     <div className="reparar">
       <div className="fila">
-        <button type="button" className="btn" disabled={reparando || desactivado} onClick={empezar}>{reparando ? tr.reparando : tr.boton}</button>
+        <button type="button" className="btn" disabled={reparando || desactivado} onClick={() => void empezar()}>{reparando ? tr.reparando : tr.boton}</button>
         {reparando && <button type="button" className="btn" onClick={cancelar}>{tr.cancelar}</button>}
         {espera.segundos !== null && <button type="button" className="btn" onClick={espera.reintentarAhora}>{tx.descarga.reintentarAhora}</button>}
         {espera.segundos !== null
