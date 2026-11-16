@@ -145,7 +145,7 @@ export default function App() {
     case 3: pantalla = <TuEquipo {...nav} config={config} evaluacion={evaluacion} analizar={analizar} elegirAMano={elegirAMano} />; break
     case 4: pantalla = <ElegirPerfil {...nav} config={config} evaluacion={evaluacion!} rutas={rutas} cambiarCarpeta={cambiarCarpeta} actualizar={actualizar} />; break
     case 5: pantalla = <Descarga {...nav} config={config} evaluacion={evaluacion!} actualizar={actualizar} />; break
-    case 6: pantalla = <Comprobacion {...nav} hayMasLigero={masLigero !== null} />; break
+    case 6: pantalla = <Comprobacion {...nav} masLigero={masLigero} elegirPerfil={(perfil) => actualizar({ perfil, pasoAsistente: 4 })} />; break
     default: pantalla = <Listo config={config} evaluacion={evaluacion!} rutas={rutas} jugar={() => { actualizar({ asistenteCompletado: true }); setVista('juego') }} />
   }
   return <>{avisoError}{pantalla}</>

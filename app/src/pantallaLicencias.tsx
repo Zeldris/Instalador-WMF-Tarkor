@@ -1,7 +1,7 @@
 // Licencias y avisos (docs/08, sección 2; docs/11): «Built with Llama», el aviso de Llama 3.1, el enlace a su
 // política de uso y el texto completo de cada licencia. Se abre desde el paso 2 y desde Ajustes.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from './api'
 import { Pagina } from './componentes'
 import type { Catalogo, GrupoLicencias, LicenciasTerceros, Perfil } from './tipos'
@@ -101,13 +101,20 @@ export function LicenciasDeTerceros({ datos: dados, cargar = cargarTerceros }: {
   )
 }
 
+/** Cuánto tiempo se ve «Copiado» antes de volver a «Copiar». */
+export const SEGUNDOS_COPIADO = 3
+
 function CopiarEnlace({ url }: { url: string }) {
   const t = tx.licencias
   const [estado, setEstado] = useState<'copiado' | 'error' | null>(null)
+  const temporizador = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => () => clearTimeout(temporizador.current), [])
   const copiar = async () => {
+    clearTimeout(temporizador.current)
     try {
       await api.copiar(url)
       setEstado('copiado')
+      temporizador.current = setTimeout(() => setEstado(null), SEGUNDOS_COPIADO * 1000)
     } catch {
       setEstado('error')
     }

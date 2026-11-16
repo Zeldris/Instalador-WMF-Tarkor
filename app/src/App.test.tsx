@@ -663,7 +663,7 @@ describe('narración de prueba lenta (INS-42)', () => {
     await conComprobacion('equilibrado')
     expect(screen.getByText(SUGERENCIA)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Probar un perfil más ligero' }))
-    expect((await boton(/^Equilibrado/)).getAttribute('aria-pressed')).toBe('true')
+    expect((await boton(/^Ligero/)).getAttribute('aria-pressed')).toBe('true')
     expect(screen.getByText(/Cuanta más memoria le dediques/)).toBeTruthy()
   }, 15000)
 

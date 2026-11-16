@@ -4,7 +4,7 @@
 // por sus tests (p. ej. `deck_16gb_maximo_no_cabe_recomienda_equilibrado`).
 
 import type { Api } from './api'
-import { catalogo, descargaGb as descargaDe } from './catalogo'
+import { catalogo, descargaGb as descargaDe, modelosDe as modelosDelPerfil } from './catalogo'
 import { ErrorIa } from './tipos'
 import type { Config, Equipo, Evaluacion, MotorDetenido, PerfilEvaluado, ProgresoModelo, Sobrante, UsoIa } from './tipos'
 
@@ -64,7 +64,7 @@ export function evaluarEjemplo(equipo: Equipo | null): Evaluacion {
       necesitaDiscoGb,
     }
   })
-  const masLigero = (perfiles.find((p) => !p.experimental) ?? perfiles[0]).id
+  const masLigero = (perfiles.find((p) => !p.experimental) ?? perfiles[0])?.id ?? ''
   if (paraIa === null) return { memoriaParaIaGb: null, discoLibreGb: disco, perfiles, maximoSeguro: null, recomendado: masLigero, equipoInsuficiente: false }
   const caben = perfiles.filter((p) => p.cabeEnMemoria && p.cabeEnDisco && !p.experimental)
   const ultimo = caben.at(-1)
@@ -108,9 +108,10 @@ let motorInstalado = false
  */
 export const fijarSinRed = (n: number, antes: typeof sinRedAntes = null) => { sinRedRestantes = n; sinRedCortes = 0; sinRedAntes = antes }
 export const reiniciarModelos = () => { motorEnMarcha = false; arranquesMotor = 0; calentarResultado = 'ok'; tokensPorSegundoPrueba = 12; sinRedRestantes = 0; sinRedCortes = 0; sinRedAntes = null; motorInstalado = false; errorCambioPerfil = null; retardoCambioPerfil = 0; sobrantes = []; usoSimulado = { porcentajeGpu: 100, memoriaMb: 5400 } }
+/** Los modelos del perfil `id` (o del primero del catálogo); ninguno si el catálogo no trae perfiles. */
 const modelosDe = (id: string | null) => {
   const perfil = catalogo.perfiles.find((p) => p.id === id) ?? catalogo.perfiles[0]
-  return [...new Set([perfil.narrador, perfil.cronista, perfil.sugerencias, perfil.embeddings])]
+  return perfil ? modelosDelPerfil(perfil) : []
 }
 let avisoMotor: MotorDetenido | null = null
 let errorReintento: string | null = null
@@ -194,8 +195,7 @@ export const ejemplo: Api = {
   asegurarMotor: async () => { if (!motorEnMarcha) { motorEnMarcha = true; arranquesMotor++ } },
   descargarModelos: async (progreso) => {
     cancelado = false
-    const perfil = catalogo.perfiles.find((p) => p.id === guardada.perfil) ?? catalogo.perfiles[0]
-    const modelos = [...new Set([perfil.narrador, perfil.cronista, perfil.sugerencias, perfil.embeddings])]
+    const modelos = modelosDe(guardada.perfil)
     await cortarSinRed(modelos, progreso)
     for (const modelo of modelos) {
       const total = (catalogo.modelos[modelo]?.descargaGb ?? 1) * 1024 ** 3
@@ -216,8 +216,7 @@ export const ejemplo: Api = {
     await pausa(60)
     if (cancelado) throw new Error('Reparación cancelada. Lo ya comprobado sigue en su sitio.')
     motor({ fase: 'listo' })
-    const perfil = catalogo.perfiles.find((p) => p.id === guardada.perfil) ?? catalogo.perfiles[0]
-    const modelos = [...new Set([perfil.narrador, perfil.cronista, perfil.sugerencias, perfil.embeddings])]
+    const modelos = modelosDe(guardada.perfil)
     await cortarSinRed(modelos, progreso)
     modelos.forEach((_, i) => progreso({ modelo: '', estado: 'verificando', hecho: i, total: modelos.length }))
     const capasRepuestas = modelosDanados ? 1 : 0

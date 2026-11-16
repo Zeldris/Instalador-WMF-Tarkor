@@ -7,8 +7,13 @@ import { fmt } from './formato'
 
 export const catalogo = catalogoJson as Catalogo
 
-export function descargaGb(p: Perfil): number {
+/** Los modelos distintos de un perfil (el Mínimo repite uno en varios papeles). */
+export function modelosDe(p: Perfil): string[] {
   return [...new Set([p.narrador, p.cronista, p.sugerencias, p.embeddings])]
+}
+
+export function descargaGb(p: Perfil): number {
+  return modelosDe(p)
     .reduce((a, m) => a + (catalogo.modelos[m]?.descargaGb ?? 0), 0)
 }
 

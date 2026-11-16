@@ -413,7 +413,7 @@ export function CopiarInforme() {
       </div>
       {error && <div className="error" role="alert">{error}</div>}
       {cargando && <p className="peq tenue" role="status">{tx.informe.cargando}</p>}
-      {visible && !cargando && texto !== null && <pre className="peq" tabIndex={0} aria-label={tx.informe.copiar} style={{ whiteSpace: 'pre-wrap', userSelect: 'text', maxHeight: 240, overflow: 'auto' }}>{texto}</pre>}
+      {visible && texto !== null && <pre className="peq" tabIndex={0} aria-label={tx.informe.copiar} style={{ whiteSpace: 'pre-wrap', userSelect: 'text', maxHeight: 240, overflow: 'auto' }}>{texto}</pre>}
     </div>
   )
 }
