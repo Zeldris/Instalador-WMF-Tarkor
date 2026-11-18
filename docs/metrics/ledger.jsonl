@@ -185,3 +185,4 @@
 {"agent":"main","branch":"claude/gw-update-0.8.0","cacheRead":263380,"cacheWrite":755,"date":"2026-11-18","input":6,"model":"claude-opus-5-5","output":630,"recorded":"2026-11-18T21:39:42Z","refs":["FLU-12"],"session":"c9ddedb9"}
 {"agent":"main","branch":"claude/gw-update-0.8.0","cacheRead":399277,"cacheWrite":1766,"date":"2026-11-18","input":8,"model":"claude-opus-5-5","output":529,"recorded":"2026-11-18T21:42:51Z","refs":["FLU-12"],"session":"c9ddedb9"}
 {"agent":"main","branch":"claude/gw-update-0.8.0","cacheRead":405145,"cacheWrite":1839,"date":"2026-11-18","input":7,"model":"claude-opus-5-5","output":507,"recorded":"2026-11-18T21:45:13Z","refs":["FLU-12"],"session":"c9ddedb9"}
+{"agent":"main","branch":"claude/gw-update-0.8.0","cacheRead":411112,"cacheWrite":1927,"date":"2026-11-18","input":8,"model":"claude-opus-5-5","output":471,"recorded":"2026-11-18T21:45:29Z","refs":["FLU-12"],"session":"c9ddedb9"}
