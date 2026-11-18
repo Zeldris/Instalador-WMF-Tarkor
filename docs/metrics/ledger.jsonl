@@ -197,3 +197,4 @@
 {"agent":"main","branch":"claude/gw-update-0.8.0","cacheRead":9855921,"cacheWrite":141387,"date":"2026-11-18","input":212,"model":"claude-opus-5-5","output":28434,"recorded":"2026-11-18T21:59:03Z","refs":["FLU-12"],"session":"03c6c866"}
 {"agent":"main","branch":"claude/gw-update-0.8.0","cacheRead":295026,"cacheWrite":1073,"date":"2026-11-18","input":8,"model":"claude-opus-5-5","output":1333,"recorded":"2026-11-18T21:59:40Z","refs":["FLU-12"],"session":"03c6c866"}
 {"agent":"main","branch":"claude/gw-update-0.8.0","cacheRead":10350122,"cacheWrite":143569,"date":"2026-11-18","input":225,"model":"claude-opus-5-5","output":30018,"recorded":"2026-11-18T21:59:45Z","refs":["FLU-12"],"session":"03c6c866"}
+{"agent":"main","branch":"claude/flu-13-ledger-ci","cacheRead":520316,"cacheWrite":26692,"date":"2026-11-18","input":14,"model":"claude-opus-5-5","output":1144,"recorded":"2026-11-18T22:26:08Z","refs":["FLU-12"],"session":"69b0162a"}
