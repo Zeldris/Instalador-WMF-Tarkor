@@ -15,7 +15,7 @@ cada commit.**
 | **Último commit en `main`** | Fusión del PR #16 (2026-11-12, `5d3fcf3`): `INS-44`, `INS-45` e `INS-57` (borrar datos al desinstalar en Windows y Linux, hoja de estilos), con la confirmación de la usuaria y el CI de GitHub en verde. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 (SQLite) no está en el juego: su PR #1 se cerró sin fusionar y se rehace en `INS-60`. |
 | **Tarea en curso · `claude/installer-docs-review-09e7vs`** | Al fusionarse, rama terminada: no queda nada pendiente en ella. |
-| **Tarea en curso · `claude/gw-update-0.8.0`** | FLU-12 en curso: flujo 0.8.0 aplicado; Q-1 (gancho whole-read duplicado, quitado) y Q-2 (pendingFile = docs/records/pending.md, pendientes movidos) hechas. Falta: gw-opt-tokens y retro (a presentar), reviewed.sh y PR. |
+| **Tarea en curso · `claude/gw-update-0.8.0`** | FLU-12: flujo 0.8.0 aplicado, revisado (Q-1, Q-2 hechas) y retro aprobada (2026-11-18). Falta: reviewed.sh, PR a main (confirmado por la usuaria) y fusionar con CI en verde. |
 | **Tests** | 2026-11-12: núcleo `cargo test -p tarkor-nucleo` 149 y el check del proyecto en verde. Asistente `vitest` y E2E con el Ollama falso: último verde el 2026-10-25 (`vitest` 27 entonces). |
 
 ## Dónde está todo (para saber qué sigue)
