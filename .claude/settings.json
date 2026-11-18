@@ -61,15 +61,6 @@
         ]
       },
       {
-        "matcher": "Read",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/gw/scripts/whole-read.py"
-          }
-        ]
-      },
-      {
         "matcher": "Bash",
         "hooks": [
           {

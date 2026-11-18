@@ -89,5 +89,6 @@
   "taskId": "(?:INS|FLU)-\\d+",
   "commitNext": true,
   "agentSignatures": false,
-  "agentsSkillsDir": ""
+  "agentsSkillsDir": "",
+  "pendingFile": "docs/records/pending.md"
 }
