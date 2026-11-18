@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.6.0
+# galivelop-workflow v0.8.0
 """Check that a project has the workflow set up (used by /gw-doctor and CI). No AI, no network.
 
   python3 doctor.py            # one line per check: OK / WARN / FAIL, each problem with the command that fixes it
@@ -21,13 +21,15 @@ while the note names no other); and, when `origin` is on GitHub, a way to read t
 or effort picked per agent (CLAUDE_CODE_EFFORT_LEVEL, CLAUDE_CODE_SUBAGENT_MODEL with _FORCE, CLAUDE_CODE_SUBAGENT_EFFORT)
 in the environment or the env block of .claude/settings.json, .claude/settings.local.json or ~/.claude/settings.json;
 and (E43) a folder holding test_*.py that no `check` command runs (`test dirs`, see check_test_dirs; the folders to skip
-are the `doctorTestDirsIgnore` key).
+are the `doctorTestDirsIgnore` key); and (E41) the identity git commits with (`git var`) does not match `authorDeny` (the pre-commit
+refuses that author).
 The compaction check, the session one, the levers one, the media tools one and the CI
 access one read the machine running doctor, not only the project, so their lines can differ between a person's machine,
 CI and a cloud session.
 Python 3.8+ standard library only.
 """
 import argparse
+import datetime
 import fnmatch
 import json
 import os
@@ -54,7 +56,8 @@ PROPOSAL = ".gw-new"  # apply.py's proposals for files with local edits
 OLD_PROPOSAL = ".gw-nuevo"  # A8 (0.x): the suffix before the rename; still recognized, with a warning
 FLOW_HOOK_SCRIPTS = ("session-start.sh", "recover.py", "review-before-main.sh", "before-stop.py",
                      "config-guard.py", "subagent-cap.py", "agent-signatures.py", "metrics.py",
-                     "whole-read.py")  # the settings template's
+                     "whole-read.py", "careful.py", "questions-guard.py",
+                     "scope-guard.py")  # the settings template's
 # Zero-width, bidi and BOM characters, written as escapes so the fix command can embed them. A zero width joiner (U+200D)
 # is fine only inside an emoji sequence (family, profession, flag, heart): after an emoji, a variation selector or a
 # skin tone, and before an emoji. Between letters, accents or punctuation (`и‍г`, `é‍ñ`), next to ASCII, a line edge
@@ -705,6 +708,57 @@ def lever_sources(root):
     return sources
 
 
+SCOUT_COMPARE = ".claude/skills/gw-scout-updates/scripts/compare.py"
+
+
+def check_scout(rep, root, cfg):
+    """D80: a gw-scout-updates seal older than `scoutMaxAgeDays`, or on files that changed since, misleads: warn.
+    The seals are read by the skill's own compare.py (one parser); anything that stops it from running is a warning."""
+    folder, max_days = config.scout_settings(cfg or {})
+    arch = Path(root) / folder / "architecture.md"
+    if not arch.exists():
+        return  # the skill was never used here
+    name = f"{folder}/architecture.md"
+    script = Path(root) / SCOUT_COMPARE
+    if not script.is_file():
+        rep.warn("scout", f"{name} exists but {SCOUT_COMPARE} is not installed, so its seals were not checked",
+                 "run /gw-update with the gw-scout-updates skill copied (apply.py --with)")
+        return
+    r = None
+    try:
+        r = subprocess.run([sys.executable, str(script), str(arch), "--root", str(root), "--json", "--no-inventory"],
+                           capture_output=True, text=True, timeout=60)
+        res = json.loads(r.stdout)
+        if not isinstance(res, dict):
+            raise ValueError("not an object")
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        detail = (r.stderr.strip().splitlines() or [str(exc)])[-1] if r else str(exc)
+        rep.warn("scout", f"compare.py could not check {name}: {detail}",
+                 f"run `python3 {script} --root {root}` and fix its error")
+        return
+    problems = []
+    dates = []
+    for item in res.get("same", []) + res.get("changed", []):
+        try:
+            dates.append(datetime.date.fromisoformat(item["date"]))
+        except (KeyError, TypeError, ValueError):
+            pass
+    if not dates and not res.get("unsealed"):
+        problems.append("it has no sealed section")
+    if max_days and dates:
+        age = (datetime.date.today() - min(dates)).days
+        if age > max_days:
+            problems.append(f"the oldest seal is {age} days old (scoutMaxAgeDays {max_days})")
+    for item in res.get("changed", []):
+        problems.append(f"section {item['section']!r} sealed files changed: {', '.join(item['files'])}")
+    for item in res.get("unsealed", []):
+        problems.append(f"section {item['section']!r} has no valid seal")
+    if problems:
+        rep.warn("scout", f"{name} is stale: {'; '.join(problems)}", "re-seal it with /gw-scout-updates")
+    else:
+        rep.ok("scout", f"{name} seals are current")
+
+
 def check_levers(rep, root, cfg):
     """B11: model and effort are picked per agent (gw-selector); a global variable that overrides them is warned."""
     try:
@@ -747,6 +801,22 @@ def invisible_chars(text):
 def strip_invisible_command(name):
     return ("python3 -c 'import re,sys;p=sys.argv[1];t=open(p,encoding=\"utf-8\").read();"
             f"open(p,\"w\",encoding=\"utf-8\").write(re.sub(\"{INVISIBLE_PATTERN}\",\"\",t))' {name}")
+
+
+def check_author(rep, root, cfg):
+    """E41: the identity git will commit with (git var, as the pre-commit reads it: user.name/user.email and the
+    GIT_AUTHOR_*/GIT_COMMITTER_* variables) does not match authorDeny."""
+    patterns = config.author_deny(cfg) if cfg else []
+    if not patterns:
+        return
+    code, message = config.author_check(root, patterns)
+    if code:
+        rep.warn("author", f"{message.split('; commit as yourself')[0]}, so the pre-commit refuses every commit",
+                 "git config user.name '<your name>' && git config user.email '<your email>' "
+                 "(and unset GIT_AUTHOR_*/GIT_COMMITTER_* if set)")
+    else:
+        rep.ok("author", "the identity git commits with (user.name/user.email, GIT_AUTHOR_*/GIT_COMMITTER_*) does not "
+               "match authorDeny")
 
 
 def check_instructions(rep, root, cfg=None):
@@ -1110,6 +1180,8 @@ def run(root):
     check_session(rep, root)
     check_compaction(rep, root)
     check_levers(rep, root, cfg)
+    check_scout(rep, root, cfg)
+    check_author(rep, root, cfg)
     return rep
 
 

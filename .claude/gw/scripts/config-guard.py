@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.6.0
+# galivelop-workflow v0.8.0
 """PreToolUse hook: ask the user before Claude edits the workflow's own configuration.
 
 The files that wire the workflow (.claude/settings.json, .claude/settings.local.json, .claude/gw.json, everything under .githooks/ and under
@@ -43,7 +43,9 @@ What it looks at, in the event on stdin (`tool_name`, `tool_input`, `cwd`):
 Also covered (D33): the same paths inside an agent worktree (`.claude/worktrees/<name>/...`); `find ... -exec|-execdir|
 -ok rm|mv|...` on them; `tar -x -C DIR` and `unzip -d DIR` into a protected folder (or from inside one). The file read by
 `touch -r`, `touch|chmod|chown|chgrp --reference` is not written. `python3 .../models.py disable|enable` (B7) counts as
-a write of .claude/gw.json: it rewrites `models.disabled` there.
+a write of .claude/gw.json: it rewrites `models.disabled` there; so does `mode.py set` (C7: `modes.<mode>`).
+`questions.py accept-risk` (C5) and `task.py current <id>|--clear` (C4) ask too: accepting a risk and switching the
+task the questions guard reads are the user's call.
 
 The git calls that rewrite the working tree without naming a path (`merge`, `pull`, `checkout|switch <branch>`,
 `reset --hard|--merge|--keep`, `stash pop|apply`, `rebase`, `cherry-pick`, `revert`, `apply`) ask only when they would
@@ -691,11 +693,25 @@ def extract_hits(cmd, args, base, root):
 
 
 def models_write(args):
-    """True when a python call runs models.py with `disable` or `enable`, which rewrite .claude/gw.json (B7)."""
+    """What a python call rewrites that only the user may change, or None: models.py `disable`/`enable` (B7) and mode.py
+    `set` (C7) rewrite .claude/gw.json; questions.py `accept-risk` (C5: accepting a risk is the user's call) the questions
+    file; task.py `current <id>`/`--clear` (C4: switching the task the questions guard reads) the current-task mark."""
     for n, w in enumerate(args):
-        if os.path.basename(w) == "models.py":
-            return any(x in ("disable", "enable") for x in args[n + 1:])
-    return False
+        script = os.path.basename(w)
+        rest = args[n + 1:]
+        if script in ("models.py", "mode.py"):
+            verbs = ("disable", "enable") if script == "models.py" else ("set",)
+            return ".claude/gw.json" if any(x in verbs for x in rest) else None
+        if script == "questions.py":
+            return ("the questions file (questions.py accept-risk: only the user accepts a risk, C5)"
+                    if "accept-risk" in rest else None)
+        if script == "task.py":
+            if "current" not in rest:
+                return None
+            after = rest[rest.index("current") + 1:]
+            return ("the current-task mark (task.py current <id>|--clear: only the user switches the task the questions "
+                    "guard reads, C4)") if after else None
+    return None
 
 
 def in_place_flag(words):
@@ -802,7 +818,7 @@ def bash_hits(command, base, root, depth=0, redirected=False):
         elif cmd in ("tar", "unzip"):
             hits += extract_hits(cmd, args, base, root)
         elif re.fullmatch(r"python[0-9.]*", cmd or "") and models_write(args):
-            hits.append(".claude/gw.json")
+            hits.append(models_write(args))
         tree = []
         if cmd == "git":
             k = git_subcommand(args)

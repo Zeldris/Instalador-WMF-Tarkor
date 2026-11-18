@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.6.0
+# galivelop-workflow v0.8.0
 """The only reader of a project's .claude/gw.json (one fact, one place).
 
 Validates the config against schema/gw.schema.json (a stdlib validator for the subset the schema uses) and fills the
@@ -19,6 +19,18 @@ defaults the schema declares. Shell scripts call the CLI; Python scripts import 
                                         # malformed -> exit 2. Never committed: it holds what must not be public
                                         # (privateNames, plus allowEmails for private-check.py and anonymize, the
                                         # aliases harvest.py prints instead of the names)
+  python3 config.py author-check        # E41: exit 1 when the commit's author or committer (git var GIT_AUTHOR_IDENT /
+                                        # GIT_COMMITTER_IDENT, so GIT_AUTHOR_*/GIT_COMMITTER_* count as in git) matches
+                                        # authorDeny; an empty list checks nothing (called by the pre-commit hook)
+  python3 config.py --rev REV author-check --commits -   # the same over the commits on stdin, one sha per line
+                                        # (%an/%ae/%cn/%ce; the pre-push on what it pushes, pre-commit --range in CI)
+  python3 config.py spike-branch NAME   # C12: exit 0 when branch NAME is an exploration branch (spikeBranch prefix),
+                                        # 1 when it is not or the feature is off (""); --prefix prints the prefix as
+                                        # applied (`spike` -> `spike/`; empty when off)
+  python3 config.py --rev REV spike-check --commits -    # C12: exit 1 (and the reason, with what to do instead)
+                                        # when a commit on stdin comes from an exploration branch: a `Spike:` trailer
+                                        # naming one (also indented, as a squash message keeps it) or a merge whose
+                                        # subject names one ("Merge branch 'spike/x'", remote-tracking too)
 
 Project root: --root, else the git top level of this script's folder when that repo has .claude/gw.json (the copy
 in a project lives in .claude/gw/scripts/), else the git top level of the current directory when it is
@@ -115,6 +127,22 @@ def git_toplevel(path):
         return Path(out) if out else None
     except (OSError, subprocess.CalledProcessError):
         return None
+
+
+# Where a project keeps its copy of push.sh (D94), relative to its root: the installed copy first, then this repo's
+# source. A hook may run from the plugin cache, whose push.sh would take the cache as its root; so a suggested push
+# command always names the project's own copy.
+PUSH_SCRIPTS = (".claude/gw/scripts/push.sh", "scripts/push.sh")
+
+
+def push_command(root, branch):
+    """The shell command that pushes `branch` of the project at `root` (D94): `bash <root>/<copy>/push.sh <branch>`
+    with the project's own push.sh (PUSH_SCRIPTS), shell-quoted; without one, `git push -u origin <branch>`."""
+    for rel in PUSH_SCRIPTS:
+        path = os.path.join(str(root), rel)
+        if os.path.isfile(path):
+            return f"bash {shlex.quote(path)} {shlex.quote(branch)}"
+    return f"git push -u origin {shlex.quote(branch)}"
 
 
 def git_common_dir(root):
@@ -300,9 +328,15 @@ def recover(config):
 
 
 def handoff(config):
-    """The `handoff` key (A13) as a dict (rowLimit, cellLimit, doneItems): the log size rules of handoff.py; an invalid
-    value gives the schema default."""
-    return _bounded_section(config, "handoff")
+    """The `handoff` key (A13) as a dict (rowLimit, cellLimit, cellHardLimit, doneItems, lockWait): the log size rules and the lock wait of
+    handoff.py (cellHardLimit 0 = off, D96); an invalid value gives the schema default. A cellHardLimit the project
+    did not set never sits below its cellLimit: the default hard cap rises to cellLimit, so a project that only raised
+    cellLimit keeps a valid config and a hard cap at or above its warning."""
+    sizes = _bounded_section(config, "handoff")
+    given = config.get("handoff")
+    if not (isinstance(given, dict) and "cellHardLimit" in given) and 0 < sizes["cellHardLimit"] < sizes["cellLimit"]:
+        sizes["cellHardLimit"] = sizes["cellLimit"]
+    return sizes
 
 
 def _int_key(config, key):
@@ -325,6 +359,154 @@ def _string_list_key(config, key):
             and all(isinstance(x, str) and x and (allowed is None or x in allowed) for x in given)):
         return list(given)
     return list(prop["default"])
+
+
+def author_deny(config):
+    """E41: the `authorDeny` patterns (an invalid value gives the schema default, the empty list)."""
+    return _string_list_key(config, "authorDeny")
+
+
+def author_denied(patterns, name, email):
+    """E41: the first pattern of `authorDeny` that the identity (name, email) matches, else None. Case-insensitive; a
+    pattern with `@` is a whole email and matches only an equal email; any other pattern is a word or phrase of the
+    name, matched whole (`Claude` hits `Claude`, `claude[bot]` and `Claude Code`, not `Claudette`)."""
+    name, email = (name or "").strip(), (email or "").strip().casefold()
+    for pattern in patterns:
+        wanted = pattern.strip()
+        if not wanted:
+            continue
+        if "@" in wanted:
+            if email == wanted.casefold():
+                return pattern
+        elif re.search(r"(?<!\w)" + re.escape(wanted) + r"(?!\w)", name, re.IGNORECASE):
+            return pattern
+    return None
+
+
+def parse_ident(ident):
+    """`Name <email> 1700000000 +0100` (git var GIT_AUTHOR_IDENT) as (name, email); None when it is not one."""
+    m = re.match(r"^(.*?)\s*<([^>]*)>", ident or "")
+    return (m.group(1), m.group(2)) if m else None
+
+
+def commits_author_check(root, patterns, shas):
+    """E41: (0, "") when no commit of `shas` has an author or committer matching `patterns` (git commit runs the
+    pre-commit; a clean merge, cherry-pick, revert or rebase does not, so the pre-push and CI check what they carry),
+    else (1, the offending commits and the command that rewrites them). Fails closed when git cannot read them."""
+    shas = [s for s in shas if s]
+    if not patterns or not shas:
+        return 0, ""
+    r = subprocess.run(["git", "log", "--no-walk=unsorted", "--format=%H%x00%an%x00%ae%x00%cn%x00%ce", *shas],
+                       cwd=str(root), capture_output=True, text=True)
+    if r.returncode != 0:
+        return 1, f"cannot read the authors of the commits to check authorDeny; fetch and retry: git log {shas[0][:12]}"
+    bad, oldest = [], None
+    for line in r.stdout.splitlines():
+        parts = line.split("\0")
+        if len(parts) != 5:
+            continue
+        sha, an, ae, cn, ce = parts
+        for role, name, email in (("author", an, ae), ("committer", cn, ce)):
+            hit = author_denied(patterns, name, email)
+            if hit:
+                bad.append(f"  {sha[:7]}: {role} {name} <{email}> matches '{hit}'")
+                oldest = sha
+    if not bad:
+        return 0, ""
+    fix = (f"git config user.name '<your name>' && git config user.email '<your email>' && git rebase -r --exec "
+           f"'git commit --amend --no-edit --reset-author' {oldest[:7]}^")
+    return 1, "these commits have an author or committer in authorDeny (.claude/gw.json):\n" + "\n".join(bad) + \
+        f"\nrewrite them as yourself: {fix}"
+
+
+def spike_prefix(config):
+    """C12: the exploration branch prefix of `spikeBranch` ("" = off). One that ends in a letter or digit gets a "/",
+    so `spike` means `spike/` and a branch called `spiked` never counts; `spike-` stays as written."""
+    prefix = str(config.get("spikeBranch", "spike/") or "").strip()
+    if prefix and prefix[-1].isalnum():
+        prefix += "/"
+    return prefix
+
+
+def is_spike_branch(name, prefix):
+    """C12: whether branch `name` (refs/heads/ or a remote's name/ removed by the caller) is an exploration branch: it
+    starts with `prefix` and has a topic after it."""
+    name = (name or "").strip()
+    if name.startswith("refs/heads/"):
+        name = name[len("refs/heads/"):]
+    return bool(prefix) and name.startswith(prefix) and len(name) > len(prefix)
+
+
+SPIKE_TODO = ("turn what it taught into a task record (python3 task.py new <id>) and redo it with tests on a working "
+              "branch, or throw it away (git branch -D <spike branch>)")
+
+
+def spike_marked(body, prefix):
+    """C12: whether a commit message carries the spike mark: a `Spike: <prefix>...` line in its last paragraph (the
+    trailer block, where commit-message.py adds it) or indented by four spaces anywhere (how `git merge --squash`
+    quotes the squashed commits' messages). A body line elsewhere that merely starts with `Spike:` does not count."""
+    p = re.escape(prefix)
+    paragraphs = [part for part in re.split(r"\n[ \t]*\n", body.strip("\n")) if part.strip()]
+    if paragraphs and re.search(rf"^Spike:[ \t]*{p}\S", paragraphs[-1], re.M):
+        return True
+    return bool(re.search(rf"^ {{4}}Spike:[ \t]*{p}\S", body, re.M))
+
+
+def spike_commits(root, prefix, shas):
+    """C12: (0, "") when no commit of `shas` comes from an exploration branch, else (1, the commits and what to do
+    instead). A commit comes from one when its message carries the spike mark (spike_marked) or it is a merge whose
+    subject is git's own for a branch named with the prefix. The shas go on git's stdin (a first push may hold the
+    whole history). Fails closed (1, with the reason) when git cannot read them; off (0) with an empty prefix."""
+    shas = [s for s in shas if s]
+    if not prefix or not shas:
+        return 0, ""
+    retry = f"fetch and retry: git log --no-walk {shas[0][:12]}"
+    try:
+        r = subprocess.run(["git", "log", "--no-walk=unsorted", "--stdin", "--format=%H%x00%P%x00%B%x1e"],
+                           cwd=str(root), input="\n".join(shas) + "\n", capture_output=True, text=True,
+                           encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return 1, f"cannot run git to look for exploration-branch work ({exc}); {retry}"
+    if r.returncode != 0:
+        return 1, f"cannot read the commits to look for exploration-branch work ({r.stderr.strip()[:200]}); {retry}"
+    merge = re.compile(rf"^Merge (?:remote-tracking )?branch(?:es)? '(?:[^'/]+/)?{re.escape(prefix)}[^']+'")
+    bad = []
+    for record in r.stdout.split("\x1e"):
+        parts = record.lstrip("\n").split("\0", 2)
+        if len(parts) != 3:
+            continue
+        sha, parents, body = parts
+        subject = body.strip().splitlines()[0] if body.strip() else ""
+        if spike_marked(body, prefix):
+            bad.append(f"  {sha[:7]} {subject[:72]} (Spike: trailer)")
+        elif len(parents.split()) > 1 and merge.match(subject):
+            bad.append(f"  {sha[:7]} {subject[:72]} (merge of an exploration branch)")
+    if not bad:
+        return 0, ""
+    return 1, (f"these commits come from an exploration branch ({prefix}<topic>, spikeBranch in .claude/gw.json), "
+               f"which never goes into a working branch:\n" + "\n".join(bad) + f"\ninstead: {SPIKE_TODO}")
+
+
+def author_check(root, patterns):
+    """E41: (0, "") when neither the author nor the committer of the commit being made matches `patterns`, else
+    (1, message with the command that fixes it). Fails closed when git cannot tell the identity."""
+    if not patterns:
+        return 0, ""
+    for role in ("AUTHOR", "COMMITTER"):
+        r = subprocess.run(["git", "var", f"GIT_{role}_IDENT"], cwd=str(root), capture_output=True, text=True)
+        ident = parse_ident(r.stdout.strip()) if r.returncode == 0 else None
+        if ident is None:
+            return 1, (f"cannot read the commit's {role.lower()} (git var GIT_{role}_IDENT failed), so authorDeny cannot "
+                       f"be checked; set your identity: git config user.name '<name>' && git config user.email '<email>'")
+        hit = author_denied(patterns, *ident)
+        if hit:
+            who = f"{ident[0]} <{ident[1]}>"
+            fix = ("git config user.name '<your name>' && git config user.email '<your email>'"
+                   + (" (and unset GIT_{0}_NAME/GIT_{0}_EMAIL if set)".format(role)))
+            amend = " For --amend, also: git commit --amend --reset-author." if role == "AUTHOR" else ""
+            return 1, (f"the commit's {role.lower()} {who} matches '{hit}' in authorDeny (.claude/gw.json); commit as "
+                       f"yourself: {fix}.{amend}")
+    return 0, ""
 
 
 def harvest(config):
@@ -369,6 +551,16 @@ def ci_step_timeout(config):
     return _schema()["properties"]["ciStepTimeout"]["default"]
 
 
+def test_unit_timeout(config):
+    """The `testUnitTimeout` key (B42): seconds a test unit of tests-for.py --run may take (0 = no limit). A bad value
+    raises ConfigError (fails closed, as testJobs does), never a silent default."""
+    given = config.get("testUnitTimeout", schema_default("testUnitTimeout"))
+    if not isinstance(given, int) or isinstance(given, bool) or given < 0:
+        raise ConfigError(f"testUnitTimeout must be an integer >= 0 (seconds; 0 = no limit), got {given!r}; "
+                          "fix .claude/gw.json")
+    return given
+
+
 def ci_system_commands(config):
     """The `ciSystemCommands` key (A13): the commands whose steps ci-local.py leaves out as system-package installs
     (an empty list leaves none out)."""
@@ -394,6 +586,20 @@ def stale_refs_paths(config):
     return _string_list_key(config, "staleRefsPaths")
 
 
+def gitignore_stacks(config):
+    """The `gitignoreStacks` key (D127): the stacks apply.py --init writes a .gitignore block for, [] = detect them.
+    Fails closed on anything but a list of known stack names, with the command that fixes it."""
+    prop = _schema()["properties"]["gitignoreStacks"]
+    known = prop["items"]["enum"]
+    given = config.get("gitignoreStacks", prop["default"])
+    if (not isinstance(given, list) or not all(isinstance(x, str) and x in known for x in given)
+            or len(set(given)) != len(given)):
+        raise ConfigError(f"gitignoreStacks must be a list of different stacks among {', '.join(known)}, got "
+                          f"{given!r}; fix it in {CONFIG_REL} (e.g. [\"python\"]) and validate: "
+                          f"python3 scripts/config.py validate")
+    return list(given)
+
+
 def instruction_lines(config):
     """The `instructionLines` key as (warn, fail): the line limits of AGENTS.md/CLAUDE.md."""
     limits = _section(config, "instructionLines")
@@ -407,8 +613,45 @@ def doctor_test_dirs_ignore(config):
 
 def context_guard(config):
     """The `contextGuard` key as a dict (cutoff, window, autocompactShare, warn, alarm,
-    charsPerToken, bigWindow)."""
+    charsPerToken, bigWindow, systemAdvice, nearRatio, warnedMax)."""
     return _section(config, "contextGuard")
+
+
+def questions_path(config):
+    """The `questions.path` key (C1): repo-relative path of the questions file, `docs/questions.md` by default."""
+    return _section(config, "questions")["path"]
+
+
+def modes(config):
+    """The `modes` key as a dict (careful, questions, carefulExempt, carefulWorktrees) (C8, C6): on/off switches of the workflow's opt-out hooks."""
+    return _section(config, "modes")
+
+
+def task_record(config):
+    """The `taskRecord` key as a dict (enabled, path, requiredFor, sections, logSections, pendingMarker) (C11)."""
+    out = _section(config, "taskRecord")
+    out["path"] = posixpath.normpath(out["path"].strip()).strip("/") or "."  # ./docs/tasks, docs//tasks/ -> docs/tasks
+    return out
+
+
+def scope_guard(config):
+    """The `scopeGuard` key (C13) as a dict: `mode` as written (off, warn, block or auto), `skipStamps` and `skipVendored`
+    (B44) and `effective`, the mode the guard applies (auto = block when modes.questions is restrictive, else warn)."""
+    out = _section(config, "scopeGuard")
+    mode = out["mode"]
+    out["effective"] = ("block" if modes(config)["questions"] else "warn") if mode == "auto" else mode
+    return out
+
+
+def given_keys(root, key):
+    """The inner keys the project's .claude/gw.json itself writes under the object key `key` (not the defaults the
+    loader fills), as a set; empty when the file, the key or the JSON is missing (B31: is the window known?)."""
+    try:
+        data = json.loads((Path(root) / CONFIG_REL).read_text(encoding="utf-8"))
+        section = data.get(key) if isinstance(data, dict) else None
+        return set(section) if isinstance(section, dict) else set()
+    except (OSError, ValueError, TypeError):
+        return set()
 
 
 def metrics(config):
@@ -453,6 +696,15 @@ def review_trivial_lines(config):
     if isinstance(given, int) and not isinstance(given, bool) and given >= 0:
         return given
     return _schema()["properties"]["reviewTrivialLines"]["default"]
+
+
+def scout_settings(config):
+    """(`scoutDir`, `scoutMaxAgeDays`) of the config (D80): each the schema default when absent or invalid."""
+    prop = _schema()["properties"]["scoutDir"]
+    folder = config.get("scoutDir")
+    if not (isinstance(folder, str) and re.fullmatch(prop["pattern"], folder)):
+        folder = prop["default"]
+    return folder, _int_key(config, "scoutMaxAgeDays")
 
 
 def test_map(config):
@@ -587,6 +839,29 @@ def log_archive(config):
     return given if isinstance(given, str) and given else schema["properties"]["logArchive"]["default"]
 
 
+def pending_file(config):
+    """The `pendingFile` key (D104): repo-relative path of the file that holds the log's Pending items, or "" when the
+    key is absent or empty (the items stay in the log, as before)."""
+    given = config.get("pendingFile")
+    return given if isinstance(given, str) else ""
+
+
+def agents_skills_dir(config):
+    """The `agentsSkillsDir` key (D7): repo-relative folder where apply.py also copies the skills (opencode, Codex),
+    the schema default when absent, "" when empty (off)."""
+    given = config.get("agentsSkillsDir")
+    if isinstance(given, str):
+        return given
+    schema = json.loads(schema_path().read_text(encoding="utf-8"))
+    return schema["properties"]["agentsSkillsDir"]["default"]
+
+
+def decisions_file(config):
+    """The `decisionsFile` key (D95): repo-relative path of the file with the Decisions section, or "" (the log)."""
+    given = config.get("decisionsFile")
+    return given if isinstance(given, str) else ""
+
+
 # What Python re and grep -E do not share (A13): shorthand classes and word boundaries, extension groups, POSIX classes,
 # backreferences. agentSignaturePatterns reach both engines, so they are limited to the common subset.
 SHARED_REGEX_UNSAFE = re.compile(r"\\[dDsSwWbBAZz<>`'1-9]|\(\?|\[\[:|\[\^?\[:")
@@ -595,13 +870,34 @@ SHARED_REGEX_UNSAFE = re.compile(r"\\[dDsSwWbBAZz<>`'1-9]|\(\?|\[\[:|\[\^?\[:")
 def semantic_errors(config):
     """Problems the schema subset cannot express: a relatedTests `paths`, testMap `paths`/`contains` or changeSize
     `exclude`/`pairs`, fullCheckPaths, agentModelShapes or agentSignaturePatterns entry that is not a valid regex (or a pair replacement that does not fit its
-    regex), an agentMap prefix that is not one folder name, an instructionLines `warn` above its `fail`, an
+    regex), an agentMap prefix that is not one folder name, an instructionLines `warn` above its `fail`, a handoff `cellHardLimit` set by the project (not 0) below its `cellLimit`, an
     ownedFiles pattern that is absolute or has a `..`."""
     errors = []
     warn, fail = instruction_lines(config)
     if warn > fail:
         errors.append(f"$.instructionLines: warn ({warn}) must not be above fail ({fail}); lower warn or raise fail "
                       "in .claude/gw.json")
+    record_path = task_record(config)["path"] if isinstance(config.get("taskRecord"), dict) else ""
+    raw_path = (config.get("taskRecord") or {}).get("path") if isinstance(config.get("taskRecord"), dict) else None
+    if isinstance(raw_path, str) and (raw_path.startswith("/") or ".." in posixpath.normpath(raw_path).split("/") or record_path == "."):
+        errors.append(f"$.taskRecord.path: {raw_path!r} must be a folder inside the repo, relative to its root; "
+                      "write it like \"docs/tasks\" in .claude/gw.json")
+    sizes = handoff(config)  # only a cellHardLimit set by the project can be below cellLimit (handoff() raises the default)
+    if 0 < sizes["cellHardLimit"] < sizes["cellLimit"]:
+        errors.append(f"$.handoff: cellHardLimit ({sizes['cellHardLimit']}) must not be below cellLimit "
+                      f"({sizes['cellLimit']}): the hard cap would fail cells the soft limit still accepts; raise "
+                      "cellHardLimit, lower cellLimit, or set cellHardLimit to 0 (off) in .claude/gw.json")
+    agents_dir = config.get("agentsSkillsDir")
+    if isinstance(agents_dir, str) and agents_dir:
+        norm = posixpath.normpath(agents_dir.replace("\\", "/")).strip("/")
+        reason = None
+        if "\\" in agents_dir or re.match(r"^[A-Za-z]:", agents_dir):
+            reason = "must be a repo-relative path with '/' separators, no backslash or drive letter"
+        elif any(norm == d or norm.startswith(d + "/") for d in (".claude/skills", ".git", ".claude/gw")):
+            reason = "must not be .claude/skills (the first copy), nor inside .git or .claude/gw"
+        if reason:
+            errors.append(f"$.agentsSkillsDir: {agents_dir!r} {reason}; use \".agents/skills\" or another folder, or "
+                          "\"\" to turn it off, in .claude/gw.json")
     agent_map = config.get("agentMap")
     if isinstance(agent_map, dict) and isinstance(agent_map.get("prefixes"), dict):
         for short in agent_map["prefixes"]:
@@ -1072,6 +1368,13 @@ def main(argv=None):
     scope_p = sub.add_parser("push-scope", help="'full <reason>' or 'related' for a branch push changing the files on stdin")
     scope_p.add_argument("--commits", help="file listing the push's new commits, one sha per line: a .claude/gw.json "
                                            "change then counts only by its keys (fullCheckSkipKeys, E47)")
+    ac = sub.add_parser("author-check", help="exit 1 when the commit's author or committer matches authorDeny (E41)")
+    ac.add_argument("--commits", help="'-': check the commits on stdin (one sha per line) instead of the next commit")
+    sb = sub.add_parser("spike-branch", help="exit 0 when the branch is an exploration branch (spikeBranch, C12)")
+    sb.add_argument("name", nargs="?", default="")
+    sb.add_argument("--prefix", action="store_true", help="print the prefix as it is applied ('' = off) and exit 0")
+    sc = sub.add_parser("spike-check", help="exit 1 when a commit on stdin comes from an exploration branch (C12)")
+    sc.add_argument("--commits", required=True, help="'-': the commits on stdin, one sha per line")
     get = sub.add_parser("get")
     get.add_argument("key", help="top-level key, or dotted (relatedTests.fast)")
     get.add_argument("--json", action="store_true")
@@ -1102,6 +1405,28 @@ def main(argv=None):
             print(f"gw config: {exc}", file=sys.stderr)
             return 2
         return 0
+    if args.command == "author-check":
+        if args.commits:
+            shas = [line.strip() for line in sys.stdin.read().splitlines() if line.strip()]
+            code, message = commits_author_check(config["_root"], author_deny(config), shas)
+            if message:
+                print(f"author-check: {message}", file=sys.stderr)
+            return code
+        code, message = author_check(config["_root"], author_deny(config))
+        if message:
+            print(f"pre-commit: {message}", file=sys.stderr)
+        return code
+    if args.command == "spike-branch" and args.prefix:
+        print(spike_prefix(config))
+        return 0
+    if args.command == "spike-branch":
+        return 0 if is_spike_branch(args.name, spike_prefix(config)) else 1
+    if args.command == "spike-check":
+        shas = [line.strip() for line in sys.stdin.read().splitlines() if line.strip()]
+        code, message = spike_commits(config["_root"], spike_prefix(config), shas)
+        if message:
+            print(f"spike-check: {message}", file=sys.stderr)
+        return code
     if args.command == "related":
         files = [line for line in sys.stdin.read().splitlines() if line]
         deleted = []
@@ -1124,9 +1449,10 @@ def main(argv=None):
         return 0
     value = dict(config, metrics=metrics(config), models=models(config), measure=measure(config), mediaContent=media_content(config),
                  recover=recover(config), handoff=handoff(config), harvest=harvest(config),
-                 contextGuard=context_guard(config),
+                 contextGuard=context_guard(config), modes=modes(config),
                  stopSeverity=stop_severity(config), changeSize=change_size(config),
-                 retro=retro(config), redWithoutFix=red_without_fix(config), branchPrefixes=branch_prefixes(config))  # inner keys fill from the schema too
+                 retro=retro(config), redWithoutFix=red_without_fix(config), branchPrefixes=branch_prefixes(config),
+                 taskRecord=task_record(config))  # inner keys fill from the schema too
     for part in args.key.split("."):
         if not isinstance(value, dict) or part not in value or part.startswith("_"):
             print(f"gw config: key '{args.key}' is not set and has no default", file=sys.stderr)

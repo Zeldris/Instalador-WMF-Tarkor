@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.6.0
+# galivelop-workflow v0.8.0
 """Reads the GitHub Actions status of a branch or a commit through the API: "look at the CI of the last push" without
 opening the web. The same reader review-before-main.sh uses to gate a merge (one place for the token / `gh` logic).
 
@@ -15,7 +15,12 @@ red or pending check of the project into green, and a commit where only ignored 
 
 Exit 0 green; 1 not green (red, pending, or no CI reported); 2 it could not be read (no token, gh missing, API error:
 fails closed). With --json, one object: {"repo", "sha", "state": green|red|pending|none|error, "problems": [...],
-"ignored": [...], "unstarted": bool, "error"} (and "failed": [...] with --failed). Python 3.8+, stdlib only.
+"ignored": [...], "unstarted": bool, "unstarted_cancelled": [names], "error"} (and "failed": [...] with --failed).
+Python 3.8+, stdlib only.
+
+D125: a check-run `cancelled` whose job ran no step (no runner, or cancelled while queued) stays red (exit 1), but its
+problem line says so and gives `gh run rerun RUN_ID --failed`; its name is in "unstarted_cancelled". If the job's steps
+cannot be read, or one ran, it is an ordinary red.
 
 --failed (D56): for each finished red job, the step that failed and its error lines (the end of that step's log, at
 most `ciFailedLines` of .claude/gw.json or --lines), plus the URL of the whole log; instead of reading the full job log.
@@ -208,6 +213,23 @@ def not_started(repo, run_):
     return any(m in text for m in NOT_STARTED)
 
 
+def cancelled_unstarted(repo, run_):
+    """D125: the rerun hint when this check-run was cancelled before any of its steps ran (no runner, or
+    cancelled while queued), else None. Reads the job's steps; when that fails, None (it stays an ordinary red)."""
+    if run_.get("conclusion") != "cancelled" or "id" not in run_:
+        return None
+    try:
+        job = api(f"repos/{repo}/actions/jobs/{run_['id']}")
+        if any(s.get("conclusion") != "skipped" and (s.get("status") in ("in_progress", "completed") or s.get("conclusion"))
+               for s in job.get("steps") or []):
+            return None
+        found = re.search(r"/actions/runs/(\d+)", f"{run_.get('details_url')} {job.get('html_url')}")
+        run_id = job.get("run_id") or (found.group(1) if found else None)
+    except (ApiError, AttributeError, TypeError):
+        return None
+    return f"gh run rerun {run_id} --failed" if run_id else "gh run rerun RUN_ID --failed"
+
+
 def ci_report(repo, sha, ignore=(), green=GREEN_RUNS):
     """{"problems": [...], "ignored": [names left out], "unstarted": True when every problem is a check-run GitHub
     never started, "pending": True when every problem is only unfinished}. Raises ApiError (and KeyError/TypeError
@@ -230,11 +252,16 @@ def ci_report(repo, sha, ignore=(), green=GREEN_RUNS):
                 "red_statuses": []}
     bad_runs = [c for c in runs if c.get("status") != "completed" or c.get("conclusion") not in green]
     bad_statuses = [s for s in statuses if s.get("state") != "success"]
-    bad = [f"{c.get('name', '?')}: {c.get('conclusion') or c.get('status')}" for c in bad_runs]
+    # by check-run, not by name: two workflows can hold a job with the same name
+    reruns = [cancelled_unstarted(repo, c) if c.get("status") == "completed" else None for c in bad_runs]
+    bad = [f"{c.get('name', '?')}: {c.get('conclusion') or c.get('status')}" +
+           (f" (cancelled before any step ran: no runner, or cancelled while queued; to rerun it: {rerun})"
+            if rerun else "") for c, rerun in zip(bad_runs, reruns)]
     bad += [f"{s.get('context', '?')}: {s.get('state')}" for s in bad_statuses]
     failed = [c for c in bad_runs if c.get("status") == "completed"] + \
         [s for s in bad_statuses if s.get("state") != "pending"]
     return {"problems": bad, "ignored": left_out, "pending": bool(bad) and not failed,
+            "unstarted_cancelled": [c.get("name", "?") for c, rerun in zip(bad_runs, reruns) if rerun],
             "red_runs": [c for c in bad_runs if c.get("status") == "completed"],
             "red_statuses": [s for s in bad_statuses if s.get("state") != "pending"],
             "unstarted": bool(bad_runs) and not bad_statuses and all(not_started(repo, c) for c in bad_runs)}
@@ -274,7 +301,7 @@ def main(argv=None):
     sys.path.insert(0, HERE)
     import config
     out = {"repo": args.repo, "sha": args.sha, "state": "error", "problems": [], "ignored": [], "unstarted": False,
-           "error": None}
+           "unstarted_cancelled": [], "error": None}
 
     def finish(code, text):
         if args.json:
@@ -323,7 +350,8 @@ def main(argv=None):
         return finish(2, f"ci-status: {out['error']}\nauthenticate (gh auth login, or export GITHUB_TOKEN) and retry: "
                          f"python3 {me} --repo {repo} --sha {out['sha'] or 'SHA'}")
     problems = report["problems"]
-    out.update(problems=problems, ignored=report["ignored"], unstarted=report["unstarted"])
+    out.update(problems=problems, ignored=report["ignored"], unstarted=report["unstarted"],
+               unstarted_cancelled=report.get("unstarted_cancelled", []))
     out["state"] = "green" if not problems else "none" if problems == [NO_CI] else \
         "pending" if report["pending"] else "red"
     note = f" (ignored: {', '.join(report['ignored'])})" if report["ignored"] else ""

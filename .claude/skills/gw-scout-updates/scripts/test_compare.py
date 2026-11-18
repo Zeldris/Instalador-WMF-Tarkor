@@ -53,6 +53,13 @@ class CompareTest(unittest.TestCase):
         self.assertEqual([s['section'] for s in res['unsealed']], ['Infrastructure'])
         self.assertEqual(res['uncounted'], ['Dockerfile'])
 
+    def test_no_inventory_skips_the_uncounted_manifests(self):
+        with open(os.path.join(self.d, 'Dockerfile'), 'w') as f:
+            f.write('FROM node:22\n')
+        res = compare.compare(self.arch, self.d, with_inventory=False)
+        self.assertEqual(res['uncounted'], [])
+        self.assertEqual([s['section'] for s in res['same']], ['AI models', 'Runtimes'])
+
     def test_deleted_file_and_unknown_commit(self):
         os.unlink(os.path.join(self.d, '.env.example'))
         with open(self.arch, 'a') as f:

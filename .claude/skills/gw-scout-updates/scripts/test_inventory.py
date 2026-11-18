@@ -45,6 +45,27 @@ class InventoryTest(unittest.TestCase):
         self.assertIn('requirements.txt', inv['manifests'])
         self.assertEqual([c['lock'] for c in inv['dependencies'] if c['name'] == 'express'], ['package-lock.json'])
 
+    def test_rust_version_from_toolchain_files_and_cargo(self):
+        write(self.d, 'rust-toolchain.toml', '[toolchain]\nchannel = "1.75.0"\ncomponents = ["clippy"]\n')
+        write(self.d, 'crate/rust-toolchain', 'nightly-2024-01-01\n')
+        write(self.d, 'crate/Cargo.toml', '[package]\nname = "c"\nrust-version = "1.70"\n\n[dependencies]\nserde = "1"\n')
+        inv = inventory.inventory(self.d)
+        self.assertEqual({(c['name'], c['version'], c['origin']) for c in inv['runtimes']},
+                         {('rust', '1.75.0', 'rust-toolchain.toml'), ('rust', 'nightly-2024-01-01', 'crate/rust-toolchain'),
+                          ('rust', '1.70', 'crate/Cargo.toml')})
+        self.assertIn(('serde', '1'), self.pairs(inv, 'dependencies'))
+        self.assertIn('rust-toolchain.toml', inv['manifests'])
+        self.assertIn('crate/rust-toolchain', inv['manifests'])
+
+    def test_rust_toolchain_edge_cases(self):
+        write(self.d, 'a/rust-toolchain', '# pinned for CI\n\n1.80.1  # stable\n')
+        write(self.d, 'b/rust-toolchain.toml', '[toolchain]\npath = "/opt/rust"\n')
+        write(self.d, 'c/Cargo.toml', '[package]\nrust-version.workspace = true\n')
+        inv = inventory.inventory(self.d)
+        self.assertEqual({(c['name'], c['version'], c['origin']) for c in inv['runtimes']},
+                         {('rust', '1.80.1', 'a/rust-toolchain')})
+        self.assertIn('b/rust-toolchain.toml', inv['manifests'])
+
     def test_merges_origins_and_excludes_claude_folder(self):
         write(self.d, '.env.example', 'LLM_MODEL=model-a\n')
         write(self.d, 'src/config/env.ts', "export const m = process.env.LLM_MODEL ?? 'model-a';\n")

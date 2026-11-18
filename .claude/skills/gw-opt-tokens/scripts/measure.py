@@ -240,6 +240,8 @@ def input_summary(entry, name=None):
 
 
 FILE_RE = re.compile(r'(?<![\w/.-])((?:[\w.-]+/)*[\w.-]+\.(?:[a-z]{1,5}))(?![\w/])')
+# `git config user.email <address>` names keys and values, not files (retro of the 0.7.0, T3).
+GIT_CONFIG = re.compile(r'\bgit\s+config\s[^;&|\n"\']*')
 READS = re.compile(r'(?:^|[|;&(]\s*|\s)(?:cat|sed|head|tail|grep|rg|awk|wc|less|nl|cut)\s')
 CD = re.compile(r'^\s*cd\s+(\S+)\s*&&')
 # What comes right after an interpreter (or `./`) is executed, not read: `bash scripts/run.sh grep ...`.
@@ -257,7 +259,7 @@ def files_read(name, entry, root):
         base = cd.group(1) if cd else ''
         executed = {os.path.normpath(e) for e in EXECUTES.findall(command)}
         paths = [p if p.startswith('/') or not base else os.path.join(base, p)
-                 for p in FILE_RE.findall(command) if os.path.normpath(p) not in executed]
+                 for p in FILE_RE.findall(GIT_CONFIG.sub(' ', command)) if os.path.normpath(p) not in executed]
     else:
         return []
     prefix = root.rstrip('/') + '/'

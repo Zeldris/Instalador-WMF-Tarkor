@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.6.0
+# galivelop-workflow v0.8.0
 # What pre-push checks about the hand-off log of each branch it pushes (for projects with "logRows": true; a no-op
 # otherwise). Called by .githooks/pre-push as:   prepush-branches.sh <changed-files-file> <pushed-commits-file>
 # with git's ref lines ("local-ref local-sha remote-ref remote-sha" per ref) on stdin. For each pushed ref:
@@ -13,8 +13,8 @@
 #     from another local branch (a sub-branch merged back) may write in that branch's row instead;
 #   - handoff.py clash: no task id the branch opens in the plan is also a different task on origin/<protectedBranch>,
 #     and no new merge kept two tasks under one id (a WARNING for the 10 most recent other remote branches);
-#   - handoff.py check: the log as the pushed tip has it (not the working copy; a later commit fixes an earlier
-#     one's): rows well formed, <= 600 characters, one per branch, and "Updated" not older than the newest new
+#   - handoff.py check: the log (and the pendingFile) as the pushed tip has it (not the working copy; a later commit
+#     fixes an earlier one's): rows well formed, <= 600 characters, one per branch, and "Updated" not older than the newest new
 #     commit that changes the log.
 # Plan folder and task-id regex: GW_PLAN and GW_TASK_ID (see handoff.py). Exit 1 if a rule is broken.
 # Bash 3.2 compatible. Root from this script's path, never from $CLAUDE_PROJECT_DIR or the current directory.
@@ -37,6 +37,8 @@ rows="$(python3 "$config" --root "$root" get logRows)" || {
 [ "$rows" = "true" ] || exit 0
 log="$(python3 "$config" --root "$root" get log)" || {
   echo "prepush-branches: cannot read log; fix the config: python3 $config --root $root validate" >&2; exit 1; }
+# pendingFile has no default: `get` fails when it is unset (the config itself was read just above).
+pending="$(python3 "$config" --root "$root" get pendingFile 2>/dev/null)" || pending=""
 protected="$(python3 "$config" --root "$root" get protectedBranch)" || {
   echo "prepush-branches: cannot read protectedBranch; fix the config: python3 $config --root $root validate" >&2; exit 1; }
 zero=0000000000000000000000000000000000000000
@@ -131,10 +133,17 @@ while read -r local_ref sha_local remote_ref sha_remote; do
     git show "$sha_local:$log" > "$tmp"
     date=()
     [ -n "$last" ] && date=(--date "$(git log -1 --format=%as "$last")")
-    if ! handoff check "$tmp" --at push ${date[@]+"${date[@]}"}; then
-      echo "handoff: in commit $(git log -1 --format='%h %s' "$sha_local")"; rm -f "$tmp"; exit 1
+    # The pending file (pendingFile) as the pushed tip has it too, not the working copy's (B38); missing there = none.
+    pend=()
+    if [ -n "$pending" ]; then
+      ptmp="$tmp.pending"
+      git show "$sha_local:$pending" > "$ptmp" 2>/dev/null || rm -f "$ptmp"
+      pend=(--pending "$ptmp")
     fi
-    rm -f "$tmp"
+    if ! handoff check "$tmp" --at push ${date[@]+"${date[@]}"} ${pend[@]+"${pend[@]}"}; then
+      echo "handoff: in commit $(git log -1 --format='%h %s' "$sha_local")"; rm -f "$tmp" "$tmp.pending"; exit 1
+    fi
+    rm -f "$tmp" "$tmp.pending"
   fi
 done
 sort -u -o "$changed" "$changed"

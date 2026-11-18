@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.6.0
+# galivelop-workflow v0.8.0
 """Get back what a compaction or a /clear dropped, without reading the whole session transcript.
 
   recover.py --state          what the SessionStart hook (clear|compact) puts back into the context: the log's
                                 state (with logRows, the current branch's row; else the log's first section, ~25
                                 lines, and on /clear also its Pendiente/Pending section; after a compaction, source
                                 "compact", only the first section, which holds the state and the next step),
-                                `git status --short` (15 lines at most), the last 5 commits, the repo's other
+                                `git status --short` (15 lines at most), the last 5 commits, the current task (B46: `Current task: <id>` or
+                                `none`; handoff.py close-row <id> clears its mark), HEAD against
+                                origin/<branch> (local refs, no fetch: up to date, ahead, behind; E59), the repo's other
                                 worktrees (path, branch and, with logRows, their row; 10 at most), the compactions in
                                 this session and since the branch last took the protected branch (its merge base: the
                                 task's start; WMF P10) with a warning when they pass the task's compaction budget
@@ -287,7 +289,7 @@ def log_state(root, branch, logs=None, source="startup"):
                            f"heading or the key")
             else:
                 out += [f"- Log ({cfg['log']}), section '{heading}':"] + indented(section)
-        return out + ([only] if compact else [])
+        return out + ([only] if compact else pending_line(root, cfg))
     first = first_section(text)
     out = [f"- Log ({cfg['log']}), first section:"] + indented(first)
     if compact:
@@ -297,7 +299,24 @@ def log_state(root, branch, logs=None, source="startup"):
         if section is not None and section[0] not in first:
             out += [f"- Log ({cfg['log']}), section '{heading}':"] + indented(section)
             break
-    return out
+    return out + pending_line(root, cfg)
+
+
+def pending_line(root, cfg):
+    """D104: with `pendingFile` set, one line with the entries of that file (its top-level items, in every section:
+    B38); the file itself is not printed."""
+    rel = cfg.get("pendingFile") or ""
+    if not isinstance(rel, str) or not rel:
+        return []
+    path = root / rel
+    if not path.is_file():
+        return [f"- Pending: {rel} (pendingFile) does not exist; create it: python3 {HERE}/handoff.py move-pending"]
+    try:
+        import handoff
+    except Exception:  # handoff.py missing or broken: no count rather than a wrong one
+        return [f"- Pending: {rel} (pendingFile); read it when the task needs it"]
+    count = handoff.pending_count(path.read_text(encoding="utf-8", errors="replace"))
+    return [f"- Pending: {count} entries in {rel} (pendingFile); read it when the task needs them: grep -n '^- ' {rel}"]
 
 
 def fit_log(log_lines, room, log):
@@ -403,11 +422,55 @@ def compaction_budget(root, branch):
     return handoff.compaction_budget(log_text(root, branch))
 
 
+def budget_count(root, branch, transcript=None):
+    """(counted, budget): the session's compactions since the task started (as --state counts them) and the log's
+    compaction budget. No transcript, no budget or any failure: None (only warnings read it; it never raises)."""
+    try:
+        path, _ = session_log.find(root, transcript, warn=False)
+        budget = compaction_budget(root, branch) if path else None
+        if budget is None:
+            return None
+        task = task_start(root, branch)
+        return count_compactions(path, task[2] if task else None), budget
+    except Exception:
+        return None
+
+
+def budget_overrun(root, branch, transcript=None):
+    """(counted, budget) when the compactions pass the log's compaction budget (budget_count), else None (D108:
+    commit-message.py asks for /clear with it)."""
+    found = budget_count(root, branch, transcript)
+    return found if found and found[0] > found[1] else None
+
+
 def protected_branch(root):
     try:
         return config.load(root).get("protectedBranch") or "main"
     except config.ConfigError:
         return "main"
+
+
+def remote_lines(root, branch):
+    """E59: one line comparing HEAD with origin/<branch> (local refs, no fetch): up to date, ahead (unpushed), behind
+    or diverged, each with the command that settles it; none on a detached HEAD."""
+    if branch in ("HEAD", "?"):
+        return []
+    ref = f"refs/remotes/origin/{branch}"
+    shown = f"origin/{CONTROL.sub('', branch)}"
+    if not git(root, "rev-parse", "-q", "--verify", ref + "^{commit}", timeout=LIMITS["gitWait"]):
+        return [f"- Remote: no {shown} in the local refs (never pushed, or not fetched): git fetch origin {branch}, "
+                f"or push it: {config.push_command(root, branch)}"]
+    counts = git(root, "rev-list", "--left-right", "--count", f"HEAD...{ref}", timeout=LIMITS["gitWait"]).split()
+    if len(counts) != 2 or not all(c.isdigit() for c in counts):
+        return []
+    ahead, behind = int(counts[0]), int(counts[1])
+    if not ahead and not behind:
+        return [f"- Remote: up to date with {shown} (local refs; git fetch origin {branch} to refresh them)"]
+    if not behind:
+        return [f"- Remote: {ahead} commit(s) ahead of {shown}, not pushed: {config.push_command(root, branch)}"]
+    if not ahead:
+        return [f"- Remote: {behind} commit(s) behind {shown}: git merge --ff-only {shown}"]
+    return [f"- Remote: diverged from {shown} ({ahead} ahead, {behind} behind): git merge --no-edit {shown}, then push"]
 
 
 def other_branch_lines(root, branch):
@@ -490,6 +553,22 @@ def review_lines(root, branch):
         return [f"- Warning: review check could not run ({CONTROL.sub('', str(exc))[:200]})"]
 
 
+def task_line(root):
+    """B46: the current task (task.py: the branch `agent/<id>-...`, else the mark `gw/current-task`) or `none`, so a mark
+    left by a closed task is seen at the start (`task.py current <id>` sets it, `task.py current --clear` removes it)."""
+    try:
+        import task
+        found, source = task.current_task(root, config.load(root))
+    except Exception:  # only a note: --state never fails
+        return []
+    if not found:
+        return ["- Current task: none"]
+    if source == "branch":  # the mark is not what says it: clearing it changes nothing
+        return [f"- Current task: {found} (from the branch name); it follows the branch, so change branch to change it"]
+    return [f"- Current task: {found} (from the {source}); if it is closed or not yours: "
+            f"{script_command(root).replace('recover.py', 'task.py')} current --clear"]
+
+
 def state(root, transcript, out, logs, source="startup"):
     """Append the --state lines to `out` (and the log's relative path to `logs`); the caller measures and prints."""
     use_config(root)
@@ -511,6 +590,11 @@ def state(root, transcript, out, logs, source="startup"):
     say("- Last commits:" + ("" if commits else " none"))
     for line in commits:
         say(f"  {line}")
+    tail.extend(task_line(root))
+    try:
+        tail.extend(remote_lines(root, branch))
+    except Exception:  # only a warning: --state never fails
+        pass
     tail.extend(worktree_lines(root))
     try:
         tail.extend(other_branch_lines(root, branch))
@@ -525,6 +609,23 @@ def state(root, transcript, out, logs, source="startup"):
         say("- Warning: no transcript_path arrived from the hook, so this is the newest transcript of the folder; with "
             "two sessions open in this repo it may be the other one's: check it with "
             f"{script_command(root)} --session <path> --search '<text you know>'")
+    frozen = []
+
+    def hook_chars():
+        """The hook output so far, measured once: the budget warning and the culprit list then weigh the same."""
+        if not frozen:
+            frozen.append(sum(len(l) + 1 for l in head + log_lines + tail))
+        return frozen[0]
+
+    measured = []
+
+    def measure():
+        """The transcript read once for every startup warning (B41), with the frozen hook output."""
+        if not measured:
+            import context_guard
+            measured.append(context_guard.Measure(root, config.load(root), path, hook_chars()))
+        return measured[0]
+
     if path:
         n = count_compactions(path)
         task = task_start(root, branch)
@@ -545,14 +646,24 @@ def state(root, transcript, out, logs, source="startup"):
         if budget is not None:
             say(f"- Compaction budget in the log: {budget}")
             if counted > budget:
-                say(f"- Warning: compaction budget exceeded ({counted} > {budget}): push and ask for /clear, or deal "
-                    f"the work out with gw-orchestrate-dealer")
+                advice = None
+                try:
+                    import context_guard
+                    if context_guard.system_is_largest(None, None, None, measure=measure()):
+                        advice = context_guard.SYSTEM_ADVICE  # D122: a /clear does not shrink what weighs most
+                except Exception:  # a warning must not cost the whole state
+                    advice = None
+                if advice:
+                    say(f"- Warning: compaction budget exceeded ({counted} > {budget}): "
+                        f"{advice}, or deal the work out with gw-orchestrate-dealer")
+                else:
+                    say(f"- Warning: compaction budget exceeded ({counted} > {budget}): push and ask for /clear, or "
+                        f"deal the work out with gw-orchestrate-dealer")
     else:
         say("- Compactions in this session: unknown (no session transcript found)")
     try:
         import context_guard
-        tail.extend(context_guard.report(root, config.load(root), path, source,
-                                         hook_chars=sum(len(l) + 1 for l in head + log_lines + tail)))
+        tail.extend(context_guard.report(None, None, None, source, measure=measure()))
     except Exception as exc:  # only a warning: --state never fails
         tail.append(f"- Startup context: could not be measured ({exc})")
     session = f" --session {path}" if path else ""
@@ -601,6 +712,15 @@ def hook_transcript(wait=3.0):
 LEGACY_FLAGS = {"--estado": "--state", "--buscar": "--search", "--sesion": "--session", "--ancho": "--width"}
 
 
+def forget_reads(session_id):
+    """E58: after a compaction or /clear the whole reads of whole-read.py left the context, so a reread is no repeat."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("whole_read", os.path.join(HERE, "whole-read.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.forget(session_id)
+
+
 def main(argv=None):
     argv = config.legacy_flags(sys.argv[1:] if argv is None else argv, LEGACY_FLAGS, "recover.py")
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -619,8 +739,10 @@ def main(argv=None):
         try:
             root = config.find_root(args.root)
             data = {} if args.session and args.source else (hook_transcript() or {})
-            state(root, args.session or data.get("transcript_path"), lines, logs,
-                  args.source or data.get("source") or "startup")
+            source = args.source or data.get("source") or "startup"
+            state(root, args.session or data.get("transcript_path"), lines, logs, source)
+            if source in ("clear", "compact") and data.get("session_id"):
+                forget_reads(data["session_id"])
         except BrokenPipeError:
             raise
         except Exception as exc:  # fail open: the hook must never break the session

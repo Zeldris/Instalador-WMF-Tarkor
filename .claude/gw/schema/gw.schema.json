@@ -1,5 +1,5 @@
 {
-  "$comment": "galivelop-workflow v0.6.0",
+  "$comment": "galivelop-workflow v0.8.0",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/zeldris/Galivelop-workflow/main/schema/gw.schema.json",
   "title": "Galivelop-workflow project config (.claude/gw.json)",
@@ -66,6 +66,17 @@
       "minimum": 0,
       "default": 20000,
       "description": "Bytes above which whole-read.py (PreToolUse hook on Read) warns when a Read takes whole, with no offset or limit, the hand-off log, its archive or a file under recordsDir; it never blocks. 0 = do not warn."
+    },
+    "agentsSkillsDir": {
+      "type": "string",
+      "pattern": "^$|^(?!/)(?!(.*/)?\\.\\.(/|$)).+[^/]$",
+      "default": ".agents/skills",
+      "description": "Repo-relative folder where apply.py also copies the workflow skills as plain copies (no symlinks), for opencode and Codex (D7); .claude/skills is always kept. Empty string: no second copy."
+    },
+    "pendingFile": {
+      "type": "string",
+      "pattern": "^$|^(?!/)(?!(.*/)?\\.\\.(/|$)).+[^/]$",
+      "description": "Repo-relative path of the file that holds the log's Pending items (D104); the log keeps one pointer line with the count, and handoff.py check --strict fails if the log holds items itself. Absent or empty: the items stay in the log. No schema default on purpose (an older project keeps its Pending section); the template sets docs/records/pending.md."
     },
     "logArchive": {
       "type": "string",
@@ -201,10 +212,12 @@
       "properties": {
         "rowLimit": {"type": "integer", "minimum": 50, "default": 600, "description": "Characters of a branch row of the log with logRows (handoff.py check fails over it)."},
         "cellLimit": {"type": "integer", "minimum": 100, "default": 800, "description": "Characters of a value cell of the log's state table (a warning; a failure with check --strict)."},
-        "doneItems": {"type": "integer", "minimum": 1, "default": 5, "description": "Items the Done section keeps (handoff.py done drops the oldest; check warns over it)."}
+        "cellHardLimit": {"type": "integer", "minimum": 0, "default": 1600, "description": "Characters of a value cell of the log's state table over which handoff.py check fails even without --strict (D96); 0 = off."},
+        "doneItems": {"type": "integer", "minimum": 1, "default": 5, "description": "Items the Done section keeps (handoff.py done drops the oldest; check warns over it)."},
+        "lockWait": {"type": "integer", "minimum": 0, "default": 10, "description": "Seconds the handoff.py commands that rewrite the log or pendingFile wait for another one that holds the repository lock before failing; 0 = do not wait."}
       },
-      "default": {"rowLimit": 600, "cellLimit": 800, "doneItems": 5},
-      "description": "Size rules of the log (handoff.py): rowLimit, cellLimit and doneItems."
+      "default": {"rowLimit": 600, "cellLimit": 800, "cellHardLimit": 1600, "doneItems": 5, "lockWait": 10},
+      "description": "Size rules and lock wait of the log (handoff.py): rowLimit, cellLimit, cellHardLimit, doneItems and lockWait."
     },
     "harvest": {
       "type": "object",
@@ -303,6 +316,12 @@
       "default": "related",
       "description": "What the pre-push runs on a push to a branch other than the protected one (D49): related = only relatedTests, unless the push changes the environment (.claude/gw.json or a fullCheckPaths match) or relatedTests has no command, then the full check; full = the check commands and relatedTests, as on the protected branch. The push to the protected branch always runs the full check."
     },
+    "spikeBranch": {
+      "type": "string",
+      "pattern": "^[^\\s~^:?*\\[\\\\]*$",
+      "default": "spike/",
+      "description": "C12: prefix of exploration branches (spike/<topic>). A prefix ending in a letter or digit gets a '/' added. On such a branch commit-message.py asks for no Refs nor task record and adds a 'Spike: <branch>' trailer; the pre-push refuses to push to any other branch a commit carrying that trailer or a merge of such a branch, and merge-branch.sh refuses to merge one. Empty turns the feature off."
+    },
     "fullCheckPaths": {
       "type": "array",
       "items": {
@@ -336,6 +355,7 @@
         "checkLockWait",
         "checkOutputGrace",
         "checkLogKeep",
+        "testUnitTimeout",
         "ciFailedLines",
         "subagentCap",
         "subagentCapStep",
@@ -364,8 +384,15 @@
         "redWithoutFix",
         "branchPrefixes",
         "mergeCleanup",
+        "pushRetryDelays",
+        "pushLsRemoteTimeout",
+        "decisionsFile",
         "wholeReadSkipExtensions",
         "wholeReadPaths",
+        "readPointers",
+        "wholeReadRepeatOnly",
+        "wholeReadStaleDays",
+        "scoutMaxAgeDays",
         "harvest",
         "applyDiffLines",
         "ciGreenConclusions",
@@ -375,7 +402,10 @@
         "doctorScanBytes",
         "patchCommitTypes",
         "measure",
-        "mediaContent"
+        "mediaContent",
+        "modes",
+        "taskRecord",
+        "scopeGuard"
       ],
       "description": "Top-level keys of .claude/gw.json whose change does not make a branch push run the full check (E47): when the push's new commits change only these keys of the config, its related tests run. Any other key, an added, removed or broken config, and fullCheckSkipKeys itself still count as an environment change. The list replaces the default one."
     },
@@ -411,6 +441,22 @@
       "minimum": 0,
       "default": 0,
       "description": "How many test processes scripts/test-run.py runs at once (one test class each, the slowest first); 0 = one per CPU."
+    },
+    "flaky": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "retries": {"type": "integer", "minimum": 0, "maximum": 5, "default": 1, "description": "Times scripts/test-run.py runs a failed test class again; one that passes on a retry is a flaky and is recorded; 0 = no retry and no record."},
+        "proposeAfter": {"type": "integer", "minimum": 1, "default": 3, "description": "Records of the same unit in <git common dir>/gw/flaky.jsonl from which the flaky line also proposes fixing it."}
+      },
+      "default": {"retries": 1, "proposeAfter": 3},
+      "description": "Flaky-test registry of scripts/test-run.py (E35): retries and proposeAfter."
+    },
+    "testUnitTimeout": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 1800,
+      "description": "Seconds a test unit (one test class) of scripts/tests-for.py --run may take before it is killed with its process group and named as failed, with the command that runs it alone; 0 = no limit."
     },
     "checkOutputGrace": {
       "type": "integer",
@@ -529,6 +575,11 @@
       "default": [],
       "description": "Repo-relative workflow files that `ci-local.py` runs, whatever their triggers; empty: every .github/workflows/*.yml|yaml triggered by the event."
     },
+    "ciYamlCheck": {
+      "type": "boolean",
+      "default": true,
+      "description": "true: `ci-local.py --validate` (in the check) parses every .github/workflows/*.yml|yaml and fails when one is invalid YAML (GitHub never runs it, so no CI goes red). false: it says it is off and passes."
+    },
     "ciKeepSteps": {
       "type": "boolean",
       "default": true,
@@ -560,6 +611,13 @@
       "items": {"type": "string", "minLength": 1},
       "default": ["CHANGELOG*"],
       "description": "Globs (fnmatch, on the repo-relative path) of files apply.py never lists old-name uses in, as history that is not renamed. The log, recordsDir and proposalsDir are always skipped."
+    },
+    "gitignoreStacks": {
+      "type": "array",
+      "items": {"type": "string", "enum": ["python", "node", "go", "rust"]},
+      "uniqueItems": true,
+      "default": [],
+      "description": "D127: the stacks whose .gitignore block apply.py --init writes (templates/gitignore/<stack>.gitignore). Empty: the stacks found by their marker files in the root (pyproject.toml, package.json, go.mod, Cargo.toml...)."
     },
     "legacyNamesMax": {
       "type": "integer",
@@ -593,6 +651,17 @@
       "items": {"type": "string", "minLength": 1},
       "default": [],
       "description": "Names of foreign CI checks (a check-run name or a commit status context, e.g. a deploy) that do not block the merge nor count as the project's CI. An exact name, or a name with `*` for any text (`vercel*`); case matters; no regex. An ignored check never turns a red or pending check of the project into green, and a commit where only ignored checks reported counts as no CI."
+    },
+    "changelogFragments": {
+      "type": "boolean",
+      "default": true,
+      "description": "D68: true: each working or subagent branch writes its CHANGELOG notes to <changelogFragmentsDir>/<branch>.md (the branch's '/' made '-'), with a ### ES and a ### EN section, instead of editing CHANGELOG.md; version.py folds them into the version's entry (on a bump, or with --fold) and deletes them, and version.py --release fails while HEAD still has one. false: CHANGELOG.md is edited by hand and fragments are neither folded nor checked."
+    },
+    "changelogFragmentsDir": {
+      "type": "string",
+      "pattern": "^(?!/)(?!(.*/)?\\.\\.(/|$))[^\\s]+[^/\\s]$",
+      "default": "changelog.d",
+      "description": "D68: repo-relative directory of the CHANGELOG fragments (changelogFragments). Its README.md and .gitkeep are not fragments."
     },
     "releaseDocs": {
       "type": "array",
@@ -691,6 +760,15 @@
       },
       "default": []
     },
+    "authorDeny": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": [],
+      "description": "E41: identities the pre-commit refuses as author or committer (case-insensitive; a pattern with @ is a whole email, any other a whole word or phrase of the name); doctor.py warns when user.name/user.email match. Empty: no check."
+    },
     "protectedPaths": {
       "type": "array",
       "items": {
@@ -745,6 +823,12 @@
       },
       "default": [],
       "description": "Folders (relative to the repo root, no '..') whose Markdown files write relative links from the repo root instead of from their own folder (md-links.py)."
+    },
+    "scoutMaxAgeDays": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 30,
+      "description": "Days after which the seal of a gw-scout-updates architecture.md section counts as stale: doctor.py warns to re-seal it (D80). 0 = do not check the age (a section whose sealed files changed, or with no seal, is still warned)."
     },
     "scoutDir": {
       "type": "string",
@@ -1035,7 +1119,7 @@
     "doctorTestDirsIgnore": {
       "type": "array",
       "items": {"type": "string", "minLength": 1},
-      "default": [".git", "node_modules", ".claude/worktrees", ".claude/gw", "venv", ".venv", "env", ".tox", "site-packages", "__pycache__"],
+      "default": [".git", "node_modules", ".claude/worktrees", ".claude/gw", ".claude/skills", ".agents/skills", "venv", ".venv", "env", ".tox", "site-packages", "__pycache__"],
       "description": "E43: folder patterns (fnmatch on the repo-relative path or its tail, so node_modules also skips a/node_modules) that doctor.py skips when it looks for folders with test_*.py that no command of check runs; a folder with a pyvenv.cfg is always skipped."
     },
     "instructionLines": {
@@ -1058,10 +1142,13 @@
         "warn": {"type": "integer", "minimum": 1, "maximum": 100, "default": 25},
         "alarm": {"type": "integer", "minimum": 1, "maximum": 100, "default": 50},
         "charsPerToken": {"type": "number", "exclusiveMinimum": 0, "default": 3.5},
-        "bigWindow": {"type": "integer", "minimum": 1000, "default": 1000000}
+        "bigWindow": {"type": "integer", "minimum": 1000, "default": 1000000},
+        "systemAdvice": {"type": "boolean", "default": true},
+        "nearRatio": {"type": "number", "minimum": 0, "maximum": 1, "default": 0.8},
+        "warnedMax": {"type": "integer", "minimum": 1, "default": 32}
       },
-      "default": {"cutoff": 0, "window": 200000, "autocompactShare": 0.8, "warn": 25, "alarm": 50, "charsPerToken": 3.5, "bigWindow": 1000000},
-      "description": "Startup-context guard (B21): recover.py --state compares the first turn after a /clear or a compaction with the compaction cutoff (cutoff tokens, or 0 = window x autocompactShare) and warns above warn percent and alarms above alarm percent; a second startup over alarm after a compaction is a loop."
+      "default": {"cutoff": 0, "window": 200000, "autocompactShare": 0.8, "warn": 25, "alarm": 50, "charsPerToken": 3.5, "bigWindow": 1000000, "systemAdvice": true, "nearRatio": 0.8, "warnedMax": 32},
+      "description": "Startup-context guard (B21): recover.py --state compares the first turn after a /clear or a compaction with the compaction cutoff (cutoff tokens, or 0 = window x autocompactShare) and warns above warn percent and alarms above alarm percent; a second startup over alarm after a compaction is a loop. systemAdvice: when a big startup (over warn) weighs most in the system (prompt, tools, MCP), the loop alarm and the compaction-budget warning ask to disable unused connectors instead of /clear (D122). nearRatio (B31): when the task's compaction budget is already spent and the current context reaches this fraction of the cutoff, the Stop hook (before-stop.py) blocks once per stretch telling the agent to close the step before the next compaction; only with a known window (cutoff or window written in the project's contextGuard, or a [1m] model id); 0 = off. warnedMax (B31): sessions (transcripts) whose warned stretch that once-per-stretch marker (<git dir>/gw-context-warn) remembers; the oldest is dropped first."
     },
     "metrics": {
       "type": "object",
@@ -1069,6 +1156,7 @@
       "properties": {
         "ledger": {"type": "string", "minLength": 1, "default": "docs/metrics/ledger.jsonl"},
         "record": {"type": "boolean", "default": true},
+        "commitLedger": {"type": "boolean", "default": true, "description": "B36: the pre-commit hook (metrics.py stage-ledger) adds the changed ledger to the next work commit, so it needs no commit of its own; never during a merge, cherry-pick, revert or rebase, never in git commit <paths>/--only, never when the ledger is ignored or is the only staged change; false leaves the ledger to the user."},
         "reports": {"type": "string", "minLength": 1, "default": "docs/metrics"},
         "gitTimeout": {"type": "integer", "minimum": 1, "maximum": 600, "default": 30, "description": "Seconds each git call of the quality report (metrics.py quality) may take."},
         "alert": {
@@ -1087,9 +1175,10 @@
           "properties": {
             "findingsTrailer": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9-]*$", "default": "Findings"},
             "retriesTrailer": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9-]*$", "default": "Retries"},
-            "reworkTypes": {"type": "array", "items": {"type": "string", "minLength": 1}, "default": ["fix", "revert"]}
+            "reworkTypes": {"type": "array", "items": {"type": "string", "minLength": 1}, "default": ["fix", "revert"]},
+            "findingsWords": {"type": "array", "items": {"type": "string", "minLength": 1}, "default": ["hallazgo", "hallazgos", "finding", "findings", "arreglos de la revisión", "review fixes"]}
           },
-          "default": {"findingsTrailer": "Findings", "retriesTrailer": "Retries", "reworkTypes": ["fix", "revert"]}
+          "default": {"findingsTrailer": "Findings", "retriesTrailer": "Retries", "reworkTypes": ["fix", "revert"], "findingsWords": ["hallazgo", "hallazgos", "finding", "findings", "arreglos de la revisión", "review fixes"]}
         },
         "prices": {
           "type": "array",
@@ -1133,8 +1222,8 @@
         ]
         }
       },
-      "default": {"ledger": "docs/metrics/ledger.jsonl", "record": true, "reports": "docs/metrics", "gitTimeout": 30, "alert": {"factor": 1.5, "days": 28, "minDays": 7}, "quality": {"findingsTrailer": "Findings", "retriesTrailer": "Retries", "reworkTypes": ["fix", "revert"]}},
-      "description": "Token ledger (B1-B6): the Stop hook metrics.py record appends, per session, agent, model and UTC date, the tokens the Claude Code transcripts show to the repo-relative ledger path (JSON lines, tokens only, never money); record false turns the recording off. reports: repo-relative folder where metrics.py report --write saves the period reports (daily/, weekly/, monthly/, quarterly/). alert (B6): the SessionStart hook (metrics.py alert) warns when a model's spend on today or yesterday (UTC) passes factor x its mean daily spend over the days before, counting only days with data and only with at least minDays of them; USD when all its rows are priced, else tokens; factor 0 turns it off. prices: dated tables of USD per million tokens per model (input, cacheWrite, cacheRead, output); a ledger row takes the newest table whose since is on or before its date, and the model key equal to its model or, failing that, the longest key that its model starts with followed by '-' (date suffixes); no table or no key = no price. A given prices replaces the whole default list. quality (B8): metrics.py quality reads the commit messages; findingsTrailer and retriesTrailer name the trailers whose integer values are summed per task id (Findings: accepted code-review findings; Retries: attempts that had to climb a rung); reworkTypes: the Conventional Commits types (after an optional WIP: prefix) that count as rework when they are not the first commit of the id, git reverts included."
+      "default": {"ledger": "docs/metrics/ledger.jsonl", "record": true, "commitLedger": true, "reports": "docs/metrics", "gitTimeout": 30, "alert": {"factor": 1.5, "days": 28, "minDays": 7}, "quality": {"findingsTrailer": "Findings", "retriesTrailer": "Retries", "reworkTypes": ["fix", "revert"], "findingsWords": ["hallazgo", "hallazgos", "finding", "findings", "arreglos de la revisión", "review fixes"]}},
+      "description": "Token ledger (B1-B6): the Stop hook metrics.py record appends, per session, agent, model and UTC date, the tokens the Claude Code transcripts show to the repo-relative ledger path (JSON lines, tokens only, never money); record false turns the recording off. commitLedger (B36): the pre-commit hook adds the changed ledger to the next work commit. reports: repo-relative folder where metrics.py report --write saves the period reports (daily/, weekly/, monthly/, quarterly/). alert (B6): the SessionStart hook (metrics.py alert) warns when a model's spend on today or yesterday (UTC) passes factor x its mean daily spend over the days before, counting only days with data and only with at least minDays of them; USD when all its rows are priced, else tokens; factor 0 turns it off. prices: dated tables of USD per million tokens per model (input, cacheWrite, cacheRead, output); a ledger row takes the newest table whose since is on or before its date, and the model key equal to its model or, failing that, the longest key that its model starts with followed by '-' (date suffixes); no table or no key = no price. A given prices replaces the whole default list. quality (B8): metrics.py quality reads the commit messages; findingsTrailer and retriesTrailer name the trailers whose integer values are summed per task id (Findings: accepted code-review findings; Retries: attempts that had to climb a rung); reworkTypes: the Conventional Commits types (after an optional WIP: prefix) that count as rework when they are not the first commit of the id, git reverts included; findingsWords (E60): with commitRefs or commitNext, commit-msg warns (never refuses) when the message names one of these words or phrases and has no findingsTrailer trailer ([] = off)."
     },
     "commandTimeout": {
       "type": "integer",
@@ -1158,6 +1247,17 @@
       "type": "boolean",
       "default": false,
       "description": "false: install/setup run only in cloud sessions (CLAUDE_CODE_REMOTE=true); true: also in a local session."
+    },
+    "prepushCiWarn": {
+      "type": "boolean",
+      "default": true,
+      "description": "D62: the pre-push warns, without blocking, when the last CI of a pushed branch (its current tip on the remote) is red, GitHub never started it, or no CI reported although .github/workflows exists and ciOnPush is not false (a force push and a remote not on GitHub are not checked); false turns the warning off."
+    },
+    "prepushCiWarnTimeout": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 10,
+      "description": "D62: seconds the pre-push's CI warning may take in all (ci-status.py for every pushed branch); past them it says so in one line and the push goes on."
     },
     "prepushClashBranches": {
       "type": "integer",
@@ -1215,6 +1315,23 @@
       "default": {"agent": ["worktree-agent-*", "agent/*"], "keep": ["claude/*"]},
       "description": "merge-branch.sh branch cleanup, shell globs: agent = the branches it may delete after a merge (a branch whose worktree is under .claude/worktrees/ also counts); keep = branches it never deletes (the protected branch and the current one never are either). The ids of a task are still read from agent/<id>-<topic>."
     },
+    "pushRetryDelays": {
+      "type": "array",
+      "items": {"type": "integer", "minimum": 0},
+      "default": [2, 4, 8, 16],
+      "description": "Seconds push.sh waits before each retry of a push that failed for a transient reason (network, timeout, HTTP 5xx): one retry per item. An empty list = no retries. Any other failure (a hook, non-fast-forward, 403) is never retried."
+    },
+    "pushLsRemoteTimeout": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 30,
+      "description": "Seconds each `git ls-remote` of push.sh (the check that the remote has the pushed commit) may take before it counts as unreadable (D94); 0 = no limit."
+    },
+    "decisionsFile": {
+      "type": "string",
+      "default": "",
+      "description": "Repo-relative path of the file with the \"Decisiones\" / \"Decisions\" section that `handoff.py add-decision` appends to (D95). Empty = the log itself."
+    },
     "mergeCleanup": {
       "type": "boolean",
       "default": true,
@@ -1232,6 +1349,39 @@
       "default": [],
       "description": "Repo-relative files or folders (a folder ends with /) the whole-read warning watches besides the log, logArchive and recordsDir."
     },
+    "readPointers": {
+      "type": "object",
+      "propertyNames": {"minLength": 1},
+      "additionalProperties": {"type": "string", "minLength": 1},
+      "default": {},
+      "description": "{\"<repo-relative file, or folder ending with />\": \"<command>\"}: files the whole-read warning watches (Read and Bash) and the command its note gives instead of reading them whole; it wins over the note for the log or a record."
+    },
+    "wholeReadRepeatOnly": {
+      "type": "boolean",
+      "default": true,
+      "description": "true: the whole-read warning speaks only when this session already read the same file whole and it has not changed since (same size and modification time); false: on every whole read over wholeReadWarnBytes."
+    },
+    "wholeReadStaleDays": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 7,
+      "description": "Days without a write after which whole-read.py deletes the other sessions' gw-reads-*.json files (own regular files only) when it creates a new one."
+    },
+    "questions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "default": "docs/questions.md",
+          "pattern": "^(?!/)(?!(.*/)?\\.\\.(/|$)).+[^/]$",
+          "description": "Repo-relative path of the questions file that questions.py reads and rewrites (C1)."
+        }
+      },
+      "default": {"path": "docs/questions.md"},
+      "description": "The questions file (C1-C3, C10): one entry per question for the user, answered by number with questions.py answer."
+    },
     "privateCheck": {
       "anyOf": [
         {"type": "boolean"},
@@ -1247,6 +1397,43 @@
       ],
       "default": {"emails": true, "allowEmails": [], "maxHits": 10},
       "description": "private-check.py (pre-push, on what each push adds): key formats, e-mail addresses (emails, default true) other than the built-in example/noreply ones and allowEmails (public; private ones go in the local .claude/gw.local.json), maxHits (hits printed before \"... and N more\", default 10), and the privateNames of .claude/gw.local.json. false turns it all off; true is the defaults."
+    },
+    "modes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "careful": {"type": "boolean", "default": true},
+        "questions": {"type": "boolean", "default": false},
+        "carefulExempt": {"type": "array", "items": {"type": "string", "minLength": 1}, "default": ["/tmp/", "/var/tmp/", "$TMPDIR/", "${TMPDIR}/"]},
+        "carefulWorktrees": {"type": "array", "items": {"type": "string", "minLength": 1}, "default": [".claude/worktrees/"]}
+      },
+      "default": {"careful": true, "questions": false, "carefulExempt": ["/tmp/", "/var/tmp/", "$TMPDIR/", "${TMPDIR}/"], "carefulWorktrees": [".claude/worktrees/"]},
+      "description": "Modes of the workflow's hooks (C8, C6). questions (default false): true = restrictive mode, false = guide mode of the questions guard questions-guard.py (C4, C5), a PreToolUse hook on Edit/Write/MultiEdit/NotebookEdit: when the current task (branch agent/<id>-..., else the mark gw/current-task of task.py current) has open questions and the edited file is code, restrictive mode denies the edit and guide mode warns once per set of open questions; documentation and content files are always allowed. Switch with mode.py (skill gw-mode). careful (default true): careful.py, a PreToolUse hook on Bash, asks the user before a destructive command (rm -r, git push --force, git reset --hard, git branch -D, git push --delete, git clean -f, git checkout -- . and git restore .); false = it does nothing. carefulExempt: path prefixes; an rm -r whose every target starts with one (and has no '..') is not asked about; the list replaces the default one ($TMPDIR/ and ${TMPDIR}/ only count while TMPDIR is set and not empty). carefulWorktrees: folders (relative to the main repository's root) whose linked git worktrees are disposable: there git reset --hard, git clean -f, git checkout|restore . and checkout/switch -f are not asked about (not after a cd or with GIT_DIR set); an empty list = no exemption."
+    },
+    "taskRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean", "default": false},
+        "path": {"type": "string", "minLength": 1, "default": "docs/tasks"},
+        "requiredFor": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true, "default": ["feat", "fix", "hotfix"]},
+        "sections": {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1, "uniqueItems": true, "default": ["Goal", "Scope", "Acceptance", "Files", "Change log", "Verification"]},
+        "logSections": {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1, "uniqueItems": true, "default": ["Why", "Alternatives", "Changed because"]},
+        "pendingMarker": {"type": "string", "minLength": 1, "default": "pending"}
+      },
+      "default": {"enabled": false, "path": "docs/tasks", "requiredFor": ["feat", "fix", "hotfix"], "sections": ["Goal", "Scope", "Acceptance", "Files", "Change log", "Verification"], "logSections": ["Why", "Alternatives", "Changed because"], "pendingMarker": "pending"},
+      "description": "Task record (C11, I-lifecycle design): with enabled true, the commit-msg hook (commit-message.py) requires that a commit of a type in requiredFor that changes code (what is-code.sh calls code; the files under path do not count) and is not WIP, a merge or the review mark touches <path>/<id>.md (with the headings of sections, in order) and ADDS a new file <path>/<id>/<date>-<agent>-<token>.md for each id of its Refs trailer: a first line `# <date> · <skill or session> · <commit or pendingMarker> · <id>` and a non-empty `## <heading>` for each of logSections (form only; REVIEW.md asks for the quality). The commit sha of an entry is not written into the file (that would dirty the tree after the commit): scripts/task.py resolves the pendingMarker from `git log --diff-filter=A`. Default off so installed projects keep working; this repo turns it on. Create the files with: python3 scripts/task.py new <id> and python3 scripts/task.py log <id> --agent <skill|session>."
+    },
+    "scopeGuard": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {"type": "string", "enum": ["off", "warn", "block", "auto"], "default": "warn"},
+        "skipStamps": {"type": "boolean", "default": true, "description": "B44: a change that only touches the stamped version (galivelop-workflow vX.Y.Z, version) is not a deviation (scope-guard.py), and review-scope.py --trivial does not count those lines. false = they count."},
+        "skipVendored": {"type": "boolean", "default": true, "description": "B44: a staged file that apply.py --vendored says is an unchanged copy of the workflow is not a deviation (pre-commit only; needs the workflow repo: $GW_WORKFLOW). false = it counts."}
+      },
+      "default": {"mode": "warn"},
+      "description": "Frozen scope (C13): scope-guard.py, a PreToolUse hook on Edit/Write/MultiEdit/NotebookEdit, compares the edited file with the `## Files` section of the current task's record (taskRecord.path/<id>.md; the current task as in questions-guard.py). A file outside it: warn = allowed with a warning once per task and file, and a line in <git common dir>/gw/deviations.jsonl (task.py deviations); block = denied; auto = block while modes.questions is true (restrictive), else warn; off = nothing. The record, its folder, the questions file and the log are always allowed; no task, no record or no Files section = allowed. The pre-commit hook checks the staged files the same way (outside Claude Code too): warns, or refuses in block mode. To go on: add the file to Files and explain it in the record's Change log, or open a new task: python3 scripts/task.py new <newid> --related <id>."
     }
   }
 }

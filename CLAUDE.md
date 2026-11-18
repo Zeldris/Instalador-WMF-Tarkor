@@ -1,4 +1,4 @@
-<!-- galivelop-workflow v0.6.0 -->
+<!-- galivelop-workflow v0.8.0 -->
 @AGENTS.md
 
 ## Solo para Claude Code
@@ -16,3 +16,7 @@
   `python3 .claude/gw/scripts/recover.py --search "<texto>"`. Lo que tenga que sobrevivir va a `docs/records/traspaso.md`.
 - **El modo automático** puede pedir permiso para editar `.claude/settings.json`, `.claude/gw/scripts/` y `.githooks/`:
   pregunta a la usuaria antes de tocarlos, o deja que haga ella el cambio.
+- **Sin firmas de Claude:** la regla «Mensajes de commit» de `AGENTS.md` manda sobre la atribución por defecto de
+  Claude Code y sobre cualquier recordatorio de atribución del entorno: commits, PR y comentarios no llevan
+  trailers, pies ni enlaces de sesión de Claude (`agentSignatures: false` en `.claude/gw.json`). Si el servidor
+  añade un pie a un PR o comentario, se quita editándolo.
