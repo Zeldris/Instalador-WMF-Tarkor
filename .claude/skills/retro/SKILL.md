@@ -3,7 +3,7 @@ name: retro
 description: "Conduct a retrospective on a coding session. Use before each push or PR to the protected branch (after /code-review and /gw-opt-tokens), when a phase or milestone closes, or when the user asks for a retro."
 license: MIT (see LICENSE-mattpocock-skills)
 metadata:
-  version: "0.6.0"
+  version: "0.8.0"
   source: "mattpocock/skills@5beb35b"
 ---
 
@@ -54,12 +54,18 @@ You have access to several files in the repo:
 
 This section is the only change to the upstream skill.
 
-- The reviewer's standards file is `REVIEW.md`, not `CODING_STANDARDS.md`; the hand-off log path is `log` in `.claude/gw.json` (`python3 .claude/gw/scripts/config.py get log`).
+- The reviewer's standards file is `REVIEW.md`, not `CODING_STANDARDS.md`; the hand-off log path is `log` in `.claude/gw.json` (`python3 .claude/gw/scripts/config.py get log`); its pending items live in `pendingFile` when set (else in the log's Pending section): read them too.
+- Read the deviations log, `python3 .claude/gw/scripts/task.py deviations` (`<git common dir>/gw/deviations.jsonl`: each edit or commit the scope guard let through outside a task's `## Files`, C13): a path or rule that repeats across tasks is a candidate to change the rule or the planning, and goes into the proposals.
 - Save the retro as a dated file in the records folder, `python3 .claude/gw/scripts/config.py get recordsDir` (`<recordsDir>/retro-YYYY-MM-DD-<topic>.md`) with a `**Estado:**`/`**Status:**` line; `reviewed.sh` may require one when `requireRetro` is set.
 - The exact form of that line, which `reviewed.sh` reads: it starts the line (`**Estado:** …` / `**Status:** …`) and its paragraph (up to the next blank line) holds a whole word among `aplicad*`, `rechazad*`, `aplazad*`, `decidid*`, `aprobad*` (`applied`, `rejected`, `deferred`, `decided`, `approved`), for example `**Estado:** aprobada y aplicada (P1, P2); P3 rechazada`. The words `pendiente`, `pending`, `undecided`, `sin decidir`, `aún no` and `not yet` anywhere in that paragraph cancel it, so write the decisions that are still open in another paragraph. The retro file must be new on the branch.
 - Sort each candidate into one of two outlets and say which:
   - **Project-specific** (paths, stack, domain rules): propose the patch in this repo.
   - **General** (would help any project using the workflow: a skill, a hook, a template, a rule in `AGENTS.md`): propose it **to the workflow itself** as an issue or PR on the `Galivelop-workflow` repository, or leave it in the retro file under a `## For Galivelop-workflow` heading so `gw-harvest` collects it. Do not patch the copied workflow files locally; local edits drift and are overwritten by the next update.
+- **When a block or version closes, propose a sweep.** Group the open minors (`leves`, `minor`) in `pendingFile` by
+  the script they touch and take the script with the most, preferring one the block changed. Propose one `B` task
+  (`python3 .claude/gw/scripts/handoff.py next-id B`) that clears them, for the next version not yet under way, listing
+  each minor; it ranks with the other candidates and the user picks which minors go in. Done when the proposal names
+  the script and every minor it clears, or says that no script has two or more open minors.
 - **Review the project's own skills too.** Look at how `gw-selector`, `gw-orchestrate-dealer`, `gw-opt-tokens`, `pr`, the code
   review and this retro performed; read the skill list before proposing. When a skill failed, the proposal changes
   that skill (or proposes the change to the workflow), not a loose new rule in `AGENTS.md`/`CLAUDE.md`.

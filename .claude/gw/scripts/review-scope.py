@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.6.0
+# galivelop-workflow v0.8.0
 """The files the phase 1 `/code-review` reads before the protected branch: the branch's diff without `vendored` files (D82).
 
   python3 review-scope.py [--base REV] [--workflow DIR] [--all]
   python3 review-scope.py --trivial [--base REV] [--workflow DIR]   # B27: exit 0 if the scoped diff is trivial
+                                                                    # (B45: the lines that only change the stamped version
+                                                                    # `galivelop-workflow vX.Y.Z`/`version:` are not counted)
 
 Prints, one repo-relative path per line, the files changed between BASE (default `origin/<protectedBranch>`, else the
 local protected branch) and HEAD. A file is `vendored` when the project holds it as an unchanged copy of the workflow
@@ -20,6 +22,7 @@ config, a git error or a `--base` that is not a commit -> exit 2 with what fixes
 """
 import argparse
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -28,6 +31,7 @@ HERE = Path(__file__).resolve().parent
 sys.dont_write_bytecode = True  # no __pycache__ in the project's .claude/gw/scripts
 sys.path.insert(0, str(HERE))
 import config  # noqa: E402
+import stamp  # noqa: E402
 
 PROG = "review-scope"
 
@@ -71,9 +75,13 @@ def workflow_dir(arg):
     return None
 
 
-def vendored(root, workflow):
-    r = subprocess.run([sys.executable, "-B", str(workflow / "scripts" / "apply.py"), "--vendored", str(root)],
-                       capture_output=True, text=True)
+def vendored(root, workflow, timeout=None):
+    try:
+        r = subprocess.run([sys.executable, "-B", str(workflow / "scripts" / "apply.py"), "--vendored", str(root)],
+                           capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise ScopeError(f"apply.py --vendored took more than {timeout}s; run it by hand: "
+                         f"python3 {workflow / 'scripts' / 'apply.py'} --vendored {root}")
     if r.returncode != 0:
         raise ScopeError(f"apply.py --vendored failed: {r.stderr.strip() or r.stdout.strip()}; run it by hand: "
                          f"python3 {workflow / 'scripts' / 'apply.py'} --vendored {root}")
@@ -95,17 +103,28 @@ def trivial(root, cfg, base, kept):
     if not code:
         print(f"{PROG}: trivial: no code in the review scope ({len(kept)} file(s))")
         return 0
-    lines = 0
-    out = git(root, "diff", "--numstat", "-z", "--no-renames", f"{base}...HEAD", "--", *code)
-    for tok in out.split("\0"):
-        parts = tok.lstrip("\n").split("\t", 2)
-        if len(parts) == 3 and parts[0].isdigit() and parts[1].isdigit():
-            lines += int(parts[0]) + int(parts[1])
+    lines = stamped = 0
+    skip_stamps = config.scope_guard(cfg)["skipStamps"]
+    # B45: the lines that only change the stamped version (stamp.py) are not counted. One diff for every code file,
+    # cut at each `diff --git a/X b/X` (no renames: both sides are the same path), the paths taken literally.
+    diff = git(root, "--literal-pathspecs", "diff", "-U0", "--no-renames", f"{base}...HEAD", "--", *code)
+    for chunk in re.split(r"(?m)^(?=diff --git )", diff):
+        if not chunk:
+            continue
+        rest = chunk.split("\n", 1)[0][len("diff --git "):]
+        half = (len(rest) - 3) // 2
+        path = rest[2:2 + half] if rest[:2] == "a/" and rest[half + 3:half + 5] == "b/" else None
+        n_stamp, n_other = stamp.stamp_diff(chunk, path)
+        if not skip_stamps:  # scopeGuard.skipStamps off: every changed line counts
+            n_stamp, n_other = 0, n_stamp + n_other
+        stamped += n_stamp
+        lines += n_other
+    note = f" ({stamped} version-stamp line(s) not counted)" if stamped else ""
     limit = config.review_trivial_lines(cfg)
     if limit and lines <= limit:
-        print(f"{PROG}: trivial: {lines} changed code line(s), at most reviewTrivialLines={limit}")
+        print(f"{PROG}: trivial: {lines} changed code line(s){note}, at most reviewTrivialLines={limit}")
         return 0
-    print(f"{PROG}: not trivial: {len(code)} code file(s), {lines} changed line(s), reviewTrivialLines={limit}")
+    print(f"{PROG}: not trivial: {len(code)} code file(s), {lines} changed line(s){note}, reviewTrivialLines={limit}")
     return 1
 
 

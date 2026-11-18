@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.6.0
+# galivelop-workflow v0.8.0
 """Hand-off log rules. The branch-row rules need `"logRows": true` in .claude/gw.json (a no-op otherwise); the
 size and "Done" rules of `check`, and the `done` subcommand, work on any log.
 
@@ -16,15 +16,51 @@ contradicting "Next" lines, so each branch writes only in its own row and the ro
                                                  the "Hecho (5 últimas)" / "Done (last 5)" section has <= 5 items,
                                                  numbered 1..n, each on its own line ("N. "). These last rules only
                                                  print `WARNING: ...` and exit 0; with --strict they fail (exit 1).
+                                                 A cell over `handoff.cellHardLimit` (1600; 0 = off) fails even
+                                                 without --strict (D96), naming `done` and `set-row`.
                                                  A log over `logSize` characters (config; 0 = no cap) also only warns,
-                                                 even with --strict
+                                                 even with --strict. With `pendingFile` set (config; D104): the log's
+                                                 "Pendiente" / "Pending" section holds no "- " items of its own, only
+                                                 a pointer line (the same soft rules: --strict fails; the pointer
+                                                 carries no count, B38: `recover.py --state` counts the file). A
+                                                 missing file, one with no "## Pendiente" / "## Pending" section
+                                                 (`archive` needs it) or a pointer with an old "(N entradas)" count
+                                                 only warn. --pending PATH reads the pending file from PATH (the
+                                                 pre-push passes the pushed commit's copy; a missing PATH = no file)
+  handoff.py preflight [--date YYYY-MM-DD] [--strict]
+                                                 what the pre-push checks in the log, without pushing (D61): `check`
+                                                 of the working copy's log with --date (default: today if the log has
+                                                 uncommitted changes, else the day of the last commit that changed it,
+                                                 as the pre-push takes the day of the newest commit that changes it),
+                                                 and with logRows and a plan, `clash HEAD
+                                                 refs/remotes/origin/<protectedBranch>`; with no such ref (a fresh
+                                                 clone, no remote) the clash is skipped with a note, as the pre-push
+                                                 skips it. With --strict the soft rules of `check` (the warnings)
+                                                 fail too (exit 1), so one pass does the work of `check --strict`
+  handoff.py move-pending [FILE]                 with `pendingFile` set: move the "- " items (and other text) of the
+                                                 log's "Pendiente" / "Pending" section to the end of that file's
+                                                 section of the same name (the file and the section are created when
+                                                 missing), and leave in the log one pointer line with the link; only
+                                                 an earlier pointer (a line that is not a list item and names the
+                                                 file) is replaced, everything else moves
+  handoff.py add-pending TEXT [--section HEADING]
+                                                 append "- TEXT" at the end of the Pending section of `pendingFile`
+                                                 (the log's own "Pendiente" / "Pending" section when unset), or at the
+                                                 end of its "### HEADING" subsection (case and edge spaces ignored;
+                                                 created at the end of Pending when missing); the file is created when
+                                                 missing; prints one line, never the content (D95)
+  handoff.py add-decision TEXT [--date YYYY-MM-DD]
+                                                 append "- <date> — TEXT" at the end of the "Decisiones" / "Decisions"
+                                                 section of `decisionsFile` (the log when empty; the section is created
+                                                 before "Pendiente" or at the end); prints one line (D95)
   handoff.py done TEXT [FILE] [--date YYYY-MM-DD]
                                                  insert "1. <date> — TEXT" at the top of the Done section (date
                                                  default: today), renumber, drop items beyond 5 (a multi-line item
                                                  moves whole), leave the rest of the file byte for byte; exit 1 if
                                                  the section is missing
   handoff.py archive [FILE] [--dry-run] [--date YYYY-MM-DD]
-                                                 move the "Pendiente" / "Pending" items (top-level "- " bullets with
+                                                 move the "Pendiente" / "Pending" items (of `pendingFile` when set,
+                                                 else of the log; top-level "- " bullets with
                                                  their continuation lines) whose first line names versions X.Y or
                                                  X.Y.Z, all <= the published one (`version` in .claude-plugin/
                                                  plugin.json; without it, the highest vX.Y.Z tag), to the archive file (config `logArchive`, not read at
@@ -42,7 +78,8 @@ contradicting "Next" lines, so each branch writes only in its own row and the ro
                                                  detached HEAD (WARNING) and while a merge, cherry-pick or rebase is closing
   handoff.py set-row TEXT [--branch BRANCH]     rewrite the text of BRANCH's row (default: the current branch) without
                                                  closing it; fails, and writes nothing, if the row is missing, TEXT is
-                                                 empty or has a newline, or it passes 600 characters
+                                                 empty or has a newline, or it passes 600 characters; prints the
+                                                 row as written and n/limit (set-row and close-row)
   handoff.py closed BASE SHA                    every task closed in the plan between BASE and SHA ("- [x] **ID**"
                                                  or struck through) is also recorded in the "Done" section of SHA's
                                                  log: struck through there, or named on a line that starts with a date
@@ -53,6 +90,16 @@ contradicting "Next" lines, so each branch writes only in its own row and the ro
                                                  entry did not change (it may still say "Next: X" with X done)
   handoff.py close-row [BRANCH] [--text TEXT]   rewrite BRANCH's row (or --branch; default: the current one) as "merged, branch finished" (last commit
                                                  before the PR, so main does not inherit a stale "Next")
+  handoff.py close-row ID                       close TASK ID (C11): when ID has the shape of taskId and its task record
+                                                 (`taskRecord.path`/ID.md) exists, it is a task, not a branch (the record's
+                                                 existence decides; `--branch ID` always means the branch). Fails, writing
+                                                 nothing and listing every reason, unless each box of `## Acceptance` is [x]
+                                                 and names an existing test (`tests/test_X.py::Class[::test_y]`) or a
+                                                 `== section` of the `check` commands (in backticks), and `## Verification`
+                                                 holds an existing commit sha and a command (in backticks); then marks
+                                                 ID's roadmap row done in every `roadmapFiles` file (the row must be
+                                                 open) and prints it. An ID with no record and no branch row: create the
+                                                 record, `task.py new ID`. Works without logRows; --text is for branches
   handoff.py clash REV OTHER... [--warn]        fail if REV and an OTHER both open a plan entry (an unindented
                                                  "- …ID" / "| ID", done or not) for an id their merge base does not
                                                  have, with different titles (two tasks that took the same id; the
@@ -79,12 +126,16 @@ Exit 0 ok, 1 rule broken (each message ends with the command that fixes it), 2 b
 Python 3.8+, stdlib only.
 """
 import argparse
+import ast
+import contextlib
 import datetime
+import errno
 import json
 import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 sys.dont_write_bytecode = True
@@ -321,6 +372,62 @@ def done_problems(text, add, recheck, limit):
     return out
 
 
+POINTER_COUNT = re.compile(r"\((\d+)\s+(?:entradas?|entry|entries)\)", re.I)
+POINTER_START = re.compile(r"(?:Lo pendiente está en|Pending items live in)\s", re.I)  # the pointer's own wording
+PENDING_ITEM = re.compile(r"^(?:[-*+]|\d+[.)])\s")  # a top-level list item: "- ", "* ", "+ ", "1. ", "1) "
+
+
+def pending_section(lines):
+    """(head, end) of the "## Pendiente" / "## Pending" section in `lines` (no line ends), or (None, None)."""
+    head = next((i for i, l in enumerate(lines) if PENDING_HEADING.match(l.rstrip("\r\n"))), None)
+    if head is None:
+        return None, None
+    return head, next((i for i in range(head + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+
+
+def pending_count(text):
+    """Top-level items of the whole pending file `text`, in every section (B38: what `grep -n '^- '` shows), but the
+    "Archivado" / "Archived" summary line."""
+    return sum(1 for l in text.splitlines() if PENDING_ITEM.match(l) and not ARCHIVED_LINE.match(l))
+
+
+def pending_problems(ctx, text, me, pending=None):
+    """D104: with `pendingFile` set, the soft problems of the log's pending section (items kept in the log, no pointer
+    line); a missing pending file, one with no pending section and a pointer with an old count are printed warnings.
+    `pending` is where to read the pending file from (default: the working copy)."""
+    rel = gwconfig.pending_file(ctx.config)
+    if not rel:
+        return []
+    lines = text.splitlines()
+    head, end = pending_section(lines)
+    fix = f"{me} move-pending"
+    if head is None:  # fail closed: the pending section is a "## Pendiente" / "## Pending" heading, nothing else
+        return [f"the log has no \"## Pendiente\" / \"## Pending\" section to point to {rel} (pendingFile); add the "
+                f"line \"## Pending\" to it and run: {fix}"]
+    held = sum(1 for l in lines[head + 1:end] if PENDING_ITEM.match(l))
+    if held:
+        return [f"the log holds {held} pending item(s) under \"{lines[head].strip()}\", but they live in {rel} "
+                f"(pendingFile); move them there: {fix}"]
+    pointer = [l for l in lines[head + 1:end] if l.strip()]
+    if not pointer:
+        return [f"the log's \"{lines[head].strip()}\" section has no pointer line to {rel} (pendingFile); "
+                f"write it: {fix}"]
+    if any(POINTER_COUNT.search(l) for l in pointer):  # B38: one count, in one place (recover.py --state)
+        print(f"WARNING: handoff: the log's pending pointer still carries a count (\"(N entradas)\" / \"(N entries)\"), "
+              f"which nothing keeps up to date; drop it: {fix}")
+    target = Path(pending) if pending is not None else ctx.root / rel
+    try:
+        found = target.read_text(encoding="utf-8", errors="replace") if target.is_file() else None
+    except OSError:
+        found = None
+    if found is None:
+        print(f"WARNING: handoff: the pending file {rel} (pendingFile) does not exist; create it: {fix}")
+    elif pending_section(found.splitlines())[0] is None:
+        print(f"WARNING: handoff: the pending file {rel} (pendingFile) has no \"## Pendiente\" / \"## Pending\" "
+              f"section, which `archive` needs; add it: {fix}")
+    return []
+
+
 def cmd_check(ctx, args):
     path = Path(args.file) if args.file else ctx.root / ctx.log
     me = f"python3 {HERE / 'handoff.py'}"
@@ -333,14 +440,29 @@ def cmd_check(ctx, args):
         print(f"WARNING: handoff: {message}")  # the module is off: an unreadable log must not block the commit
         return 0
     sizes = gwconfig.handoff(ctx.config)
+    hard = sizes["cellHardLimit"]  # D96: the warning alone got ignored (a cell reached 10 115 characters)
+    cells = long_cells(text, min(sizes["cellLimit"], hard) if hard > 0 else sizes["cellLimit"])
+    over = [(label, size) for label, size in cells if 0 < hard < size]
     soft = [f"a cell of the state table (\"{label}\") has {size} characters (limit {sizes['cellLimit']}); shorten it and move what "
-            f"is done to the Done section: {me} done \"<text>\"" for label, size in long_cells(text, sizes["cellLimit"])]
+            f"is done to the Done section: {me} done \"<text>\"" for label, size in cells
+            if size > sizes["cellLimit"] and (label, size) not in over]
+    hard_problems = [f"a cell of the state table (\"{label}\") has {size} characters, over the hard cap (handoff.cellHardLimit "
+                     f"= {hard}; it fails even without --strict); move what is closed to the Done section: {me} done "
+                     f"\"<text>\", then shorten the cell (a branch row: {me} set-row \"<short text>\" --branch <branch>; "
+                     f"any other cell: edit {ctx.log})" for label, size in over]
     soft += done_problems(text, f"{me} done \"<text>\"", f"{me} check {path} --strict", sizes["doneItems"])
+    soft += pending_problems(ctx, text, me, args.pending)
     cap = gwconfig.log_size(ctx.config)
     if cap > 0 and len(text) > cap:  # a warning only: it never fails the commit, not even with --strict
-        print(f"WARNING: handoff: the log has {len(text)} characters (cap logSize = {cap}); archive the items of published "
-              f"versions: {me} archive")
+        if gwconfig.pending_file(ctx.config):  # `archive` works on pendingFile: it cannot shrink the log
+            print(f"WARNING: handoff: the log has {len(text)} characters (cap logSize = {cap}); shorten it by hand (move "
+                  f"what is done out of the state table: {me} done \"<text>\"; the pending items live in "
+                  f"{gwconfig.pending_file(ctx.config)}, `archive` does not touch the log)")
+        else:
+            print(f"WARNING: handoff: the log has {len(text)} characters (cap logSize = {cap}); archive the items of "
+                  f"published versions: {me} archive")
     problems = rows_problems(ctx, args, text.splitlines()) if ctx.config.get("logRows") else []
+    problems += hard_problems
     if args.strict:
         problems += soft
     else:
@@ -748,20 +870,26 @@ def archivable(first_line, published):
 
 
 def cmd_archive(ctx, args):
-    path = Path(args.file) if args.file else ctx.root / ctx.log
-    log_name = args.file if args.file else ctx.log
+    on_pending = not args.file and bool(gwconfig.pending_file(ctx.config))
+    log_name = args.file or gwconfig.pending_file(ctx.config) or ctx.log
+    path = Path(args.file) if args.file else ctx.root / log_name
     archive = ctx.root / gwconfig.log_archive(ctx.config)
-    cap = gwconfig.log_size(ctx.config)
+    cap = 0 if on_pending else gwconfig.log_size(ctx.config)  # logSize caps the log
+    me = f"python3 {HERE / 'handoff.py'}"
     try:
         raw = path.read_bytes().decode("utf-8")
     except (OSError, UnicodeDecodeError) as exc:
+        if on_pending:  # B38: the file it reads is the pending file, not the log
+            raise Usage(f"cannot read {path} ({exc}); create the pending file ({me} move-pending), fix `pendingFile` "
+                        "in .claude/gw.json, or save it as UTF-8")
         raise Usage(f"cannot read {path} ({exc}); create the log or fix `log` in .claude/gw.json")
     version, published = published_version(ctx)
     lines = re.findall(r"[^\n]*\n|[^\n]+", raw)
     head = next((i for i, l in enumerate(lines) if PENDING_HEADING.match(l.rstrip("\r\n"))), None)
     if head is None:
-        print(f"handoff: {path} has no \"## Pendiente\" / \"## Pending\" section; add the line \"## Pending\" to it "
-              f"and rerun: python3 {HERE / 'handoff.py'} archive {path}")
+        how = f" (or run {me} move-pending, which adds it)" if on_pending else ""
+        print(f"handoff: {path} has no \"## Pendiente\" / \"## Pending\" section; add the line \"## Pending\" to it"
+              f"{how} and rerun: {me} archive" + ("" if on_pending else f" {path}"))
         return 1
     english = lines[head].split()[1].lower().startswith("pending")
     eol = "\r\n" if lines[head].endswith("\r\n") else "\n"
@@ -831,12 +959,28 @@ def cmd_archive(ctx, args):
     except (OSError, UnicodeDecodeError) as exc:
         raise Usage(f"cannot write the archive or the log ({exc}); check the permissions of {archive.parent} and {path}, "
                     "then rerun: handoff.py archive")
-    print(f"handoff: archived {len(moved)} item(s) to {archive}; log now {shown(size)}; commit both files with the work")
+    print(f"handoff: archived {len(moved)} item(s) to {archive}; {log_name} now {shown(size)}; commit both files with "
+          "the work")
     return 0
 
 
+def write_atomic(path, data):
+    """Write `data` (bytes) to `path` through a temp file in the same folder and os.replace (B38): a failed write
+    leaves the old file whole."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_bytes(data)
+        os.replace(tmp, path)
+    finally:
+        try:
+            tmp.unlink()
+        except OSError:  # already renamed, or not there
+            pass
+
+
 def rewrite_row(ctx, branch, text):
-    """Replace the text of `branch`'s row in the log file. Returns the number of rows found; writes only if exactly 1."""
+    """Replace the text of `branch`'s row in the log file. Returns (rows found, the new row); writes only if exactly 1."""
     path = ctx.root / ctx.log
     try:
         with open(path, encoding="utf-8", newline="") as f:  # Path.read_text(newline=) is Python 3.13+
@@ -845,16 +989,22 @@ def rewrite_row(ctx, branch, text):
         raise Usage(f"cannot read {path} ({exc}); fix `log` in .claude/gw.json")
     eol = "\r\n" if "\r\n" in raw else "\n"
     lines = raw.split(eol)
-    hit = 0
+    hit, new = 0, None
     for i, line in enumerate(lines):
         m = ROW.match(line)
         if m and m.group("branch") == branch:
-            lines[i] = f"| **{m.group('label')} · `{branch}`** | {text} |"
+            lines[i] = new = f"| **{m.group('label')} · `{branch}`** | {text} |"
             hit += 1
     if hit == 1:
         with open(path, "w", encoding="utf-8", newline="") as f:  # Path.write_text(newline=) is Python 3.10+
             f.write(eol.join(lines))
-    return hit
+    return hit, new
+
+
+def show_row(ctx, row, text):
+    """Print the row as written and its size against the limit (E61), so the caller need not reread the log."""
+    print(f"  {row}")
+    print(f"  {len(text.strip())}/{gwconfig.handoff(ctx.config)['rowLimit']} characters")
 
 
 def row_branch(ctx, args):
@@ -869,14 +1019,184 @@ def row_branch(ctx, args):
     return branch
 
 
+def task_record_path(ctx, args):
+    """(is the argument the shape of a task id, the path of its task record if that file exists else None). A branch
+    given with --branch is always a branch: only the positional argument can be a task (C11)."""
+    given = getattr(args, "branch", None)
+    if not given or getattr(args, "branch_opt", None) or not re.fullmatch(ctx.id_src, given):
+        return False, None
+    path = Path(ctx.root) / gwconfig.task_record(ctx.config)["path"] / f"{given}.md"
+    return True, (path if path.is_file() else None)
+
+
+REF_TEST = re.compile(r"(?P<file>[\w./-]*test_[\w.-]+\.py)::(?P<cls>\w+)(?:::(?P<fn>\w+))?")
+REF_SECTION = re.compile(r"`==\s*([^`]+?)\s*`")
+SHA_WORD = re.compile(r"(?<![0-9A-Za-z])[0-9a-f]{7,40}(?![0-9A-Za-z])")
+BOX = re.compile(r"^\s*[-*]\s*\[(.)\]\s*(.*)$")
+
+
+def check_sections(ctx):
+    """The `== …` titles the project's `check` commands print: every word of a command that is a file of the project
+    is read for `section "title"` and `echo "== title"` (what tests/check.sh does)."""
+    import shlex
+    titles = set()
+    for command in ctx.config.get("check") or []:
+        try:
+            words = shlex.split(command)
+        except ValueError:
+            words = command.split()
+        for word in words:
+            path = Path(ctx.root) / word
+            if path.is_file():
+                text = path.read_text(encoding="utf-8", errors="replace")
+                titles.update(m.strip() for m in re.findall(r'(?m)^\s*section\s+"([^"]+)"', text))
+                titles.update(m.strip() for m in re.findall(r'echo\s+"==\s*([^"]+)"', text))
+    return titles
+
+
+def acceptance_reasons(ctx, body, sections):
+    boxes = [m for m in (BOX.match(l) for l in body.splitlines()) if m]
+    if not boxes:
+        return ["`## Acceptance` has no checkbox; write the criteria as `- [ ] text (tests/test_X.py::Class)`"]
+    out = []
+    root = Path(ctx.root).resolve()
+    for m in boxes:
+        mark, text = m.group(1), m.group(2).strip()
+        shown = text if len(text) <= 60 else text[:57] + "..."
+        if mark not in "xX":
+            out.append(f"Acceptance box not ticked: {shown!r}; tick it with [x] once its test passes")
+            continue
+        named = 0
+        for r in REF_TEST.finditer(text):
+            named += 1
+            path = (root / r.group("file")).resolve()
+            if root not in path.parents or not path.is_file():
+                out.append(f"Acceptance {shown!r} names {r.group('file')}, which does not exist; fix the name or write the test")
+                continue
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
+            except (SyntaxError, ValueError):
+                out.append(f"Acceptance {shown!r}: {r.group('file')} does not parse as Python; fix the file")
+                continue
+            classes = [n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == r.group("cls")]
+            if not classes:
+                out.append(f"Acceptance {shown!r}: {r.group('file')} has no class {r.group('cls')} at module level; fix the name")
+            elif r.group("fn") and not any(isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == r.group("fn")
+                                           for c in classes for n in c.body):
+                out.append(f"Acceptance {shown!r}: class {r.group('cls')} of {r.group('file')} has no test {r.group('fn')}; fix the name")
+        for title in REF_SECTION.findall(text):
+            named += 1
+            if title not in sections:
+                out.append(f"Acceptance {shown!r} names the check section `== {title}`, which no `check` command prints; "
+                           "fix the name (the `== …` lines of `bash tests/check.sh`)")
+        if not named:
+            out.append(f"Acceptance box ticked without a test: {shown!r}; name one as `tests/test_X.py::Class` "
+                       "or a check section as `== name` (in backticks)")
+    return out
+
+
+RUNNERS = ("python", "python3", "bash", "sh", "zsh", "npm", "npx", "yarn", "pnpm", "make", "pytest", "node", "git", "cargo",
+           "go", "uv", "pip", "ruby", "php", "mvn", "gradle", "dotnet", "deno", "bun", "tox", "gh")
+
+
+def runnable(ctx, span):
+    """Whether a backquoted text starts like a command: a known program, or an existing script of the project (a bare
+    path such as docs/questions.md or a branch name is not one)."""
+    words = span.split()
+    if not words or SHA_WORD.fullmatch(span.strip()):
+        return False
+    first = words[0]
+    if first in RUNNERS:
+        return True
+    path = Path(ctx.root) / first
+    return first.endswith((".sh", ".py", ".js")) and path.is_file()
+
+
+def verification_reasons(ctx, body):
+    if not body.strip() or re.fullmatch(r"(?:\s|—|-|\*)*", body):
+        return ["`## Verification` is empty or still the template; write the commit and the command that proves it"]
+    out = []
+    candidates = [w for w in SHA_WORD.findall(body) if re.search(r"\d", w)]
+    known = [w for w in candidates
+             if subprocess.run(["git", "-C", str(ctx.root), "cat-file", "-e", f"{w}^{{commit}}"],
+                               capture_output=True).returncode == 0]
+    if not candidates:
+        out.append("`## Verification` names no commit sha; add the sha of the commit that did the work (git rev-parse --short HEAD)")
+    elif not known:
+        out.append(f"`## Verification` names {', '.join(candidates)}, which is not a commit of this repository; "
+                   "fix the sha (git log --oneline)")
+    spans = re.findall(r"`([^`\n]+)`", body) + [l.strip() for b in re.findall(r"```[^\n]*\n(.*?)```", body, re.S)
+                                               for l in b.splitlines() if l.strip()]
+    if not any(runnable(ctx, s) for s in spans):
+        out.append("`## Verification` names no command; write the command that proves it between backticks, starting with "
+                   "a program (python3, bash, npm, make, pytest, ...) or an existing script")
+    return out
+
+
+def close_task(ctx, task_id, record):
+    """C11: mark a task's roadmap row done, only when its record shows the work is tested and verified."""
+    import task as gwtask
+    import roadmap as gwroadmap
+    text = record.read_text(encoding="utf-8").replace("\r\n", "\n")
+    sections = {h.lower(): b for h, b in gwtask.sections_of(text)}
+    rel = record.relative_to(Path(ctx.root)).as_posix()
+    reasons = []
+    for name, check in (("acceptance", lambda b: acceptance_reasons(ctx, b, check_sections(ctx))),
+                        ("verification", lambda b: verification_reasons(ctx, b))):
+        if name in sections:
+            reasons += check(sections[name])
+        else:
+            reasons.append(f"{rel} has no `## {name.title()}` section; see the template (task.py new)")
+    if reasons:
+        print(f"handoff: {task_id} is not ready to close, nothing was written ({len(reasons)} reasons) in {rel}:")
+        for r in reasons:
+            print(f"  - {r}")
+        print(f"fix {rel} and run again: python3 {HERE / 'handoff.py'} close-row {task_id}")
+        return 1
+    files = gwconfig.roadmap_files(ctx.config)
+    if not files:
+        print("handoff: roadmapFiles is empty in .claude/gw.json, so there is no roadmap row to mark; list the roadmap "
+              "in each language (see docs/en/config.md)")
+        return 1
+    try:
+        loaded = gwroadmap.load_files(Path(ctx.root), files, task_id)
+        print(f"handoff: {task_id} closed; roadmap rows marked done:")
+        gwroadmap.cmd_done(loaded, task_id, datetime.date.today().isoformat(), [], False)
+    except gwroadmap.RoadmapError as exc:
+        print(f"handoff: {exc}; nothing was written (see: python3 {HERE / 'roadmap.py'} show {task_id})")
+        return 1
+    print(f"commit it: git commit -am 'Close {task_id}'")
+    return 0
+
+
 def cmd_close_row(ctx, args):
+    shaped, record = task_record_path(ctx, args)
+    if record is not None:
+        if args.text:
+            raise Usage(f"--text is for a branch row; {args.branch} is a task (its record exists): drop --text")
+        rc = close_task(ctx, args.branch, record)
+        if rc == 0:
+            import task as gwtask
+            try:
+                gwtask.clear_mark(ctx.root, args.branch)  # C4: a closed task is no longer the current one
+            except gwtask.GitStuck:
+                pass
+        return rc
     text = args.text or CLOSED_TEXT.get(ctx.config["language"], CLOSED_TEXT["en"])
     branch = row_branch(ctx, args)
-    hit = rewrite_row(ctx, branch, text)
+    hit = 0
+    if ctx.config.get("logRows"):
+        hit, row = rewrite_row(ctx, branch, text)
     if hit != 1:
+        if shaped:
+            rec = gwconfig.task_record(ctx.config)["path"]
+            print(f"handoff: {branch} has no task record ({rec}/{branch}.md) and no branch row in {ctx.log}; for a task, "
+                  f"create the record: python3 {HERE / 'task.py'} new {branch}; for a branch: handoff.py close-row --branch {branch}")
+            return 1
         print(f"handoff: found {hit} rows for {branch}, expected 1; add the row first: edit {ctx.log}")
         return 1
     print(f"handoff: row of {branch} closed in {ctx.log}; commit it: git commit -am 'Close the log row of {branch}'")
+    show_row(ctx, row, text)
     return 0
 
 
@@ -891,12 +1211,358 @@ def cmd_set_row(ctx, args):
         print(f"handoff: the text has {len(text)} characters (limit {limit}); shorten it, or move what is done to the Done "
               f"section: python3 {HERE / 'handoff.py'} done \"<text>\"")
         return 1
-    hit = rewrite_row(ctx, branch, text)
+    hit, row = rewrite_row(ctx, branch, text)
     if hit != 1:
         print(f"handoff: found {hit} rows for {branch}, expected 1; add the row first: edit {ctx.log}")
         return 1
     print(f"handoff: row of {branch} updated in {ctx.log} ({len(text)} characters); commit it together with the work")
+    show_row(ctx, row, text)
     return 0
+
+
+def pending_skeleton(english):
+    """The text of a new pending file (move-pending and add-pending create it the same way)."""
+    title = "Pending" if english else "Pendiente"
+    return (f"# {title}\n\n" + ("What is still open; the log only points here. Add and remove items in this file.\n"
+                                  if english else
+                                  "Lo que queda abierto; la bitácora solo apunta aquí. Se añade y se quita en este "
+                                  "archivo.\n") + f"\n## {title}\n")
+
+
+DECISIONS_HEADING = re.compile(r"^##\s+(Decisiones|Decisions)\b.*$", re.I)
+
+
+def split_lines(raw):
+    """The lines of `raw` cut at "\\n" only: a CRLF line keeps its "\\r" at its end, so every line keeps its own
+    ending and a mixed file stays as it was; blank lines at the end are kept (only the last terminator is dropped).
+    `write_added` joins them back with "\\n"; the lines a command adds take the "\\r" of their neighbour (`ends`)."""
+    if not raw.strip():
+        return []
+    lines = raw.split("\n")
+    if lines[-1] == "":  # the terminator of the last line, not a blank line
+        lines.pop()
+    elif len(lines) > 1 and lines[-2].endswith("\r"):  # no final newline: the last line ends like the one before
+        lines[-1] += "\r"
+    return lines
+
+
+def ends(lines, at):
+    """"\\r" when the line at `at` of `lines` (the last one when `at` is past the end) ends in CRLF, else ""."""
+    i = min(at, len(lines) - 1)
+    return "\r" if 0 <= i and lines[i].endswith("\r") else ""
+
+
+def item_lines(text):
+    """`text` as list lines: the first becomes a "- " item (a "* ", "+ ", "1. " marker is replaced; "- [ ]" stays); the
+    others are indented two spaces and blank ones are dropped (a blank line would end the item)."""
+    rows = [l for l in text.strip().splitlines() if l.strip()]
+    first = re.sub(r"^(?:[-*+]|\d+[.)])\s+", "", rows[0].strip())
+    return ["- " + first] + ["  " + l.rstrip() for l in rows[1:]]
+
+
+def fenced_lines(lines):
+    """The indexes of `lines` inside a fenced code block (```` ``` ```` or ``~~~``), fences included."""
+    inside, mark, out = False, "", set()
+    for i, l in enumerate(lines):
+        m = re.match(r"\s*(```+|~~~+)", l)
+        if m and (not inside or m.group(1)[0] == mark):
+            inside, mark = not inside, m.group(1)[0]
+            out.add(i)
+        elif inside:
+            out.add(i)
+    return out
+
+
+def section_span(lines, heading_re, lo=0, hi=None):
+    """(head, end) of the first section in lines[lo:hi] whose heading matches `heading_re`, outside code fences; it
+    ends at the next "## " heading (at the next "## " or "### " one when it is itself a "### " heading) or at `hi`;
+    (None, None) when missing."""
+    hi = len(lines) if hi is None else hi
+    fenced = fenced_lines(lines)
+    head = next((i for i in range(lo, hi) if i not in fenced and heading_re.match(lines[i])), None)
+    if head is None:
+        return None, None
+    stops = ("## ", "### ") if lines[head].startswith("### ") else ("## ",)
+    return head, next((i for i in range(head + 1, hi) if i not in fenced and lines[i].startswith(stops)), hi)
+
+
+def insert_in_section(lines, head, end, items, lead=False):
+    """Insert `items` after the last non-blank line of the section (head, end) of `lines`, in place (`lead`: after a
+    blank line); the new lines end like the section's heading (CRLF or LF)."""
+    cr = ends(lines, head)
+    items = [l + cr for l in items]
+    pos = end
+    while pos > head + 1 and not lines[pos - 1].strip():
+        pos -= 1
+    new = ([cr] if pos == head + 1 or lead else []) + items
+    if end == pos and end < len(lines):  # no blank line before the next heading
+        new.append(cr)
+    lines[pos:pos] = new
+
+
+def read_for_add(path, me, cmd):
+    try:
+        return path.read_bytes().decode("utf-8") if path.exists() else None
+    except (OSError, UnicodeDecodeError) as exc:
+        raise Usage(f"cannot read {path} ({exc}); fix the file (UTF-8) and rerun: {me} {cmd}")
+
+
+def log_is_english(ctx):
+    """True when the log's Pending or Decisions heading is English (the way move-pending tells); the log is read once
+    per run (n.º 11 of the D95 review): the answer is kept in `ctx`."""
+    if not hasattr(ctx, "log_english"):
+        ctx.log_english = _log_is_english(ctx)
+    return ctx.log_english
+
+
+def _log_is_english(ctx):
+    try:
+        for l in (ctx.root / ctx.log).read_text(encoding="utf-8").splitlines():
+            if PENDING_HEADING.match(l):
+                return l.split()[1].lower().startswith("pending")
+            if DECISIONS_HEADING.match(l):
+                return l.split()[1].lower().startswith("decisions")
+    except (OSError, UnicodeDecodeError):
+        pass
+    return False
+
+
+def write_added(path, lines, me, cmd):
+    try:
+        write_atomic(path, ("\n".join(lines) + "\n").encode("utf-8"))
+    except OSError as exc:
+        raise Usage(f"cannot write {path} ({exc}); check its permissions and rerun: {me} {cmd}")
+
+
+# The commands that rewrite the log or `pendingFile`/`decisionsFile`: main() runs them under one lock, the single
+# point that decides what is locked (n.º 1 and 4 of the review of D95).
+WRITING_COMMANDS = ("done", "set-row", "close-row", "archive", "move-pending", "add-pending", "add-decision")
+
+
+@contextlib.contextmanager
+def write_lock(ctx, cmd):
+    """One exclusive lock per repository, <git common dir>/gw/handoff.lock, around the read-change-write of a writing
+    command (two `add-*` at once, or an `add-*` and a `move-pending`, lost an item: n.º 9 of the D95 review).
+    `fcntl.flock`: the system drops it when the process ends, so a killed run leaves no orphan lock. It waits
+    `handoff.lockWait` seconds and then fails saying how to rerun; only EWOULDBLOCK/EAGAIN mean "held". Without
+    `fcntl` (Windows), without a git dir, or when the file system refuses locks (any other OSError) there is no lock
+    and one `WARNING` line says so."""
+    me = f"python3 {HERE / 'handoff.py'}"
+    try:
+        import fcntl
+    except ImportError:
+        print(f"handoff: WARNING: no fcntl on this platform, so {cmd} runs without a lock (two at once can lose an item)",
+              file=sys.stderr)
+        yield
+        return
+    common = gwconfig.git_common_dir(ctx.root)
+    if common is None:
+        print(f"handoff: WARNING: {ctx.root} is not in a git repository, so {cmd} runs without a lock", file=sys.stderr)
+        yield
+        return
+    where = common / "gw" / "handoff.lock"
+    wait = gwconfig.handoff(ctx.config)["lockWait"]
+    try:
+        where.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(where, os.O_RDWR | os.O_CREAT, 0o644)
+    except OSError as exc:
+        raise Usage(f"cannot open the lock {where} ({exc}); check its permissions and rerun: {me} {cmd}")
+    try:
+        deadline = time.monotonic() + wait
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError as exc:
+                if exc.errno not in (errno.EWOULDBLOCK, errno.EAGAIN):  # the file system has no flock: go without
+                    print(f"handoff: WARNING: cannot lock {where} ({exc}), so {cmd} runs without a lock", file=sys.stderr)
+                    break
+                if time.monotonic() >= deadline:
+                    raise Usage(f"another handoff.py holds the lock {where} and did not let go in {wait} s; wait for "
+                                f"it, or raise handoff.lockWait in .claude/gw.json, and rerun: {me} {cmd}")
+                time.sleep(0.05)
+        yield
+    finally:
+        os.close(fd)  # closing the descriptor releases the lock
+
+
+def cmd_add_pending(ctx, args):
+    me = f"python3 {HERE / 'handoff.py'}"
+    if not args.text.strip():
+        raise Usage(f"the text is empty; give it: {me} add-pending \"the item\"")
+    own = gwconfig.pending_file(ctx.config)
+    rel = own or ctx.log
+    path = ctx.root / rel
+    section = re.sub(r"^#+\s*", "", args.section.strip()).strip() if args.section else ""
+    if args.section is not None and not section:
+        raise Usage(f"--section is empty; give a title: {me} add-pending \"the item\" --section \"Title\"")
+    raw = read_for_add(path, me, "add-pending")
+    if raw is None:
+        if not own:
+            raise Usage(f"{path} does not exist; fix `log` in .claude/gw.json and rerun: {me} add-pending")
+        raw = pending_skeleton(log_is_english(ctx))
+    lines = split_lines(raw)
+    head, end = section_span(lines, PENDING_HEADING)
+    if head is None and own:
+        cr = ends(lines, len(lines))
+        lines += ([cr] if lines and lines[-1].strip() else []) + [("## Pending" if log_is_english(ctx) else "## Pendiente") + cr]
+        head, end = len(lines) - 1, len(lines)
+    elif head is None:
+        raise Usage(f"{path} has no \"## Pendiente\" / \"## Pending\" section; add the line \"## Pending\" to it "
+                    f"and rerun: {me} add-pending")
+    items = item_lines(args.text)
+    if section:  # a "### <title>" of the Pending section (case and edge spaces ignored); created at its end
+        sub, sub_end = section_span(lines, re.compile(rf"^###\s+{re.escape(section)}\s*$", re.I), head + 1, end)
+        if sub is None:
+            insert_in_section(lines, head, end, [f"### {section}", ""] + items, lead=True)
+        else:
+            insert_in_section(lines, sub, sub_end, items)
+    else:
+        insert_in_section(lines, head, end, items)
+    if own:
+        count = pending_count("\n".join(lines))
+    else:
+        h, e = section_span(lines, PENDING_HEADING)
+        count = pending_count("\n".join(lines[h + 1:e]))
+    write_added(path, lines, me, "add-pending")
+    print(f"handoff: added 1 item to {rel} ({count} in all)")
+    return 0
+
+
+def cmd_add_decision(ctx, args):
+    me = f"python3 {HERE / 'handoff.py'}"
+    if not args.text.strip():
+        raise Usage(f"the text is empty; give it: {me} add-decision \"the decision\"")
+    rel = gwconfig.decisions_file(ctx.config) or ctx.log
+    path = ctx.root / rel
+    separate = path.resolve() != (ctx.root / ctx.log).resolve()
+    raw = read_for_add(path, me, "add-decision")
+    if raw is None:
+        if not separate:
+            raise Usage(f"{path} does not exist; fix `log` in .claude/gw.json and rerun: {me} add-decision")
+        raw = "# Decisions\n\n## Decisions\n" if log_is_english(ctx) else "# Decisiones\n\n## Decisiones\n"
+    lines = split_lines(raw)
+    text = re.sub(r"^\d{4}-\d{2}-\d{2}\s*[—–-]\s*", "", args.text.strip())  # the entry gets its date: never twice
+    if not text:
+        raise Usage(f"the text is empty (only a date was given); give it: {me} add-decision \"the decision\"")
+    item = item_lines(f"{args.date} — {text}")
+    head, end = section_span(lines, DECISIONS_HEADING)
+    if head is None:
+        title = "## Decisions" if log_is_english(ctx) else "## Decisiones"
+        ph, _ = section_span(lines, PENDING_HEADING)
+        if ph is not None and not separate:
+            cr = ends(lines, ph)
+            lines[ph:ph] = [title + cr, cr] + [l + cr for l in item] + [cr]
+        else:
+            cr = ends(lines, len(lines))
+            lines += ([cr] if lines and lines[-1].strip() else []) + [title + cr, cr] + [l + cr for l in item]
+    else:
+        insert_in_section(lines, head, end, item)
+    write_added(path, lines, me, "add-decision")
+    print(f"handoff: added 1 decision to {rel}")
+    return 0
+
+
+def cmd_preflight(ctx, args):
+    """D61: the log checks of prepush-branches.sh (check with a date, clash with origin/<protectedBranch>), run before
+    pushing so a green `check` is enough to push."""
+    me = f"python3 {HERE / 'handoff.py'}"
+    if not ctx.config.get("logRows"):  # the date is a logRows rule: no git needed; the size and Done rules still run
+        return cmd_check(ctx, argparse.Namespace(file=None, date=None, strict=args.strict, at="commit", pending=None))
+    date, dirty = args.date, True
+    status = ctx.git("status", "--porcelain", "--", ctx.log)
+    # --no-merges: the pre-push dates the log by the commits that change it, never by a merge (diff-tree shows none
+    # for one), so a CI pull_request merge made today does not move the day.
+    last = ctx.git("log", "-1", "--no-merges", "--format=%as", "--", ctx.log)
+    if status.returncode == 0 and last.returncode == 0:
+        dirty = bool(status.stdout.strip()) or not last.stdout.strip()
+    elif not date:
+        raise Usage(f"git cannot read the state of {ctx.log} ({(status.stderr or last.stderr).strip()}); "
+                    f"check the repository (git status) or pass the day: {me} preflight --date YYYY-MM-DD")
+    if not date:
+        date = datetime.date.today().isoformat() if dirty else last.stdout.strip()
+    # A clean log is already committed: the fix is a new commit (at="push"), not "run the commit again".
+    code = cmd_check(ctx, argparse.Namespace(file=None, date=date, strict=args.strict, at="commit" if dirty else "push",
+                                             pending=None))
+    protected = ctx.config["protectedBranch"]
+    ref = f"refs/remotes/origin/{protected}"
+    if not ctx.git("rev-parse", "-q", "--verify", f"{ref}^{{commit}}").stdout.strip():
+        print(f"handoff: preflight: no {ref} here, so the task-id clash check is skipped (the pre-push skips it too); "
+              f"to run it, fetch it: git fetch origin {protected}")
+        return code
+    clash = cmd_clash(ctx, argparse.Namespace(revs=["HEAD", ref], warn=False, merge=None, tip=None, merging=False))
+    return code or clash
+
+
+def cmd_move_pending(ctx, args):
+    rel = gwconfig.pending_file(ctx.config)
+    me = f"python3 {HERE / 'handoff.py'}"
+    if not rel:
+        raise Usage("pendingFile is not set in .claude/gw.json; set it (for example \"docs/records/pending.md\") and "
+                    f"rerun: {me} move-pending")
+    path = Path(args.file) if args.file else ctx.root / ctx.log
+    target = ctx.root / rel
+    try:
+        lines = re.findall(r"[^\n]*\n|[^\n]+", path.read_bytes().decode("utf-8"))
+        old = target.read_text(encoding="utf-8") if target.exists() else None
+    except (OSError, UnicodeDecodeError) as exc:
+        raise Usage(f"cannot read {path} or {target} ({exc}); fix the file (UTF-8) and rerun: {me} move-pending")
+    head, end = pending_section(lines)
+    if head is None:
+        raise Usage(f"{path} has no \"## Pendiente\" / \"## Pending\" section; add the line \"## Pending\" to it and "
+                    f"rerun: {me} move-pending")
+    english = lines[head].split()[1].lower().startswith("pending")
+    eol = "\r\n" if lines[head].endswith("\r\n") else "\n"
+    body = [l.rstrip("\r\n") for l in lines[head + 1:end]]
+    names = {rel, Path(rel).name, "`pendingFile`"}  # the template's pointer names the key
+
+    def is_pointer(l):  # an earlier pointer, as move-pending or the template writes it, naming the file; prose stays
+        return POINTER_START.match(l) is not None and any(n in l for n in names)
+
+    moved = [l for l in body if not is_pointer(l)]
+    while moved and not moved[0].strip():
+        moved.pop(0)
+    while moved and not moved[-1].strip():
+        moved.pop()
+    title = "Pending" if english else "Pendiente"
+    if old is None:
+        old = pending_skeleton(english)
+    flines = old.splitlines()
+    fhead, fend = pending_section(flines)
+    if fhead is None:
+        flines += ["", f"## {title}"]
+        fhead, fend = len(flines) - 1, len(flines)
+    section = flines[fhead + 1:fend]
+    while section and not section[-1].strip():
+        section.pop()
+    if moved:
+        section = (section or [""]) + ([""] if section and section[-1].strip() and not moved[0].startswith("- ") else [])
+        section += moved
+    new_file = flines[:fhead + 1] + section + ([""] + flines[fend:] if fend < len(flines) else [])
+    new_text = "\n".join(new_file).rstrip("\n") + "\n"
+    count = pending_count(new_text)
+    try:
+        link = Path(os.path.relpath(target, path.resolve().parent)).as_posix()
+    except ValueError:  # another drive on Windows: no relative path
+        link = target.as_posix()
+    pointer = (f"Pending items live in [`{rel}`]({link}); add and remove them there." if english else
+               f"Lo pendiente está en [`{rel}`]({link}); se añade y se quita allí.")
+    tail = [eol] if end < len(lines) else []
+    new_log = "".join(lines[:head + 1] + [eol, pointer + eol] + tail + lines[end:])
+    try:  # the pending file first: if the log write fails, the items are in both files, never in neither
+        write_atomic(target, new_text.encode("utf-8"))
+        write_atomic(path, new_log.encode("utf-8"))
+    except OSError as exc:
+        raise Usage(f"cannot write {target} or {path} ({exc}); check their permissions and rerun: {me} move-pending")
+    print(f"handoff: moved {sum(1 for l in moved if PENDING_ITEM.match(l))} item(s) to {rel} ({count} in all); "
+          "commit both files with the work")
+    return 0
+
+
+COMMANDS = {"check": cmd_check, "done": cmd_done, "own-row": cmd_own_row, "closed": cmd_closed,
+            "in-progress": cmd_in_progress, "close-row": cmd_close_row, "set-row": cmd_set_row, "clash": cmd_clash,
+            "archive": cmd_archive, "next-id": cmd_next_id, "move-pending": cmd_move_pending,
+            "add-pending": cmd_add_pending, "add-decision": cmd_add_decision, "preflight": cmd_preflight}
 
 
 def main(argv=None):
@@ -911,6 +1577,7 @@ def main(argv=None):
     c.add_argument("--strict", action="store_true")
     c.add_argument("--at", choices=("commit", "push"), default="commit",
                    help="where it runs: at commit time (the commit does not exist yet) or at push time (it does)")
+    c.add_argument("--pending", help="read the pending file (pendingFile) from this path; a missing one = no file")
     d = sub.add_parser("done")
     d.add_argument("text")
     d.add_argument("file", nargs="?")
@@ -919,6 +1586,17 @@ def main(argv=None):
     a.add_argument("file", nargs="?")
     a.add_argument("--date")
     a.add_argument("--dry-run", action="store_true")
+    f = sub.add_parser("preflight")
+    f.add_argument("--date")
+    f.add_argument("--strict", action="store_true")
+    m = sub.add_parser("move-pending")
+    m.add_argument("file", nargs="?")
+    ap = sub.add_parser("add-pending")
+    ap.add_argument("text")
+    ap.add_argument("--section")
+    ad = sub.add_parser("add-decision")
+    ad.add_argument("text")
+    ad.add_argument("--date")
     o = sub.add_parser("own-row")
     o.add_argument("commit", nargs="?")
     o.add_argument("branch", nargs="?")
@@ -980,17 +1658,18 @@ def main(argv=None):
             return 0
         if args.cmd == "archive":
             args.date = args.date or datetime.datetime.now(datetime.timezone.utc).date().isoformat()
-        elif args.cmd == "done":
+        elif args.cmd in ("done", "add-decision"):
             args.date = args.date or datetime.date.today().isoformat()
-        elif not ctx.config.get("logRows") and args.cmd not in ("check", "archive", "next-id"):
+        elif (not ctx.config.get("logRows") and args.cmd not in ("check", "archive", "next-id", "move-pending",
+                                                                 "add-pending", "preflight")
+              and not (args.cmd == "close-row" and task_record_path(ctx, args)[0])):  # a task id needs no branch rows
             if args.cmd in ("set-row", "close-row"):
                 print("handoff: logRows is off in .claude/gw.json, so there are no branch rows and nothing was written; "
                       f"enable it: set \"logRows\": true in .claude/gw.json, then rerun {args.cmd}")
                 return 1
             return 0  # the branch-row module is off: nothing to check (`check` still reads the size and Done rules)
-        return {"check": cmd_check, "done": cmd_done, "own-row": cmd_own_row, "closed": cmd_closed,
-                "in-progress": cmd_in_progress, "close-row": cmd_close_row, "set-row": cmd_set_row, "clash": cmd_clash,
-                "archive": cmd_archive, "next-id": cmd_next_id}[args.cmd](ctx, args)
+        with (write_lock(ctx, args.cmd) if args.cmd in WRITING_COMMANDS else contextlib.nullcontext()):
+            return COMMANDS[args.cmd](ctx, args)
     except Usage as exc:
         print(f"handoff: {exc}", file=sys.stderr)
         return 2

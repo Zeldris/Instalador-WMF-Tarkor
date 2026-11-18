@@ -7,6 +7,7 @@ Usage:
 Walks the versioned files (`git ls-files`; without git, everything except node_modules, .git and venvs) and reports,
 per section (those of references/formats.md):
   runtimes         .nvmrc, .node-version, .python-version, .tool-versions, package.json `engines`, go.mod `go`,
+                   rust-toolchain(.toml) `channel`, Cargo.toml `rust-version`,
                    pyproject `requires-python`, Dockerfile `FROM` (image and tag), CI `<language>-version`
   dependencies     package.json (dependencies/devDependencies), requirements*.txt, pyproject.toml, go.mod,
                    Cargo.toml; with the lockfile if there is one
@@ -150,9 +151,20 @@ def inventory(root, files=None, exclude=EXCLUDE):
                 inv['runtimes'].append(comp('go', m.group(1), path))
             for n, v in re.findall(r'^\s*(?:require\s+)?([\w.\-]+\.[\w.\-/]+)\s+(v\S+)', text, re.M):
                 inv['dependencies'].append(comp(n, v, path))
+        elif base in ('rust-toolchain', 'rust-toolchain.toml'):
+            inv['manifests'].append(path)
+            text = read(root, path)
+            m = re.search(r'^\s*channel\s*=\s*["\']([^"\']+)', text, re.M)
+            if not m and base == 'rust-toolchain' and '[' not in text:  # the legacy file: just the channel
+                m = re.search(r'^\s*([^\s#][^\s]*)', text, re.M)
+            if m:
+                inv['runtimes'].append(comp('rust', m.group(1), path))
         elif base == 'Cargo.toml':
             inv['manifests'].append(path)
             text = read(root, path)
+            m = re.search(r'^rust-version\s*=\s*["\']([^"\']+)', text, re.M)
+            if m:
+                inv['runtimes'].append(comp('rust', m.group(1), path, 'rust-version'))
             block = re.search(r'^\[dependencies\](.*?)(^\[|\Z)', text, re.S | re.M)
             for n, v, vt in re.findall(r'^([\w\-]+)\s*=\s*(?:"([^"]+)"|\{(?:[^}]*?\bversion\s*=\s*"([^"]+)")?)',
                                        block.group(1) if block else '', re.M):

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.6.0
+# galivelop-workflow v0.8.0
 """See or mark one task row of the roadmap in every language, without reading the roadmap whole (D55).
 
   python3 roadmap.py show ID              # the row of ID in each file of `roadmapFiles`, with its `## ` section
@@ -11,6 +11,10 @@
                                           # takes its `###` sub-sections), in the first file of `roadmapFiles`:
                                           # `ID  status  first 80 chars of the description`; --status keeps the
                                           # rows whose status contains TEXT (case-insensitive)
+
+  python3 roadmap.py check                # every version section has the same row ids in every file of `roadmapFiles`
+                                          # (D105); versions match by the heading's first code span, not its text;
+                                          # exit 1 lists, per version, the ids each file lacks; no-op with < 2 files
 
 A task row is a Markdown table line whose first cell is exactly ID. `roadmapFiles` in .claude/gw.json lists the
 roadmap in each language, the source first: `{"path", "done", "open"}`. `done` is the word written at the start of
@@ -145,6 +149,54 @@ def cmd_list(root, files, version, status):
             print(f"{row[0]}  {row[-1]}  {row[1][:80]}")
 
 
+def section_ids(root, entry):
+    """{version: set of row ids} of a roadmap file: every table row under a `## ` heading whose first code span is the
+    version (its `###` sub-sections included); headings without a code span are skipped."""
+    try:
+        lines = (root / entry["path"]).read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise RoadmapError(f"cannot read {entry['path']} ({exc.strerror}); fix roadmapFiles in .claude/gw.json")
+    out, version, header_next = {}, None, False
+    for line in lines:
+        if line.startswith("## "):
+            first = re.match(r"## `([^`]+)`", line)
+            version = first.group(1) if first else None
+            if version:
+                out.setdefault(version, set())
+            continue
+        spans = cells(line) if version else None
+        if not spans:
+            header_next = False
+            continue
+        row = [line[a:b].strip() for a, b in spans]
+        if all(set(c) <= set("-: ") for c in row):
+            continue  # the `---` separator
+        if len(row) >= 3 and row[0] and not header_next and not re.fullmatch(r"(?i)ids?", row[0]):
+            out[version].add(row[0])
+    return out
+
+
+def cmd_check(root, files):
+    """Fail when the row ids of a version differ between the files of `roadmapFiles` (D105)."""
+    if len(files) < 2:
+        return
+    per_file = [(entry["path"], section_ids(root, entry)) for entry in files]
+    problems = []
+    for version in sorted({v for _p, ids in per_file for v in ids}):
+        union = set().union(*(ids.get(version, set()) for _p, ids in per_file))
+        for path, ids in per_file:
+            if version not in ids:
+                problems.append(f"version {version}: no `## `{version}`` section in {path}; add it "
+                                f"(ids: {', '.join(sorted(union)) or 'none'})")
+                continue
+            missing = sorted(union - ids[version])
+            if missing:
+                problems.append(f"version {version}: {path} lacks {', '.join(missing)}; add those rows there "
+                                "(copy them from the other roadmap file, translated)")
+    if problems:
+        raise RoadmapError("roadmap files differ:\n  " + "\n  ".join(problems))
+
+
 def cmd_done(loaded, task, date, notes, force):
     if notes and len(notes) != len(loaded):
         raise RoadmapError(f"{len(notes)} --note for {len(loaded)} roadmap files; give one per file, in the order of "
@@ -167,8 +219,8 @@ def cmd_done(loaded, task, date, notes, force):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="See, list or mark roadmap rows in every language (roadmapFiles).")
-    parser.add_argument("command", choices=["show", "done", "list"])
-    parser.add_argument("task", help="task id, the first cell of its row (D55); for list, the version (e.g. 0.6)")
+    parser.add_argument("command", choices=["show", "done", "list", "check"])
+    parser.add_argument("task", nargs="?", help="task id, the first cell of its row (D55); for list, the version (e.g. 0.6)")
     parser.add_argument("--status", help="list: only rows whose status cell contains this text (case-insensitive)")
     parser.add_argument("--date", help="done: date in the status cell (default: today, YYYY-MM-DD)")
     parser.add_argument("--note", action="append", default=[],
@@ -182,6 +234,16 @@ def main(argv=None):
     except config.ConfigError as exc:
         print(f"roadmap: {exc}", file=sys.stderr)
         return 2
+    if args.command == "check":
+        try:
+            cmd_check(root, files)
+        except RoadmapError as exc:
+            print(f"roadmap: {exc}", file=sys.stderr)
+            return 1
+        return 0
+    if not args.task:
+        print(f"roadmap: {args.command} needs an argument; see `python3 scripts/roadmap.py --help`", file=sys.stderr)
+        return 1
     if not files:
         print("roadmap: roadmapFiles is empty in .claude/gw.json; list the roadmap in each language "
               "(see docs/en/config.md)", file=sys.stderr)

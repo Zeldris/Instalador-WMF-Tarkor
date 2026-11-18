@@ -5,7 +5,7 @@ disable-model-invocation: true
 license: MIT
 compatibility: Claude Code or any Agent Skills agent; git and python3 3.8+; the Galivelop-workflow repo cloned or added to the session
 metadata:
-  version: "0.6.0"
+  version: "0.8.0"
   source: "Galivelop workshop"
 ---
 
@@ -16,6 +16,9 @@ If `.claude/gw/gw-update.md` exists in the project, read it first: it holds what
 Updates what the workflow owns (scripts, skills, git hooks, settings entries, CI) and reports changes in what the
 project fills in (log, `REVIEW.md`, `GLOSSARY.md`, notes). The mechanical part is `apply.py`; this skill adds the
 judgement: what changed, what the user wants, what to merge by hand. Reply in the project's `language`.
+
+The project's installed copy of this skill is the old version. Once `<workflow>` is at the target tag (step 1), follow
+`<workflow>/skills/gw-update/SKILL.md` instead of the installed copy.
 
 ## 1. Compare versions
 
@@ -41,7 +44,7 @@ newer than the workflow: stop and tell the user to update the workflow clone.
 
 ```bash
 git -C <project> status --short            # a clean tree makes the update easy to review and undo
-python3 <workflow>/scripts/apply.py <project> --dry-run
+python3 <workflow>/scripts/apply.py <project> --dry-run            # add --summary for counts, decisions, renames and warnings only
 ```
 
 It lists what it would create, update or propose, what it would `move` or `remove` to migrate a project installed with
@@ -55,7 +58,10 @@ from the project's copy. Summarise it for the user with the CHANGELOG entries be
 ## 3. Show the template diff for filled files
 
 Log, `REVIEW.md`, `GLOSSARY.md` and the `.claude/gw/*.md` notes are never overwritten, because the project filled
-them in. Show what the **template** changed, not what differs from the project's file:
+them in. Show what the **template** changed, not what differs from the project's file. `apply.py --dry-run` already prints the
+template update notes (also for a log still at its old path) and, for `REVIEW.md` and `GLOSSARY.md`, the diff from the
+installed version's template to the new one (`--summary` counts them); if it warns that it cannot read the `v<X>`
+template, do it by hand:
 
 ```bash
 old="$(mktemp -d)"                                                              # a throwaway folder
@@ -108,7 +114,10 @@ user from the tables and opens a file only for a row in doubt.
    were 89% of the paths of one update. Review the files the project merged by hand and its own files.
 3. Commit with the message `apply.py` suggested and a real `Next:` line (`Siguiente:` in Spanish projects), update
    the log in the same commit, and `git push`; the pre-push runs the check.
-4. Open the PR from the update branch to `protectedBranch` (the `pr` skill writes the body, listing the CHANGELOG
+4. Open the PR only after the three phases of the project's `AGENTS.md` (code review, environment, closing), not right
+   after the commit. The PR's CI runs the base branch's old `.githooks/pre-commit`: if it rejects text of the workflow
+   itself, mark that line with `gw-allow-secret` and say so in the PR body.
+   Open the PR from the update branch to `protectedBranch` (the `pr` skill writes the body, listing the CHANGELOG
    entries between X and Y and what was merged by hand) and give the user its link. Merging stays the user's call.
 
 Done when doctor is green, no `*.gw-new` is left, `version` equals Y and the PR is open.

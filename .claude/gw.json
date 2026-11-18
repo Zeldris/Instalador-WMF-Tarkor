@@ -1,6 +1,6 @@
 {
   "$schema": "gw/schema/gw.schema.json",
-  "version": "0.6.0",
+  "version": "0.8.0",
   "schemaVersion": 1,
   "language": "es",
   "visibleLanguages": [],
@@ -23,7 +23,8 @@
     "python3 -m unittest discover -s .claude/skills/gw-media-content/scripts",
     "python3 -m unittest discover -s .claude/skills/gw-opt-ai/scripts",
     "python3 -m unittest discover -s .claude/skills/gw-opt-tokens/scripts",
-    "python3 -m unittest discover -s .claude/skills/gw-scout-updates/scripts"
+    "python3 -m unittest discover -s .claude/skills/gw-scout-updates/scripts",
+    "python3 .claude/gw/scripts/ci-local.py --validate"
   ],
   "requireRetro": true,
   "content": [
@@ -79,10 +80,15 @@
     {
       "path": "docs/05-plan-de-trabajo.md",
       "done": "hecho",
-      "open": ["pendiente", "en curso"]
+      "open": [
+        "pendiente",
+        "en curso"
+      ]
     }
   ],
   "taskId": "(?:INS|FLU)-\\d+",
   "commitNext": true,
-  "agentSignatures": false
+  "agentSignatures": false,
+  "agentsSkillsDir": "",
+  "pendingFile": "docs/records/pending.md"
 }

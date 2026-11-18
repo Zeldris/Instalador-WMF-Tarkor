@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.6.0
+# galivelop-workflow v0.8.0
 # After /code-review of the diff against the protected branch, with its fixes pushed: records HEAD's sha in the
 # config's `reviewMark` and commits it ("Revisado: <sha>" / "Reviewed: <sha>" by `language`). The mark travels with
 # the repo, so other accounts and scheduled tasks see it; .githooks/pre-push and the PR hook accept code up to it.
@@ -57,20 +57,48 @@ if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
   echo "reviewed: the tree has uncommitted changes to tracked files; commit and push them, review again, then: git add -u && git commit && git push" >&2
   exit 1
 fi
-git fetch -q origin "$protected" "$branch" || {
-  echo "reviewed: cannot fetch origin/$protected and origin/$branch; push the branch first: git push -u origin $branch" >&2; exit 1; }
+# A project that adopts the flow before it has its protected branch (D109): origin has no such branch, so the review
+# base is the empty tree (the whole history is what the push creating it brings, as the pre-push judges it with an empty
+# base). Only a definite "no such ref" (ls-remote exit 2) counts; any other failure (network, auth) still fails closed.
+has_protected=true
+# The full ref name: a bare "main" would also match refs/heads/backup/main (ls-remote compares by the tail).
+lsr_err="$(git ls-remote --exit-code origin "refs/heads/$protected" 2>&1 >/dev/null)"; lsr_rc=$?
+case "$lsr_rc" in
+  0) ;;
+  2) has_protected=false ;;
+  *) echo "reviewed: cannot reach origin to look for $protected (git ls-remote exit $lsr_rc): $lsr_err" >&2
+     echo "reviewed: fix the network, the credentials or the remote and retry: git ls-remote --heads origin $protected" >&2; exit 1 ;;
+esac
+push_cmd="$(printf 'bash %q %q' "$here/push.sh" "$branch")"  # quoted: the root may have spaces (D94)
+if [ "$has_protected" = "true" ]; then
+  git fetch -q origin "$protected" "$branch" || {
+    echo "reviewed: cannot fetch origin/$protected and origin/$branch; push the branch first: $push_cmd" >&2; exit 1; }
+else
+  if [ "$branch" = "$protected" ]; then
+    # Branch first, then push.sh with it: push.sh takes a branch, not a refspec (D94), so no `git push HEAD:<branch>`.
+    printf 'reviewed: origin has no %s yet and you are on %s itself; move the work to another branch, push it and mark from there: git switch -c <work-branch> && bash %q <work-branch> && bash %q\n' \
+      "$protected" "$protected" "$here/push.sh" "$here/reviewed.sh" >&2; exit 1
+  fi
+  echo "reviewed: origin has no $protected yet; reviewing the whole history of $branch (empty base)" >&2
+  git fetch -q origin "$branch" || {
+    echo "reviewed: cannot fetch origin/$branch; push the branch first: $push_cmd" >&2; exit 1; }
+fi
 head="$(git rev-parse HEAD)"
 if [ "$head" != "$(git rev-parse -q --verify "refs/remotes/origin/$branch")" ]; then
-  echo "reviewed: HEAD is not what origin/$branch has; push the fixes before marking: git push -u origin $branch" >&2; exit 1
+  echo "reviewed: HEAD is not what origin/$branch has; push the fixes before marking: $push_cmd" >&2; exit 1
 fi
-if ! git merge-base --is-ancestor "refs/remotes/origin/$protected" HEAD; then
+if [ "$has_protected" = "true" ] && ! git merge-base --is-ancestor "refs/remotes/origin/$protected" HEAD; then
   echo "reviewed: the branch does not include the latest origin/$protected; merge it, review again and mark: git merge origin/$protected" >&2
   exit 1
 fi
 
 if [ "$retro" = "true" ]; then
-  base="$(git merge-base HEAD "refs/remotes/origin/$protected")" || {
-    echo "reviewed: no common history with origin/$protected; fetch more: git fetch --deepen=200 origin $protected" >&2; exit 1; }
+  if [ "$has_protected" = "true" ]; then
+    base="$(git merge-base HEAD "refs/remotes/origin/$protected")" || {
+      echo "reviewed: no common history with origin/$protected; fetch more: git fetch --deepen=200 origin $protected" >&2; exit 1; }
+  else
+    base="$(git hash-object -t tree /dev/null)"  # the empty tree: every file of the branch is "added"
+  fi
   decided=""
   added="$(git diff --no-renames --name-only --diff-filter=A "$base" HEAD | grep -E -- "$retro_file_re" || true)"
   while IFS= read -r file; do
@@ -105,12 +133,21 @@ if [ -n "$prev" ] && git cat-file -e "$prev^{commit}" 2>/dev/null && git merge-b
   else
     since_what="the previous review mark $prev"
   fi
-else
+elif [ "$has_protected" = "true" ]; then
   since="$(git merge-base HEAD "refs/remotes/origin/$protected" 2>/dev/null || true)"; since_what="the fork from origin/$protected (no usable previous mark)"
+else
+  since="EMPTY"; since_what="the start of the history (origin has no $protected yet)"
 fi
 if [ -n "$since" ]; then
-  if unreviewed="$(bash "$here/is-code.sh" "$since" HEAD 2>/dev/null)" \
-    && own="$(git -c core.quotePath=false log --format= --name-only "$since..HEAD" "^refs/remotes/origin/$protected" 2>/dev/null)"; then
+  if [ "$since" = "EMPTY" ]; then
+    is_code_since=""; log_range=(HEAD)
+  elif [ "$has_protected" = "true" ]; then
+    is_code_since="$since"; log_range=("$since..HEAD" "^refs/remotes/origin/$protected")
+  else
+    is_code_since="$since"; log_range=("$since..HEAD")
+  fi
+  if unreviewed="$(bash "$here/is-code.sh" "$is_code_since" HEAD 2>/dev/null)" \
+    && own="$(git -c core.quotePath=false log --format= --name-only "${log_range[@]}" 2>/dev/null)"; then
     # The code files (tree diff) that the branch's own commits touched; whole lines, so paths with spaces stay whole.
     if [ -n "$unreviewed" ] && [ -n "$own" ]; then
       unreviewed="$(printf '%s\n' "$unreviewed" | grep -Fxf <(printf '%s\n' "$own") || true)"
@@ -122,7 +159,7 @@ if [ -n "$since" ]; then
       while IFS= read -r file; do printf '  %s\n' "$file" >&2; done <<<"$unreviewed"
     fi
   else
-    echo "reviewed: warning: could not list the code changed since $since_what; check by hand: bash $here/is-code.sh $since HEAD" >&2
+    echo "reviewed: warning: could not list the code changed since $since_what; check by hand: bash $here/is-code.sh '$is_code_since' HEAD" >&2
   fi
 fi
 
