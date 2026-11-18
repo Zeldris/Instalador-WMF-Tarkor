@@ -15,7 +15,7 @@ cada commit.**
 | **Último commit en `main`** | Fusión del PR #16 (2026-11-12, `5d3fcf3`): `INS-44`, `INS-45` e `INS-57` (borrar datos al desinstalar en Windows y Linux, hoja de estilos), con la confirmación de la usuaria y el CI de GitHub en verde. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 (SQLite) no está en el juego: su PR #1 se cerró sin fusionar y se rehace en `INS-60`. |
 | **Tarea en curso · `claude/installer-docs-review-09e7vs`** | Al fusionarse, rama terminada: no queda nada pendiente en ella. |
-| **Tarea en curso · `claude/gw-update-0.8.0`** | FLU-12 en curso: flujo 0.6.0 → 0.8.0 aplicado (apply.py --update, sin .agents/skills); AGENTS.md, CLAUDE.md y REVIEW.md fusionados a mano; check en verde. Parche local en test_measure.py de gw-opt-tokens (fallo del flujo 0.8.0, falta llevarlo a su repo). Falta: CI, revisión de lo fusionado a mano, gw-opt-tokens y retro, reviewed.sh y PR. |
+| **Tarea en curso · `claude/gw-update-0.8.0`** | FLU-12 en curso: flujo 0.8.0 aplicado y CI en verde (3712df8). Revisión hecha: 2 medios esperan a la usuaria (Q-1 gancho whole-read duplicado en settings.json; Q-2 pendingFile), 1 leve a pendientes. Falta: aplicar Q-1/Q-2, gw-opt-tokens y retro, reviewed.sh y PR. |
 | **Tests** | 2026-11-12: núcleo `cargo test -p tarkor-nucleo` 149 y el check del proyecto en verde. Asistente `vitest` y E2E con el Ollama falso: último verde el 2026-10-25 (`vitest` 27 entonces). |
 
 ## Dónde está todo (para saber qué sigue)
@@ -137,7 +137,7 @@ cada commit.**
     copia `scripts/config.py` y `schema/gw.schema.json` con la estructura del repo del flujo y en un proyecto falla
     (5 errores, `FileNotFoundError`); aquí lleva un parche local (`workflow_file()` mira también `.claude/gw/`, como
     hace `measure.py`). El aviso de `apply.py` sobre `docs/propuestas` en `docs/13:14` es un falso positivo: es una
-    ruta del repo GVIG, no de este. La mayoría de los hallazgos del punto 16 llegaron arreglados en la 0.5.2.
+    ruta del repo GVIG, no de este. La mayoría de los hallazgos del punto 16 llegaron arreglados en la 0.5.2. En la 0.8.0 el fallo sigue y el parche se rehízo; leve de la revisión de `FLU-12` (no vuelve a revisarse en su PR): repite en tres sitios (líneas 389, 459 y 483) el respaldo raíz/`gw` en lugar de un solo helper.
 22. Pendientes leves de la revisión de bloque `INS-63`…`INS-67` (2026-11-15; no vuelven a revisarse en su PR): el
     porcentaje de la barra de descarga (`pantallasIa.tsx`, ~160 y ~169) se calcula dos veces (`aria-valuenow` y
     ancho); el job e2e de `app.yml` llama dos veces a `tools/qa/e2e.sh` y repite vite y cargo-about para la variante
