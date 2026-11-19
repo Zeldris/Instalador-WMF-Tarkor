@@ -166,3 +166,5 @@ Instalador de escritorio de Tarkor (Tauri v2, Windows y Linux). El flujo viene d
   o el arranque de procesos.
 - Lo que dependa del equipo de la usuaria (la Steam Deck, un Windows limpio) se apunta en el plan como pendiente de
   `INS-8` o de la fase 5.
+- En cadenas de órdenes con `&&`, un recuento que puede dar cero va con `|| true` (`grep -c … || true`): si no, corta
+  lo que sigue (retro de `FLU-14`).

@@ -17,7 +17,7 @@ cada commit.**
 | **Tarea en curso · `claude/installer-docs-review-09e7vs`** | Al fusionarse, rama terminada: no queda nada pendiente en ella. |
 | **Tarea en curso · `claude/gw-update-0.8.0`** | Al fusionarse, rama terminada: no queda nada pendiente en ella. |
 | **Tarea en curso · `claude/flu-13-ledger-ci`** | FLU-13 abierta (pendiente): paths-ignore de docs/metrics en check.yml y app.yml; propuesta del libro de tokens en la retro de FLU-12; FLU-12 cerrada. PR a main abierto en paralelo al #30; se fusiona tras él con el CI en verde. |
-| **Tarea en curso · `claude/gw-update-0.8.1`** | FLU-14 en curso: flujo en v0.8.1, check en verde, revisión (fase 1) sin hallazgos; opt-tokens y retro escritas (retro-2026-11-19-flu-14.md, pendiente de la usuaria). Falta: confirmar la retro, CI en verde, fase 3 y PR. |
+| **Tarea en curso · `claude/gw-update-0.8.1`** | Al fusionarse, rama terminada: no queda nada pendiente en ella. |
 | **Tests** | 2026-11-12: núcleo `cargo test -p tarkor-nucleo` 149 y el check del proyecto en verde. Asistente `vitest` y E2E con el Ollama falso: último verde el 2026-10-25 (`vitest` 27 entonces). |
 
 ## Dónde está todo (para saber qué sigue)
