@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.0
+# galivelop-workflow v0.8.1
 """Which models the workflow may use: `models.disabled` in .claude/gw.json (B7).
 
   python3 models.py list                  # the disabled entries, one per line (nothing when none)

@@ -4,7 +4,7 @@ description: Token-spend retrospective: measures where a session's tokens went a
 license: MIT
 compatibility: Claude Code or any Agent Skills agent; git; python3 for scripts/measure.py (standard library only)
 metadata:
-  version: "0.8.0"
+  version: "0.8.1"
   source: "Galivelop workshop; generalised from the Tarkor, installer, portal and private-project-1 gw-opt-tokens"
 ---
 
@@ -22,8 +22,8 @@ retries and redone work.
 
 ## Steps
 
-1. **Measure, do not remember.** Run `python3 <skill folder>/scripts/measure.py` (newest session, last 24 h; if it has fewer than `measure.minCalls` calls, e.g. after a `/clear`, the previous session of the same branch, and it says so). Options:
-   `--hours N` (`0` = whole session), `--since <ISO|sha>` (from a date or a commit), `--session <path>`, `--top N`;
+1. **Measure, do not remember.** Run `python3 <skill folder>/scripts/measure.py` (newest session, from its last `/clear` or compaction, else the last 24 h; if it has fewer than `measure.minCalls` calls, e.g. after a `/clear`, the previous session of the same branch, and it says so). Options:
+   `--hours N` (`0` = whole session; given, it replaces the `/clear` start), `--since <ISO|sha>` (from a date or a commit), `--session <path>`, `--top N`;
    `--help` lists them. The script finds the project root with `git rev-parse --show-toplevel` and the session log in
    the repo's folder or a parent folder, warning on stderr if the session was opened outside the repo. Read only its
    output, never the raw log. It gives:

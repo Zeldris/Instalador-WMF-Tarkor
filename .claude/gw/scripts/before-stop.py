@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.0
+# galivelop-workflow v0.8.1
 """Stop hook: do not let Claude finish with commits that are not pushed, or with changes the log does not mention.
 
 "What is not pushed does not exist" (AGENTS.md) is the workflow's most important rule and, until this hook, only the

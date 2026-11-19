@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.0
+# galivelop-workflow v0.8.1
 """The files the phase 1 `/code-review` reads before the protected branch: the branch's diff without `vendored` files (D82).
 
   python3 review-scope.py [--base REV] [--workflow DIR] [--all]
@@ -16,11 +16,14 @@ file is listed by its new path (a rename is read as the old path deleted and the
 the working tree: review a clean checkout of the commit. Known limits: the workflow repo is trusted to be at a published version, and the tree must be clean. Deleted files are listed (there is nothing left to compare).
 
 The workflow copy that says what is vendored is `--workflow DIR`, else the env var GW_WORKFLOW, else this script's own
-repo when that is the workflow. Without one the whole diff is printed, with a note on stderr saying so (reviewing too
-much is the safe side). `--all` prints the whole diff without asking. Fails closed on what it cannot know: an invalid
+repo when that is the workflow, else the repo under review when it is the workflow, else (a project) the sibling clone
+`../Galivelop-workflow` when it is at the `version` of `.claude/gw.json`. Without one it fails closed (D132) with the
+command that clones the tagged version; a project's vendored files would otherwise be handed over as its own code.
+`--all` prints the whole diff without asking. Fails closed on what it cannot know: an invalid
 config, a git error or a `--base` that is not a commit -> exit 2 with what fixes it. Python 3.8+ standard library only.
 """
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -68,11 +71,69 @@ def changed(root, base):
     return [p for p in out.split("\0") if p]
 
 
-def workflow_dir(arg):
-    for cand in (arg, os.environ.get("GW_WORKFLOW"), str(HERE.parent)):
-        if cand and (Path(cand) / "scripts" / "apply.py").is_file() and (Path(cand) / "skills").is_dir():
+WORKFLOW_NAME = "galivelop-workflow"
+
+
+def plugin_field(cand, field):
+    try:
+        data = json.loads((Path(cand) / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data.get(field) if isinstance(data, dict) else None
+
+
+def is_workflow(cand):
+    """A folder is the workflow repo only when it has the workflow layout and its plugin.json names the workflow (a
+    project that vendors the scripts has scripts/apply.py and skills/ too, and must not be run as the workflow)."""
+    return (bool(cand) and (Path(cand) / "scripts" / "apply.py").is_file() and (Path(cand) / "skills").is_dir()
+            and plugin_field(cand, "name") == WORKFLOW_NAME)
+
+
+def plugin_version(cand):
+    return plugin_field(cand, "version")
+
+
+def workflow_dir(arg, root, cfg):
+    """D132: --workflow, else $GW_WORKFLOW (both must be the workflow repo: a wrong one is an error, not ignored; a
+    version other than the project's warns), else this script's own repo, else `root` when that is the workflow. A
+    project looks for the clone at `workflowClone` (default `../Galivelop-workflow`) at the version of its
+    `.claude/gw.json`. None found, or no `version` to compare: fail closed with the command that fixes it."""
+    version = cfg.get("version")
+    version = version if isinstance(version, str) and version else None
+    for origin, cand in (("--workflow", arg), ("GW_WORKFLOW", os.environ.get("GW_WORKFLOW"))):
+        if not cand:
+            continue
+        if not is_workflow(cand):
+            raise ScopeError(f"{origin} {cand} is not the {WORKFLOW_NAME} repo (no scripts/apply.py, skills/ and a "
+                             f".claude-plugin/plugin.json named {WORKFLOW_NAME}); point it at a clone: "
+                             f"python3 {Path(__file__).name} --workflow <DIR> (or --all to list the whole diff)")
+        found = plugin_version(cand)
+        if version and found != version:
+            print(f"{PROG}: warning: {origin} {cand} is at v{found}, the project at v{version}; what is vendored "
+                  f"may differ: git clone --branch v{version} --depth 1 {repo_url(cand, cfg)} <DIR>", file=sys.stderr)
+        return Path(cand)
+    for cand in (str(HERE.parent), str(root)):
+        if is_workflow(cand):
             return Path(cand)
-    return None
+    clone = (Path(root).resolve() / config.workflow_clone(cfg)).resolve()
+    url = repo_url(clone, cfg)
+    if version is None:
+        raise ScopeError(f"{Path(root) / '.claude' / 'gw.json'} has no \"version\", so no workflow copy can be matched; "
+                         f"add it (the installed workflow version, as in templates/gw.json) or clone one and give it: "
+                         f"git clone --depth 1 {url} <DIR> && python3 {Path(__file__).name} --workflow <DIR> "
+                         "(or --all to list the whole diff)")
+    if is_workflow(clone) and plugin_version(clone) == version:
+        return clone
+    seen = f"; {clone} is at v{plugin_version(clone)}, not v{version}" if is_workflow(clone) else ""
+    raise ScopeError(f"no workflow copy at v{version} to tell what is vendored{seen}; clone the tagged version and "
+                     f"rerun with --workflow: git clone --branch v{version} --depth 1 {url} <DIR> && "
+                     f"python3 {Path(__file__).name} --workflow <DIR> (or --all to list the whole diff)")
+
+
+def repo_url(cand, cfg):
+    """The workflow's clone URL: `repository` of its plugin.json when `cand` is the workflow, else `workflowRepository`."""
+    url = plugin_field(cand, "repository") if is_workflow(cand) else None
+    return url if isinstance(url, str) and url else config.workflow_repository(cfg)
 
 
 def vendored(root, workflow, timeout=None):
@@ -131,7 +192,7 @@ def trivial(root, cfg, base, kept):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--base", help="the diff starts at the merge base with this commit (default origin/<protectedBranch>)")
-    ap.add_argument("--workflow", help="the workflow repo whose copies are vendored (default $GW_WORKFLOW, else this repo)")
+    ap.add_argument("--workflow", help="the workflow repo whose copies are vendored (default $GW_WORKFLOW, else this repo, else ../Galivelop-workflow at the project's version)")
     ap.add_argument("--trivial", action="store_true",
                     help="exit 0 and say why when the scoped diff is trivial (no code, or reviewTrivialLines changed "
                          "lines or fewer), 1 otherwise; prints no paths")
@@ -146,12 +207,7 @@ def main(argv=None):
         paths = changed(root, base)
         skip = set()
         if not args.all:
-            workflow = workflow_dir(args.workflow)
-            if workflow is None:
-                print(f"{PROG}: no workflow repo to compare with, so the whole diff is listed; give it: "
-                      f"python3 {Path(__file__).name} --workflow <workflow repo>", file=sys.stderr)
-            else:
-                skip = vendored(root, workflow)
+            skip = vendored(root, workflow_dir(args.workflow, root, cfg))
         kept = [p for p in paths if p not in skip]
         if args.trivial:
             return trivial(root, cfg, base, kept)

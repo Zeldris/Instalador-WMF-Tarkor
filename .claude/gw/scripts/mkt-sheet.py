@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.0
+# galivelop-workflow v0.8.1
 """One-page presentation sheets written in Markdown, built to a styled A4 HTML and a PDF (A10).
 
 The sheets live as Markdown (the only place they are edited); the HTML and the PDF are generated from them, so the

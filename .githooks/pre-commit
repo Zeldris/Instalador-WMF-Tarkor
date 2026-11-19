@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.8.0
+# galivelop-workflow v0.8.1
 # Git pre-commit hook (copied into projects as .githooks/pre-commit; enable with: git config core.hooksPath .githooks).
 #   - No secrets in a commit: by file (.env except .env.example/.sample/.template, *.pem, *.key, *.p12, *.pfx, *.jks,
 #     id_rsa and friends, .netrc, and the local private list .claude/gw.local.json) and by added content (well-known
