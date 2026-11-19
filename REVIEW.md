@@ -1,4 +1,4 @@
-<!-- galivelop-workflow v0.8.0 -->
+<!-- galivelop-workflow v0.8.1 -->
 # Guía de revisión
 
 Lo que el revisor (`/code-review`) comprueba en cada diff del instalador, además de los fallos de

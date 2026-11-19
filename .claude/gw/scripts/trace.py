@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.0
+# galivelop-workflow v0.8.1
 """Everything about one task id, gathered on the spot from the repo (D14); nothing is stored, so there is no index
 to keep in step.
 

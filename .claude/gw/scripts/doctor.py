@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.0
+# galivelop-workflow v0.8.1
 """Check that a project has the workflow set up (used by /gw-doctor and CI). No AI, no network.
 
   python3 doctor.py            # one line per check: OK / WARN / FAIL, each problem with the command that fixes it
@@ -488,6 +488,15 @@ def is_flow_script(command, root):
     return False
 
 
+def matchers_overlap(a, b):
+    """True when two hook matchers can fire on the same tool: an empty or `*` matcher matches everything, else they
+    share an alternative (split on `|`, anchors and parentheses ignored)."""
+    def alts(m):
+        return None if m.strip() in ("", "*") else {x.strip("^$() ") for x in m.split("|")}
+    x, y = alts(a), alts(b)
+    return x is None or y is None or bool(x & y)
+
+
 def stale_flow_hooks(hooks, root):
     """[(event, command)] of SessionStart/PreToolUse/Stop hooks that run a workflow script (by name and by its
     header) from another folder."""
@@ -560,6 +569,30 @@ def check_settings(rep, root):
                         rel = os.path.relpath(f, str(root))
                         rep.fail(f"settings {event}", f"hook command points to {rel}, which does not exist",
                                  "restore it (/gw-update) or fix the command in .claude/settings.json")
+    for event, entries in hooks.items():
+        seen = {}  # command -> matchers of the entries that already register it
+        for entry in entries if isinstance(entries, list) else []:
+            for h in (entry.get("hooks") or []) if isinstance(entry, dict) and isinstance(entry.get("hooks"), list) else []:
+                command = h.get("command") if isinstance(h, dict) else None
+                if not command:
+                    continue
+                matcher = entry.get("matcher") or ""
+                for other in seen.get(command, []):
+                    if not matchers_overlap(other, matcher):
+                        continue  # disjoint matchers: the command runs once per tool call
+                    problems += 1
+                    if ".claude/gw/scripts/" in command:
+                        rep.fail(f"settings {event}", f"'{command}' is registered in two entries (matchers "
+                                 f"'{other}' and '{matcher}') that match the same tool, so it runs twice",
+                                 "python3 scripts/apply.py --update (from the workflow) drops the old one, "
+                                 "or delete one entry in .claude/settings.json")
+                    else:
+                        rep.warn(f"settings {event}", f"'{command}' is registered in two entries (matchers "
+                                 f"'{other}' and '{matcher}') that match the same tool, so it runs twice",
+                                 f"delete one of the two entries (matcher '{matcher}') from .claude/settings.json by hand; "
+                                 "apply.py --update does not touch project commands")
+                    break
+                seen.setdefault(command, []).append(matcher)
     for event, command in stale_flow_hooks(hooks, root):
         problems += 1
         rep.warn(f"settings {event}", f"'{command}' runs a workflow script from outside .claude/gw/scripts/ "
@@ -1116,6 +1149,22 @@ def check_media_tools(rep, root):
         rep.ok("media tools", f"gw-media-content: {', '.join(found)} found")
 
 
+def check_related_tests(rep, cfg):
+    """D137: WARN when branchCheck is "related" (the default) but relatedTests has no command in fast or slow: the
+    branch pre-push then falls back to the full check on every push (config.py push_scope), so "related" saves nothing.
+    Any other branchCheck, or a relatedTests with a command, says nothing."""
+    if not cfg or cfg.get("branchCheck", "related") != "related":
+        return
+    related = cfg.get("relatedTests")
+    related = related if isinstance(related, dict) else {}
+    if any(related.get(kind) for kind in ("fast", "slow")):
+        return
+    rep.warn("related tests", 'branchCheck is "related" but relatedTests has no command, so the branch pre-push has '
+             "no related tests to run and runs the full check on every push",
+             'fill relatedTests in .claude/gw.json ({"fast": ["<test command for {files}>"], "slow": []}, see '
+             'docs/en/config.md), or set "branchCheck": "full" to say so')
+
+
 GITHUB_REMOTE = re.compile(r"^(?:https?://(?:[^/@]+@)?|ssh://(?:[^/@]+@)?|[^/@:]+@)github\.com[:/]", re.I)
 
 
@@ -1175,6 +1224,7 @@ def run(root):
     check_test_dirs(rep, root, cfg)
     check_media_folder(rep, root)
     check_media_tools(rep, root)
+    check_related_tests(rep, cfg)
     proposals = check_proposals(rep, root)
     check_skills(rep, root, version, proposals, cfg)
     check_session(rep, root)

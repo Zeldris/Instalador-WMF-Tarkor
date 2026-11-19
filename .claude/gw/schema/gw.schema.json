@@ -1,5 +1,5 @@
 {
-  "$comment": "galivelop-workflow v0.8.0",
+  "$comment": "galivelop-workflow v0.8.1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/zeldris/Galivelop-workflow/main/schema/gw.schema.json",
   "title": "Galivelop-workflow project config (.claude/gw.json)",
@@ -60,6 +60,18 @@
       "minimum": 0,
       "default": 30,
       "description": "A phase 1 review diff of this many changed lines or fewer (vendored files left out) is trivial: review-scope.py --trivial exits 0 and the session reviews it without a subagent (B27). 0 = only a diff with no code is trivial."
+    },
+    "workflowClone": {
+      "type": "string",
+      "minLength": 1,
+      "default": "../Galivelop-workflow",
+      "description": "Where review-scope.py looks for a clone of the workflow repo (relative to the repo root) to tell which files are vendored (D132); it must be at the version of this file."
+    },
+    "workflowRepository": {
+      "type": "string",
+      "minLength": 1,
+      "default": "https://github.com/Zeldris/Galivelop-workflow",
+      "description": "URL review-scope.py tells to clone when it finds no workflow copy (D132); with a workflow copy at hand, its plugin.json repository wins."
     },
     "wholeReadWarnBytes": {
       "type": "integer",

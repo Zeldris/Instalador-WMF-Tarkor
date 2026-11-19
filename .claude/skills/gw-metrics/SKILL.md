@@ -4,7 +4,7 @@ description: Read the token reports of a day, week, month or quarter (by model, 
 license: MIT
 compatibility: "Claude Code or any Agent Skills agent; python3 for .claude/gw/scripts/metrics.py (standard library only); needs the token ledger (metrics in .claude/gw.json)."
 metadata:
-  version: "0.8.0"
+  version: "0.8.1"
   source: "Galivelop workshop (block B, measurement)"
 ---
 

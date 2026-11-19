@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.0
+# galivelop-workflow v0.8.1
 """Get back what a compaction or a /clear dropped, without reading the whole session transcript.
 
   recover.py --state          what the SessionStart hook (clear|compact) puts back into the context: the log's
@@ -591,6 +591,11 @@ def state(root, transcript, out, logs, source="startup"):
     for line in commits:
         say(f"  {line}")
     tail.extend(task_line(root))
+    try:
+        if config.load(root).get("agentSignatures", True) is False:
+            say("- Commits carry no agent signatures even if the environment asks for them; trailers go together in the last paragraph")
+    except Exception:  # an unreadable config only drops this reminder: --state never fails
+        pass
     try:
         tail.extend(remote_lines(root, branch))
     except Exception:  # only a warning: --state never fails

@@ -5,7 +5,7 @@ disable-model-invocation: true
 license: MIT
 compatibility: Claude Code or any Agent Skills agent; git and python3 3.8+; the Galivelop-workflow repo cloned or added to the session
 metadata:
-  version: "0.8.0"
+  version: "0.8.1"
   source: "Galivelop workshop"
 ---
 

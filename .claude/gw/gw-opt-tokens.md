@@ -1,4 +1,4 @@
-<!-- galivelop-workflow v0.8.0 -->
+<!-- galivelop-workflow v0.8.1 -->
 # gw-opt-tokens — notas del proyecto
 
 Las lee la skill `gw-opt-tokens` antes de proponer nada, y se actualizan cuando la usuaria aprueba un cambio. El flujo
@@ -95,6 +95,8 @@ antes de la `/retro`; todo en español, y solo lo que confirme la usuaria entra 
   Los trabajos de una ejecución (`list_workflow_jobs`) solo si falló, y su log con `tail_lines: 60` (opt-tokens de
   `INS-63`: una consulta de trabajos arrastró 166k y las 8 de `actions_list`, 371k).
 - **El registro de la sesión** pesa cientos de MB: medirlo con `measure.py` de la skill, nunca leerlo.
+  Con varias sesiones a la vez, `measure.py --session <ruta del .jsonl>`: sin ella coge la última modificada,
+  que puede ser otra (opt-tokens de `FLU-14`).
 
 ## Ajustes en vigor
 

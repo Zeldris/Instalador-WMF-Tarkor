@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.0
+# galivelop-workflow v0.8.1
 """Startup-context and compaction-loop guard (B21). Imported by recover.py --state; also a CLI for hand use.
 
 After a /clear or a compaction the session starts again with the log state, AGENTS.md/CLAUDE.md, hook output, skills

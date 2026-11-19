@@ -6,6 +6,7 @@ import datetime as dt
 import itertools
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -316,6 +317,110 @@ class Measure(unittest.TestCase):
         self.assertNotEqual(none.returncode, 0)
         self.assertIn('No calls in that period', none.stderr)
         self.assertTrue(os.path.exists(new))
+
+    def clear_line(self, hours_ago: float) -> dict:
+        return _line('user', '<command-name>/clear</command-name>\n<command-message>clear</command-message>\n'
+                             '<command-args></command-args>', timestamp=ago(hours_ago))
+
+    def run_session(self, parts: list, *args: str) -> subprocess.CompletedProcess:
+        d = folder()
+        path = log(os.path.join(d, 's.jsonl'), *parts)
+        return subprocess.run(['python3', MEASURE, '--session', path, *args], capture_output=True, text=True, cwd=d)
+
+    def test_d138_default_starts_after_the_last_clear(self):
+        parts = [response('a', 10, timestamp=ago(5)), response('b', 20, timestamp=ago(4)), self.clear_line(3),
+                 response('c', 30, timestamp=ago(2))]
+        r = self.run_session(parts)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('API calls: 1  |', r.stdout)
+        self.assertIn('period: since the last /clear (', r.stdout)
+
+    def test_d138_without_a_clear_keeps_the_24_hours(self):
+        parts = [response('a', 10, timestamp=ago(30)), response('b', 20, timestamp=ago(5)), response('c', 30, timestamp=ago(2))]
+        r = self.run_session(parts)
+        self.assertIn('API calls: 2  |', r.stdout)
+        self.assertIn('period: last 24 h', r.stdout)
+
+    def test_d138_the_later_of_clear_and_compaction_wins(self):
+        def boundary(hours_ago):
+            return _line('system', subtype='compact_boundary', content='Conversation compacted', timestamp=ago(hours_ago))
+        later_compaction = [response('a', 10, timestamp=ago(6)), self.clear_line(5), response('b', 20, timestamp=ago(4)),
+                            boundary(3), response('c', 30, timestamp=ago(2)), response('d', 40, timestamp=ago(1))]
+        r = self.run_session(later_compaction)
+        self.assertIn('API calls: 2  |  compactions: 0', r.stdout)
+        self.assertIn('since the last compaction (', r.stdout)
+        later_clear = [response('a', 10, timestamp=ago(6)), boundary(5), response('b', 20, timestamp=ago(4)),
+                       self.clear_line(3), response('c', 30, timestamp=ago(2))]
+        r = self.run_session(later_clear)
+        self.assertIn('API calls: 1  |', r.stdout)
+        self.assertIn('since the last /clear (', r.stdout)
+
+    def test_d138_explicit_since_or_hours_do_not_apply_it(self):
+        parts = [response('a', 10, timestamp=ago(5)), self.clear_line(3), response('c', 30, timestamp=ago(2))]
+        for args in (('--since', ago(10)), ('--hours', '10'), ('--hours', '0')):
+            r = self.run_session(parts, *args)
+            self.assertIn('API calls: 2  |', r.stdout, args)
+            self.assertNotIn('/clear (', r.stdout, args)
+
+    def test_d138_a_clear_mentioned_in_text_is_not_a_clear(self):
+        parts = [response('a', 10, timestamp=ago(5)),
+                 _line('user', 'I ran <command-name>/clear</command-name> before', timestamp=ago(4)),
+                 response('b', 20, timestamp=ago(3))]
+        self.assertIn('API calls: 2  |', self.run_session(parts).stdout)
+
+    def test_d138_clear_is_found_with_the_message_tag_first_or_list_content(self):
+        for content in ('<command-message>clear</command-message>\n<command-name>/clear</command-name>\n<command-args></command-args>',
+                        [{'type': 'text', 'text': '<command-message>clear</command-message>\n'
+                                                  '<command-name>/clear</command-name>'}]):
+            parts = [response('a', 10, timestamp=ago(5)), _line('user', content, timestamp=ago(3)),
+                     response('b', 30, timestamp=ago(2))]
+            r = self.run_session(parts)
+            self.assertIn('API calls: 1  |', r.stdout, content)
+            self.assertIn('since the last /clear (', r.stdout, content)
+
+    def break_session(self, calls_before: int, break_line, calls_after: int, prev_calls: int = 3) -> subprocess.CompletedProcess:
+        """D138: no --session; `cur.jsonl` (newest) has `calls_before` calls, a break 1 h ago, `calls_after` after it."""
+        home, repo = folder(), folder()
+        subprocess.run(['git', 'init', '-q', repo], check=True)
+        proj = os.path.join(home, '.claude', 'projects', '-home-user')
+        prev = log(os.path.join(proj, 'prev.jsonl'),
+                   *[response(f'p{n}', 50, timestamp=ago(4), gitBranch='feat') for n in range(prev_calls)])
+        os.utime(prev, (100, 100))
+        parts = [response(f'b{n}', 10, timestamp=ago(3), gitBranch='feat') for n in range(calls_before)]
+        parts.append(break_line)
+        parts += [response(f'a{n}', 10, timestamp=ago(0.5), gitBranch='feat') for n in range(calls_after)]
+        log(os.path.join(proj, 'cur.jsonl'), *parts)
+        env = {**os.environ, 'HOME': home, 'CLAUDE_CODE_REMOTE': 'true'}
+        return subprocess.run(['python3', MEASURE], capture_output=True, text=True, cwd=repo, env=env)
+
+    def test_d138_min_calls_looks_at_the_stretch_after_the_break(self):
+        compaction_line = _line('system', subtype='compact_boundary', content='Conversation compacted', timestamp=ago(1))
+        # 300 calls in 24 h but 1 after the compaction: the fallback triggers on the reported stretch
+        r = self.break_session(300, compaction_line, 1)
+        self.assertIn('Note: the current session has 1 calls (under measure.minCalls = 5)', r.stdout)
+        self.assertIn('Session: prev.jsonl', r.stdout)
+        # the previous session is measured whole, not cut to its own tail by its own break
+        r = self.break_session(2, self.clear_line(1), 6)
+        self.assertIn('Session: cur.jsonl', r.stdout)
+        self.assertNotIn('Note:', r.stdout)
+        self.assertIn('API calls: 6  |', r.stdout)
+
+    def test_d139_the_repo_folder_wins_over_a_parent_folder_with_more_calls(self):
+        home, repo = folder(), folder()
+        subprocess.run(['git', 'init', '-q', repo], check=True)
+        root = os.path.realpath(repo)
+        parent = os.path.join(home, '.claude', 'projects', re.sub(r'[^A-Za-z0-9]', '-', os.path.dirname(root)))
+        own = os.path.join(home, '.claude', 'projects', re.sub(r'[^A-Za-z0-9]', '-', root))
+        log(os.path.join(parent, 'up.jsonl'), *[response(f'p{n}', 5, timestamp=ago(2)) for n in range(4)])
+        log(os.path.join(own, 'own.jsonl'), response('o', 5, timestamp=ago(2)))
+        env = {**os.environ, 'HOME': home}
+        run = lambda: subprocess.run(['python3', MEASURE, '--since', ago(3)], capture_output=True, text=True, cwd=root, env=env)
+        r = run()
+        self.assertIn('Session: own.jsonl', r.stdout)
+        self.assertIn('API calls: 1  |', r.stdout)
+        os.remove(os.path.join(own, 'own.jsonl'))  # the repo's folder has none: the parent's is the fallback
+        r = run()
+        self.assertIn('Session: up.jsonl', r.stdout)
 
     def test_artifact_rows_show_the_action(self):
         """B22: HEAVIEST RESULTS tells `quickstart` from `publish` for Artifact calls."""

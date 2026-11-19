@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.0
+# galivelop-workflow v0.8.1
 """The only reader of a project's .claude/gw.json (one fact, one place).
 
 Validates the config against schema/gw.schema.json (a stdlib validator for the subset the schema uses) and fills the
@@ -687,6 +687,22 @@ def test_scan_skip_dirs(config):
     if isinstance(given, list) and all(isinstance(x, str) and x for x in given):
         return list(given)
     return list(_schema()["properties"]["testScanSkipDirs"]["default"])
+
+
+def workflow_clone(config):
+    """The `workflowClone` key (D132): where a project looks for its workflow clone (relative to the repo root)."""
+    given = config.get("workflowClone")
+    if isinstance(given, str) and given:
+        return given
+    return _schema()["properties"]["workflowClone"]["default"]
+
+
+def workflow_repository(config):
+    """The `workflowRepository` key (D132): the URL review-scope.py tells to clone when it finds no workflow copy."""
+    given = config.get("workflowRepository")
+    if isinstance(given, str) and given:
+        return given
+    return _schema()["properties"]["workflowRepository"]["default"]
 
 
 def review_trivial_lines(config):

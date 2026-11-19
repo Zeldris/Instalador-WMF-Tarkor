@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.0
+# galivelop-workflow v0.8.1
 """Frozen scope (C13, `scopeGuard`): a change of requirements is another task.
 
   scope-guard.py                     PreToolUse hook on Edit, Write, MultiEdit and NotebookEdit (event JSON on stdin)
@@ -132,10 +132,10 @@ def vendored_set(top):
     always unchanged, so the hook cannot tell it from a file the task is about to change. Empty when the workflow repo or
     the answer is not available (a timeout included): then they count as before (the safe side)."""
     try:
-        workflow = rs.workflow_dir(None)
-        return rs.vendored(top, workflow, timeout=VENDORED_TIMEOUT) if workflow else set()
-    except Exception:  # noqa: BLE001 (a failed lookup, a timeout, only means nothing is skipped)
-        return set()
+        workflow = rs.workflow_dir(None, top, config.load(str(top)))
+        return rs.vendored(top, workflow, timeout=VENDORED_TIMEOUT)
+    except (rs.ScopeError, config.ConfigError, OSError, subprocess.SubprocessError):
+        return set()  # no workflow copy, a failed lookup or a timeout only mean nothing is skipped (a bug still shows)
 
 
 def stamp_only_staged(top, rel):

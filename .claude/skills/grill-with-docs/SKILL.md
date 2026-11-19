@@ -4,7 +4,7 @@ description: A relentless interview to sharpen a plan or design, which also crea
 disable-model-invocation: true
 license: MIT (see LICENSE-mattpocock-skills)
 metadata:
-  version: "0.8.0"
+  version: "0.8.1"
   source: "mattpocock/skills@5beb35b"
 ---
 

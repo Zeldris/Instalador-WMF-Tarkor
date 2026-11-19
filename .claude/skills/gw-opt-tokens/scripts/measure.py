@@ -180,7 +180,7 @@ def newest_session(root):
     return max(logs, key=lambda p: (os.path.getmtime(p), p)) if logs else None
 
 
-def previous_session(path, root, since):
+def previous_session(path, root, since, cut=False):
     """The newest other log of the project whose branch is the one of `path` and that has calls in the period
     (ties in mtime: the greater file name); (that log or None, the branch or None)."""
     branch = branch_of(path)
@@ -189,12 +189,12 @@ def previous_session(path, root, since):
     others = sorted((p for p in session_logs(os.path.abspath(root)) if os.path.abspath(p) != os.path.abspath(path)),
                     key=lambda p: (os.path.getmtime(p), p), reverse=True)
     for p in others:
-        if branch_of(p) == branch and responses_of(p, since):
+        if branch_of(p) == branch and responses_of(p, cut_since(p, since, cut)):
             return p, branch
     return None, branch
 
 
-def default_session(root, since=None):
+def default_session(root, since=None, cut=False):
     """Newest `.jsonl` of the root's log folder or of a parent folder's; exits if there is none.
     With `since`, the one with most responses from that moment on (the newest file may be a later session that
     does not cover the period); the newest if none has any."""
@@ -204,8 +204,13 @@ def default_session(root, since=None):
         sys.exit(f'No sessions in ~/.claude/projects/{folder_of(root)}/ or its parent folders (use --session)')
     path = max(candidates, key=os.path.getmtime)
     if since:
-        covered = {p: len(responses_of(p, since)) for p in candidates}
-        if max(covered.values()) > 0:
+        covered = {p: len(responses_of(p, cut_since(p, since, cut))) for p in candidates}
+        # D139: the repo's own log folder first; a parent folder's (a session opened above the repo) only when
+        # none of the repo's logs has calls in the period.
+        own = [p for p in candidates if os.path.basename(os.path.dirname(p)) == folder_of(root) and covered[p] > 0]
+        if own:
+            candidates = own
+        if max(covered[p] for p in candidates) > 0:
             path = max(candidates, key=lambda p: (covered[p], os.path.getmtime(p)))
     folder = os.path.basename(os.path.dirname(path))
     cloud_start = os.environ.get('CLAUDE_CODE_REMOTE') == 'true' and folder == '-home-user'  # where the cloud starts
@@ -213,6 +218,52 @@ def default_session(root, since=None):
         print(f'(warning: log from a session opened outside the repo, in folder {folder}; '
               f'if it is not this session, pass --session)', file=sys.stderr)
     return path
+
+
+# D138: a /clear is a user line made of command tags (`<command-name>`/`<command-message>`, in either order): the
+# line starts with a command tag and has the `/clear` name tag anywhere; a mention inside prose is not one.
+CLEAR_TAG = re.compile(r'<command-name>\s*/clear\s*</command-name>')
+
+
+def cut_since(path, since, cut):
+    """D138: the start of the stretch reported for a log: just after its last /clear or compaction when `cut`
+    (neither --since nor --hours), else `since`. The minCalls fallback and the session choice use it too."""
+    brk = last_break(path) if cut else None
+    return brk[0] + dt.timedelta(microseconds=1) if brk else since  # the marker itself is not a call
+
+
+def last_break(path):
+    """D138: moment of the last `/clear` (a user line with `<command-name>/clear</command-name>`) or compaction
+    (`compact_boundary`) of a log; (UTC datetime, 'clear' | 'compaction') or None."""
+    found = None
+    try:
+        with open(path, encoding='utf-8') as log:
+            for line in log:
+                if '/clear</command-name>' not in line and 'command-message>clear<' not in line and 'compact_boundary' not in line:
+                    continue  # cheap filter before parsing
+                try:
+                    d = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(d, dict) or d.get('isSidechain') or not d.get('timestamp'):
+                    continue
+                content = (d.get('message') or {}).get('content')
+                if isinstance(content, list):
+                    content = ' '.join(b.get('text') or '' for b in content if isinstance(b, dict))
+                if d.get('type') == 'system' and d.get('subtype') == 'compact_boundary':
+                    kind = 'compaction'
+                elif d.get('type') == 'user' and isinstance(content, str) and \
+                        content.lstrip().startswith('<command-') and CLEAR_TAG.search(content):
+                    kind = 'clear'
+                else:
+                    continue
+                try:
+                    found = (parse_time(d['timestamp']), kind)
+                except ValueError:
+                    continue
+    except OSError:
+        pass
+    return found
 
 
 def tokens_of(content):
@@ -341,7 +392,9 @@ def main():
                     'repeats, per-file reads, per-model and per-subagent split. Standard library only.')
     ap.add_argument('--session', metavar='PATH.jsonl',
                     help='session log to read (default: newest of the repo folder or its parent folders)')
-    ap.add_argument('--hours', type=float, default=24, help='period in hours, 0 = the whole session (default 24)')
+    ap.add_argument('--hours', type=float, default=None,
+                    help='period in hours, 0 = the whole session (default: from the last /clear or compaction of the '
+                         'session log, else 24)')
     ap.add_argument('--since', metavar='ISO|SHA',
                     help='only from that moment (commit: its date; ISO-8601 date, no zone = UTC); replaces --hours')
     ap.add_argument('--top', type=int, default=12, help='rows per list (default 12)')
@@ -355,16 +408,17 @@ def main():
     since = None
     if a.since:
         since = since_moment(a.since)
-    elif a.hours > 0:
-        since = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=a.hours)
-    path = a.session or default_session(root, since)
+    elif a.hours is None or a.hours > 0:
+        since = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=24 if a.hours is None else a.hours)
+    cut = a.since is None and a.hours is None  # D138: stretch since the last /clear or compaction
+    path = a.session or default_session(root, since, cut)
     note = None
     threshold = 0 if a.session else min_calls(root)
     current = newest_session(root) if threshold else None  # the session in progress, not the one with most calls
     if current:
-        have = len(responses_of(current, since))
+        have = len(responses_of(current, cut_since(current, since, cut)))
         if have < threshold:
-            before, branch = previous_session(current, root, since)
+            before, branch = previous_session(current, root, since, cut)
             if before:
                 note = (f'Note: the current session has {have} calls (under measure.minCalls = {threshold}); '
                         f'measuring the previous session of branch {branch}: {os.path.basename(before)}')
@@ -374,6 +428,9 @@ def main():
                 note = (f'Note: the current session has {have} calls (under measure.minCalls = {threshold}) and '
                         f'there is no previous session of {"branch " + branch if branch else "its branch"}: '
                         f'measuring {os.path.basename(path)}')
+
+    start = last_break(path) if cut else None
+    since = cut_since(path, since, cut)
 
     usage = collections.Counter()
     api_calls = 0
@@ -471,7 +528,8 @@ def main():
 
     total_in = usage['input_tokens'] + usage['cache_creation_input_tokens'] + usage['cache_read_input_tokens']
     period = ('whole session' if not since else f'since {since:%Y-%m-%d %H:%M} UTC' if a.since
-              else f'last {a.hours:g} h')
+              else f'since the last {"/clear" if start[1] == "clear" else "compaction"} ({since:%Y-%m-%d %H:%M} UTC)'
+              if start else f'last {24 if a.hours is None else a.hours:g} h')
     print(f'Session: {os.path.basename(path)}  |  period: {period}')
     if note:
         print(note)

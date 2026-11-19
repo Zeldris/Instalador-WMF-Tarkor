@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.0
+# galivelop-workflow v0.8.1
 """Token ledger (B1/B2): `metrics.py record` appends the tokens the Claude Code transcripts show to a ledger in the repo.
 
 Run as a `Stop` hook (hook JSON on stdin: `session_id`, `transcript_path`, `stop_hook_active`) or by hand
@@ -43,12 +43,13 @@ period twice is an error (exit 2).
 
 `metrics.py quality --period day|week|month|quarter [--date D] [--write]` (B8) sets quality signals beside the spend of
 each task id. Spend comes from the period's ledger rows; the signals only from the messages of the commits in the
-history from HEAD (no merges) whose committer date (UTC) falls in the period and that have a `Refs:` trailer (the others
-are ignored). Per id: `commits`; `red` (subject starts with the `commitWipPrefix`, `WIP:` by default: the check was red); `rework` (commits whose
+history from HEAD whose committer date (UTC) falls in the period and that have a `Refs:` trailer (the others are
+ignored; a merge with `Refs:` adds only its findings and retries, D141). Per id: `commits`; `red` (subject starts with the `commitWipPrefix`, `WIP:` by default: the check was red); `rework` (commits whose
 Conventional Commits type, after a `WIP: ` prefix, is in `metrics.quality.reworkTypes`, and git reverts `Revert "..."`,
 not counting the first commit of the id in the whole history); `findings` and `retries` (the sums of the integer values
 of the trailers `metrics.quality.findingsTrailer` and `retriesTrailer`, matched case-insensitively; a value that is not a
-non-negative integer is ignored and listed under "Ignored trailers"). A second table gives the same by model: the signals
+non-negative integer is ignored and listed under "Ignored trailers"; a commit or merge with several ids counts its
+whole value for each of them, so the rows do not add up to the reviews' total). A second table gives the same by model: the signals
 of the ids each model spent on (an id counts for every model that spent on it). It prints the report; `--write` saves it
 as `<reports>/<daily|weekly|monthly|quarterly>/<name>-quality.md`. Nothing in the period (no commits with `Refs:` and no
 ledger rows) says so on stderr and writes nothing (exit 0); no git repository or a git failure, or a bad config, exit 2.
@@ -538,20 +539,23 @@ COUNT_RE = re.compile(r"^[0-9]+$")
 
 
 def history_commits(root):
-    """The commits of the history from HEAD, newest first, without merges: [{"sha", "day" (UTC date text), "subject",
-    "trailers"}] for those with a `Refs:` trailer ("refs" holds their ids). No commits yet gives []."""
+    """The commits of the history from HEAD, newest first: [{"sha", "day" (UTC date text), "subject", "trailers",
+    "merge"}] for those with a `Refs:` trailer ("refs" holds their ids). Merges are kept with "merge": True (D141): a
+    review's fixes are often merged with `Findings:` on the merge, and only those trailers count from them. No commits
+    yet gives []."""
     git(root, "rev-parse", "--git-dir")  # raises MetricsError outside a repository
     try:
         git(root, "rev-parse", "--verify", "-q", "HEAD")
     except MetricsError:
         return []
-    out = git(root, "log", "--no-merges", "--format=%H%x1f%ct%x1f%B%x00")
+    out = git(root, "log", "--format=%H%x1f%P%x1f%ct%x1f%B%x00")
     commits = []
     for record_text in out.split("\x00"):
         record_text = record_text.strip("\n")
         if not record_text:
             continue
         sha, _, rest = record_text.partition("\x1f")
+        parents, _, rest = rest.partition("\x1f")
         stamp, _, message = rest.partition("\x1f")
         if "refs" not in message.lower():
             continue  # cheap filter before running git interpret-trailers
@@ -563,7 +567,7 @@ def history_commits(root):
         refs = refs_of(trailers)
         if refs:
             commits.append({"sha": sha, "day": day, "subject": message.strip().split("\n", 1)[0].strip(),
-                            "trailers": trailers, "refs": refs})
+                            "trailers": trailers, "refs": refs, "merge": len(parents.split()) > 1})
     return commits
 
 
@@ -585,10 +589,10 @@ def commit_type(subject, wip="WIP: "):
 def commit_signals(commits, first, last, quality, wip="WIP: "):
     """({id: {"commits", "red", "rework", "findings", "retries"}}, [(sha7, "Key: value") of ignored trailers]) of the
     commits (newest first, all the history) whose day is in first..last. The first commit of an id is the oldest of
-    the whole list that names it; it is never rework."""
+    the whole list that names it; it is never rework. A merge (D141) adds only its findings and retries."""
     oldest = {}
     for c in commits:  # newest first: the last write is the oldest commit
-        for ref in c["refs"]:
+        for ref in ([] if c.get("merge") else c["refs"]):
             oldest[ref] = c["sha"]
     rework_types = {t.lower() for t in quality["reworkTypes"]}
     names = {"findings": quality["findingsTrailer"].lower(), "retries": quality["retriesTrailer"].lower()}
@@ -610,11 +614,13 @@ def commit_signals(commits, first, last, quality, wip="WIP: "):
                     ignored.append((c["sha"][:7], f"{key}: {value}"))
         for ref in sorted(set(c["refs"])):
             acc = signals.setdefault(ref, dict.fromkeys(("commits", "red", "rework", "findings", "retries"), 0))
+            acc["findings"] += sums["findings"]
+            acc["retries"] += sums["retries"]
+            if c.get("merge"):
+                continue
             acc["commits"] += 1
             acc["red"] += 1 if red else 0
             acc["rework"] += 1 if is_rework and oldest[ref] != c["sha"] else 0
-            acc["findings"] += sums["findings"]
-            acc["retries"] += sums["retries"]
     return signals, sorted(set(ignored))
 
 
