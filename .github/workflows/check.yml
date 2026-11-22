@@ -1,4 +1,4 @@
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.8.2
 # The project's check in CI: each `ciInstall` command (else each `install` command), then each `check` command of
 # .claude/gw.json, on every push outside the protected branch and on every pull request (`ciOnPush`: false, only on
 # pull requests: apply.py renders the push filter as ['**'], which matches every branch). On a pull request it also
@@ -15,6 +15,8 @@ name: Check
 on:
   push:
     branches-ignore: [main]
+    # A push that only changes the metrics ledger (`metrics.ledger`, D162) does not start CI.
+    paths-ignore: ["docs/metrics/ledger.jsonl"]
   pull_request:
   workflow_call:
 

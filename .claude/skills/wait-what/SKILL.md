@@ -4,7 +4,7 @@ description: "Stop. That last message did not land: re-pitch it. Use when the us
 disable-model-invocation: true
 license: MIT (see LICENSE-mattpocock-skills)
 metadata:
-  version: "0.8.1"
+  version: "0.8.2"
   source: "mattpocock/skills@5beb35b"
 ---
 

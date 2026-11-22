@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.8.2
 """The questions file (C1-C3, C10): the questions the agent has for the user, one entry each, kept in the file of
 `questions.path` in .claude/gw.json (default docs/questions.md) so they are not asked again in every iteration.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.8.2
 """PreToolUse hook on Edit, Write, MultiEdit and NotebookEdit (C4, C5, `modes.questions`): editing code while the current
 task has open questions in the questions file (questions.py) is blocked (restrictive mode) or warned about (guide mode).
 

@@ -4,7 +4,7 @@ description: Run the main session as an orchestrator that deals work out to clea
 license: MIT
 compatibility: Claude Code or any Agent Skills agent with subagents; git; reads .claude/gw.json
 metadata:
-  version: "0.8.1"
+  version: "0.8.2"
   source: "Galivelop workshop; generalised from the Tarkor, installer and portal gw-orchestrate-dealer"
 ---
 
@@ -14,7 +14,7 @@ If `.claude/gw/gw-orchestrate-dealer.md` exists in the project, read it first: i
 
 The main session is the **orchestrator**: it holds the plan, the decisions and the thread with the user, and deals each
 chunk of work to a subagent that starts with an empty context. Every deal is an automatic `/clear`: the main session
-receives a short summary and grows slowly. Reply to the user in the project's `language`.
+receives a short summary and grows slowly. Reply to the user in the project's `language`. Its own model is that of its own work (plan, decide, review: usually Sonnet `medium`), weighed with `metrics.py quality`; Opus only for design or a non-obvious cause (`gw-selector`).
 
 Config values used below come from `.claude/gw.json`: `check` (list of commands), `log` (handover file),
 `protectedBranch`, `language`. Read it once at the start.
@@ -81,7 +81,7 @@ A read of more than ~200 lines, or a long output, in the main session is a chunk
    `python3 .claude/gw/scripts/tests-for.py --diff {head} --run` (from `testMap`, shellcheck first; `--why` says which rule brought each test; if empty, pick them yourself).
    Tests live in: <where the tests of each layer you touch live, e.g. `tests/test_ui_browser.py` for the UI>.
    For guard code or scripts: first list the edge cases (git states, platforms, empty or odd input) and write a
-   test for each before calling the chunk done; the review afterwards is the safety net, not the first pass.
+   test for each before calling the chunk done; the review afterwards is the safety net, not the first pass. Each new test: prove it red without the fix with `bash .claude/gw/scripts/red-without-fix.sh`.
    Do not: <what belongs to another chunk or needs a user decision>.
    If you change a function or a field, grep every user of it and adjust them, or list them under MISSING.
    A red test is pre-existing only if it fails the same on `origin/{protectedBranch}` (both outputs under EVIDENCE).

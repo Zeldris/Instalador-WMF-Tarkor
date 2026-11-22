@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.8.2
 """PreToolUse hook on `Read` and `Bash` (B26, E58): warn when a session reads WHOLE a watched file that is larger
 than `wholeReadWarnBytes` in .claude/gw.json. It never blocks: it adds `additionalContext` to the call, so the next
 steps read less; with no warning it prints nothing (no opinion).

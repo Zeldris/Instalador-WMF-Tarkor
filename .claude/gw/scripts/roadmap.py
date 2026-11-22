@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.8.2
 """See or mark one task row of the roadmap in every language, without reading the roadmap whole (D55).
 
   python3 roadmap.py show ID              # the row of ID in each file of `roadmapFiles`, with its `## ` section
@@ -15,6 +15,8 @@
   python3 roadmap.py check                # every version section has the same row ids in every file of `roadmapFiles`
                                           # (D105); versions match by the heading's first code span, not its text;
                                           # exit 1 lists, per version, the ids each file lacks; no-op with < 2 files
+
+`recover.py --state` reuses list_rows/open_rows to print the open rows of the version branch (D166).
 
 A task row is a Markdown table line whose first cell is exactly ID. `roadmapFiles` in .claude/gw.json lists the
 roadmap in each language, the source first: `{"path", "done", "open"}`. `done` is the word written at the start of
@@ -119,8 +121,9 @@ def cmd_show(loaded):
         print(lines[n].rstrip("\n"))
 
 
-def cmd_list(root, files, version, status):
-    """Print `ID  status  description[:80]` for each table row in the section(s) of `version` in the first file."""
+def list_rows(root, files, version, status=None):
+    """[(ID, status, description[:80])] for each table row in the section(s) of `version` in the first file (what
+    `list` prints); RoadmapError when the file or the section is missing. D166: recover.py reuses it."""
     entry = files[0]
     try:
         lines = (root / entry["path"]).read_text(encoding="utf-8").splitlines()
@@ -144,9 +147,20 @@ def cmd_list(root, files, version, status):
     if not found:
         raise RoadmapError(f"no section for version {version!r} in {entry['path']}; see the `## ` headings with "
                            f"`grep -n '^## ' {entry['path']}`")
-    for row in out:
-        if len(row) >= 3 and (not status or status.lower() in row[-1].lower()):
-            print(f"{row[0]}  {row[-1]}  {row[1][:80]}")
+    return [(row[0], row[-1], row[1][:80]) for row in out
+            if len(row) >= 3 and (not status or status.lower() in row[-1].lower())]
+
+
+def open_rows(root, files, version):
+    """list_rows of `version` whose status starts with an `open` word of the first file (D166)."""
+    words = [w.lower() for w in files[0].get("open", [])]
+    return [r for r in list_rows(root, files, version) if r[1].lower().startswith(tuple(words))] if words else []
+
+
+def cmd_list(root, files, version, status):
+    """Print `ID  status  description[:80]` for each table row in the section(s) of `version` in the first file."""
+    for rid, st, desc in list_rows(root, files, version, status):
+        print(f"{rid}  {st}  {desc}")
 
 
 def section_ids(root, entry):

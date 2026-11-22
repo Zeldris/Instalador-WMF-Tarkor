@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.8.2
 """Startup-context and compaction-loop guard (B21). Imported by recover.py --state; also a CLI for hand use.
 
 After a /clear or a compaction the session starts again with the log state, AGENTS.md/CLAUDE.md, hook output, skills
@@ -291,10 +291,18 @@ def report(root, cfg, path, source, hook_chars=0, measure=None):
         pct = startup_pct(last, cfg)
         lines = [f"- Startup context of the last stretch: {fmt(last['first_usage'])} tokens = {pct} % of the "
                  f"compaction cutoff {fmt(cutoff)} (model {last['model']})"]
-        if pct >= guard["warn"]:
+        eff = pct  # D156: what the user can reduce; the system (prompt, tools, MCP) is not theirs to trim
+        if system_weighs_most(root, cfg, last, hook_chars, parts=m.culprits):
+            sys_tokens = next(t for label, t, _ in m.culprits() if label == SYSTEM)
+            eff = startup_pct(dict(last, first_usage=max(0, last["first_usage"] - sys_tokens)), cfg)
+            if eff < guard["warn"]:
+                lines.append(f"- Note: startup context is {pct} % of the cutoff, but {fmt(sys_tokens)} tokens of it are "
+                             f"the system (prompt, tools, MCP) and the part you control is {eff} % (below warn "
+                             f"{guard['warn']} %): nothing to trim here; {SYSTEM_ADVICE}")
+        if eff >= guard["warn"]:
             lines.append(f"- Warning: startup context above {guard['warn']} %: the culprits, largest first:")
             lines += culprit_lines(root, cfg, last["first_usage"], hook_chars, parts=m.culprits())
-        if pct >= guard["alarm"]:
+        if eff >= guard["alarm"]:
             lines.append(f"- ALARM: startup context above {guard['alarm']} %")
 
         def over(seg):

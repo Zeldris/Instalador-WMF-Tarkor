@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.8.2
 # Pushes a branch with retries and says "pushed" only when the remote really has the commit (D94).
 #   bash push.sh [<branch>]     (default: the current branch)
 #  - Runs `git push -u origin <branch>`; its output is shown and also classified when it fails.

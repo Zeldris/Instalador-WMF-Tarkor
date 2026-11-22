@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.8.2
 # Cache of "the project's `check` already passed": lets the pre-push (and scripts/check.sh) skip a check that already
 # ran green on the same tree with the same commands and wrapper, less than `checkReuseTtl` (24 h) ago. One line per success,
 # "<epoch> <key>", in <git common dir>/gw-check-green (shared by linked worktrees), the last `checkReuseKeep` (50) kept.

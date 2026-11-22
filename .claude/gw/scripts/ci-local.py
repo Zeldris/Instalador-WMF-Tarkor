@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.8.2
 """Runs the project's GitHub Actions CI on this machine, for when GitHub does not start it (no Actions quota, no
 runners), and with --record records the result in the config's `ciLocalLog` (default docs/records/ci-local.md).
 The PR hook (review-before-main.sh) takes a committed green record as the CI of a PR whose CI never started; a CI
@@ -948,6 +948,8 @@ def main(argv=None):
     log = cfg["ciLocalLog"]
     was_dirty = dirty(root, log)
     run = Run(root, cfg, args.event, args.plan)
+    leftover = os.path.join(root, ".gw-ci")  # D160: the workflow's base-hook step writes it into the tree
+    had_leftover = os.path.lexists(leftover)
     try:
         found = workflows(root, cfg, args.event, run.branch)
         changed = changed_files(root, cfg["protectedBranch"])
@@ -984,6 +986,8 @@ def main(argv=None):
             return 2
     finally:
         shutil.rmtree(run.tmp, ignore_errors=True)
+        if not had_leftover and os.path.isdir(leftover) and not os.path.islink(leftover):
+            shutil.rmtree(leftover, ignore_errors=True)  # D160: also when the run fails or stops early
     result = summary(run)
     for item in run.not_covered:
         run.say(f"not covered: {item}")

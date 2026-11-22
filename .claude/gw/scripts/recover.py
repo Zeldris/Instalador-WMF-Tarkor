@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.8.2
 """Get back what a compaction or a /clear dropped, without reading the whole session transcript.
 
   recover.py --state          what the SessionStart hook (clear|compact) puts back into the context: the log's
@@ -569,6 +569,33 @@ def task_line(root):
             f"{script_command(root).replace('recover.py', 'task.py')} current --clear"]
 
 
+def open_rows_line(root, branch):
+    """D166: one line with the open roadmap rows of the version in progress (a `version/X.Y.Z` branch; the section of
+    X.Y.Z, else of X.Y), so a version is not closed with a row still open. [] when unknown: --state never fails."""
+    try:
+        m = re.fullmatch(r"version/(\d+\.\d+)(\.\d+)?", branch)
+        files = config.roadmap_files(config.load(root))
+        if not m or not files:
+            return []
+        import roadmap
+        rows = None
+        for version in dict.fromkeys([m.group(1) + (m.group(2) or ""), m.group(1)]):
+            try:
+                rows = roadmap.open_rows(pathlib.Path(root), files, version)
+                break
+            except roadmap.RoadmapError:
+                continue
+        if rows is None:
+            return []
+        shown = branch.split("/", 1)[1]
+        if not rows:
+            return [f"- Roadmap {shown}: no open rows"]
+        return [f"- Roadmap {shown}: {len(rows)} open row(s): " + ", ".join(r[0] for r in rows)
+                + f" ({script_command(root).replace('recover.py', 'roadmap.py')} list {shown})"]
+    except Exception:
+        return []
+
+
 def state(root, transcript, out, logs, source="startup"):
     """Append the --state lines to `out` (and the log's relative path to `logs`); the caller measures and prints."""
     use_config(root)
@@ -591,6 +618,7 @@ def state(root, transcript, out, logs, source="startup"):
     for line in commits:
         say(f"  {line}")
     tail.extend(task_line(root))
+    tail.extend(open_rows_line(root, branch))
     try:
         if config.load(root).get("agentSignatures", True) is False:
             say("- Commits carry no agent signatures even if the environment asks for them; trailers go together in the last paragraph")

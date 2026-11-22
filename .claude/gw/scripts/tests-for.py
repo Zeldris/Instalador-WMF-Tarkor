@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.8.2
 """The test files a change calls for, from `testMap` in .claude/gw.json (E21).
 
   python3 tests-for.py FILE [...]          # the test files, one per line (repo-relative, sorted, no repeats)
@@ -280,8 +280,10 @@ def run_parallel(root, cfg, tests, pythonpath=None):
 
 
 def shell_files(root, files):
-    """The changed `.sh` files that still exist (a deleted one is skipped), sorted."""
-    return sorted(f for f in set(files) if f.endswith(".sh") and (root / f).is_file())
+    """The changed `.sh` files that still exist (a deleted one is skipped), sorted. D152: not the workflow copies
+    under `.claude/gw/` of an installed project (the workflow checks its own; the project's own .sh files stay)."""
+    return sorted(f for f in set(files)
+                  if f.endswith(".sh") and not f.startswith(".claude/gw/") and (root / f).is_file())
 
 
 def run_shellcheck(root, shells):

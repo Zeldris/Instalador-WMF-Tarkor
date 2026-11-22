@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.8.2
 # Merges a subagent's branch into the current one (merge, never rebase: branches are pushed), runs the config's
 # `check` commands and the related tests (`relatedTests`) on the result and, if they pass, cleans up the subagent's
 # worktree and branch.

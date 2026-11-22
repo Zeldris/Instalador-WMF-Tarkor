@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.8.2
 """PreToolUse hook: with `agentSignatures: false`, block the text an agent publishes on GitHub when it carries a signature (D21).
 
 The commit-msg hook only covers commit messages; this covers the title and body of what goes to GitHub:

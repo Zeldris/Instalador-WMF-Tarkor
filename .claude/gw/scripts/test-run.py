@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.8.2
 """Run the Python test suites in parallel, one test class per process (E45).
 
   python3 test-run.py [DIR ...] [--jobs N] [--python CMD] [--times N]

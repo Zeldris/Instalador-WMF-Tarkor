@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.8.2
 # Git pre-push hook (copied into projects as .githooks/pre-push; enable with: git config core.hooksPath .githooks).
 #   - While it runs, keeps a marker `gw-push-in-progress.<pid>` in this worktree's own git dir (one per linked worktree, one per push) with its pid
 #     and, per pushed ref, the LOCAL sha and local branch, so the Stop hook (before-stop.py) does not tell an agent to

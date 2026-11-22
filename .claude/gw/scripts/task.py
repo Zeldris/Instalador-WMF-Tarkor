@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.8.2
 """The task record (C11): the contract of a task (`<taskRecord.path>/<id>.md`) and its decision log, one file per
 entry in the folder `<taskRecord.path>/<id>/` that nobody edits afterwards.
 

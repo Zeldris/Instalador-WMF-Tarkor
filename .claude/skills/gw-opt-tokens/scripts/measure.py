@@ -195,19 +195,24 @@ def previous_session(path, root, since, cut=False):
 
 
 def default_session(root, since=None, cut=False):
-    """Newest `.jsonl` of the root's log folder or of a parent folder's; exits if there is none.
-    With `since`, the one with most responses from that moment on (the newest file may be a later session that
+    """The session in progress: the newest `.jsonl` of the root's log folder, of a parent folder's or of the cloud
+    start folder (D144; on a tie in mtime the repo's own folder wins, D139); exits if there is none.
+    With the default period (`cut`) that session whatever its calls; with an explicit period the one with most responses from that moment on (the newest file may be a later session that
     does not cover the period); the newest if none has any."""
     root = os.path.abspath(root)
     candidates = session_logs(root)
     if not candidates:
         sys.exit(f'No sessions in ~/.claude/projects/{folder_of(root)}/ or its parent folders (use --session)')
-    path = max(candidates, key=os.path.getmtime)
-    if since:
+    own_folder = folder_of(root)
+    path = max(candidates, key=lambda p: (os.path.getmtime(p), os.path.basename(os.path.dirname(p)) == own_folder))
+    if since and not cut:  # explicit period: the log covering it, D139's folder preference, never another branch's (D151)
+        branch = branch_of(path)
+        if branch:  # a log of another branch is out; one without `gitBranch` is not discarded
+            candidates = [p for p in candidates if p == path or branch_of(p) in (None, branch)]
         covered = {p: len(responses_of(p, cut_since(p, since, cut))) for p in candidates}
         # D139: the repo's own log folder first; a parent folder's (a session opened above the repo) only when
         # none of the repo's logs has calls in the period.
-        own = [p for p in candidates if os.path.basename(os.path.dirname(p)) == folder_of(root) and covered[p] > 0]
+        own = [p for p in candidates if os.path.basename(os.path.dirname(p)) == own_folder and covered[p] > 0]
         if own:
             candidates = own
         if max(covered[p] for p in candidates) > 0:
@@ -391,7 +396,7 @@ def main():
         description='Where the tokens of a Claude Code session went: API usage, context curve, heavy results, '
                     'repeats, per-file reads, per-model and per-subagent split. Standard library only.')
     ap.add_argument('--session', metavar='PATH.jsonl',
-                    help='session log to read (default: newest of the repo folder or its parent folders)')
+                    help='session log to read (default: the newest, the session in progress, of the repo folder, its parent folders and the cloud start folder)')
     ap.add_argument('--hours', type=float, default=None,
                     help='period in hours, 0 = the whole session (default: from the last /clear or compaction of the '
                          'session log, else 24)')

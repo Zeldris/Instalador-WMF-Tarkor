@@ -1,5 +1,5 @@
 {
-  "$comment": "galivelop-workflow v0.8.1",
+  "$comment": "galivelop-workflow v0.8.2",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/zeldris/Galivelop-workflow/main/schema/gw.schema.json",
   "title": "Galivelop-workflow project config (.claude/gw.json)",
@@ -751,8 +751,12 @@
                 "type": "string"
               }
             }
-          }
+          },
+          "default": []
         }
+      },
+      "default": {
+        "cases": []
       }
     },
     "logSections": {
@@ -1078,12 +1082,18 @@
           "type": "boolean",
           "default": true,
           "description": "B11: doctor.py warns when a global Claude Code variable overrides the model or effort picked per agent (CLAUDE_CODE_EFFORT_LEVEL, CLAUDE_CODE_SUBAGENT_MODEL with CLAUDE_CODE_SUBAGENT_MODEL_FORCE, the undocumented CLAUDE_CODE_SUBAGENT_EFFORT) in the environment or an env block of the project or user settings. false turns the check off."
+        },
+        "sessionCheck": {
+          "type": "boolean",
+          "default": true,
+          "description": "D142: session-start.sh compares the session model the last gw-selector line of the transcript recommends (`Session: <model> <effort>`) with the model the session runs on (the hook's `model`, else the last assistant message) and warns when their families differ, so a resumed session does not carry on with the wrong model. false turns the warning off."
         }
       },
       "default": {
         "disabled": [],
         "agentFields": ["model", "effort"],
-        "checkLevers": true
+        "checkLevers": true,
+        "sessionCheck": true
       },
       "description": "Which models the workflow may use (B7) and how each agent gets its model and effort (B11)."
     },
@@ -1188,9 +1198,9 @@
             "findingsTrailer": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9-]*$", "default": "Findings"},
             "retriesTrailer": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9-]*$", "default": "Retries"},
             "reworkTypes": {"type": "array", "items": {"type": "string", "minLength": 1}, "default": ["fix", "revert"]},
-            "findingsWords": {"type": "array", "items": {"type": "string", "minLength": 1}, "default": ["hallazgo", "hallazgos", "finding", "findings", "arreglos de la revisión", "review fixes"]}
+            "findingsWords": {"type": "array", "items": {"type": "string", "minLength": 1}, "default": ["arreglos de la revisión", "review fixes"]}
           },
-          "default": {"findingsTrailer": "Findings", "retriesTrailer": "Retries", "reworkTypes": ["fix", "revert"], "findingsWords": ["hallazgo", "hallazgos", "finding", "findings", "arreglos de la revisión", "review fixes"]}
+          "default": {"findingsTrailer": "Findings", "retriesTrailer": "Retries", "reworkTypes": ["fix", "revert"], "findingsWords": ["arreglos de la revisión", "review fixes"]}
         },
         "prices": {
           "type": "array",
@@ -1234,7 +1244,7 @@
         ]
         }
       },
-      "default": {"ledger": "docs/metrics/ledger.jsonl", "record": true, "commitLedger": true, "reports": "docs/metrics", "gitTimeout": 30, "alert": {"factor": 1.5, "days": 28, "minDays": 7}, "quality": {"findingsTrailer": "Findings", "retriesTrailer": "Retries", "reworkTypes": ["fix", "revert"], "findingsWords": ["hallazgo", "hallazgos", "finding", "findings", "arreglos de la revisión", "review fixes"]}},
+      "default": {"ledger": "docs/metrics/ledger.jsonl", "record": true, "commitLedger": true, "reports": "docs/metrics", "gitTimeout": 30, "alert": {"factor": 1.5, "days": 28, "minDays": 7}, "quality": {"findingsTrailer": "Findings", "retriesTrailer": "Retries", "reworkTypes": ["fix", "revert"], "findingsWords": ["arreglos de la revisión", "review fixes"]}},
       "description": "Token ledger (B1-B6): the Stop hook metrics.py record appends, per session, agent, model and UTC date, the tokens the Claude Code transcripts show to the repo-relative ledger path (JSON lines, tokens only, never money); record false turns the recording off. commitLedger (B36): the pre-commit hook adds the changed ledger to the next work commit. reports: repo-relative folder where metrics.py report --write saves the period reports (daily/, weekly/, monthly/, quarterly/). alert (B6): the SessionStart hook (metrics.py alert) warns when a model's spend on today or yesterday (UTC) passes factor x its mean daily spend over the days before, counting only days with data and only with at least minDays of them; USD when all its rows are priced, else tokens; factor 0 turns it off. prices: dated tables of USD per million tokens per model (input, cacheWrite, cacheRead, output); a ledger row takes the newest table whose since is on or before its date, and the model key equal to its model or, failing that, the longest key that its model starts with followed by '-' (date suffixes); no table or no key = no price. A given prices replaces the whole default list. quality (B8): metrics.py quality reads the commit messages; findingsTrailer and retriesTrailer name the trailers whose integer values are summed per task id (Findings: accepted code-review findings; Retries: attempts that had to climb a rung); reworkTypes: the Conventional Commits types (after an optional WIP: prefix) that count as rework when they are not the first commit of the id, git reverts included; findingsWords (E60): with commitRefs or commitNext, commit-msg warns (never refuses) when the message names one of these words or phrases and has no findingsTrailer trailer ([] = off)."
     },
     "commandTimeout": {

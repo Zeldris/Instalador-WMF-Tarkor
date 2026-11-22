@@ -4,7 +4,7 @@ description: Show or switch the workflow's modes (careful, questions) in .claude
 license: MIT
 compatibility: "Claude Code or any Agent Skills agent; python3 for .claude/gw/scripts/mode.py (standard library only); needs .claude/gw.json."
 metadata:
-  version: "0.8.1"
+  version: "0.8.2"
   source: "Galivelop workshop (block C, questions)"
 ---
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.8.2
 """The files the phase 1 `/code-review` reads before the protected branch: the branch's diff without `vendored` files (D82).
 
   python3 review-scope.py [--base REV] [--workflow DIR] [--all]

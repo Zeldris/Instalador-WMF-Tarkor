@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.8.2
 """Check that a project has the workflow set up (used by /gw-doctor and CI). No AI, no network.
 
   python3 doctor.py            # one line per check: OK / WARN / FAIL, each problem with the command that fixes it
@@ -1202,6 +1202,41 @@ def check_ci_access(rep, root):
                  "run `gh auth login` (or export GITHUB_TOKEN)")
 
 
+def check_workflow_clone(rep, root, cfg):
+    """D158: WARN when the folder of `workflowClone` does not exist (review-scope.py needs it to tell what is
+    `vendored`). The workflow repo itself has no clone to find, so it says nothing."""
+    if not cfg or ((root / "scripts" / "apply.py").is_file() and (root / "skills").is_dir()
+                   and (root / ".claude-plugin" / "plugin.json").is_file()):
+        return
+    rel = config.workflow_clone(cfg)
+    if (root / rel).is_dir():
+        return
+    rep.warn("workflow clone", f"workflowClone points at {rel}, which does not exist, so review-scope.py cannot tell "
+             "what is vendored and the review reads the whole diff",
+             f"git clone --depth 1 <workflow repo URL> {rel}, or set \"workflowClone\" in .claude/gw.json to the "
+             "folder of your clone")
+
+
+AGENT_FILES = (".claude/agents/gw-worker.md", ".claude/agents/gw-reviewer.md")
+
+
+def check_agent_files_ignored(rep, root):
+    """D159: WARN when .gitignore leaves out an agent file the workflow installs (a commit then drops it)."""
+    found = []
+    for rel in AGENT_FILES:
+        if not (root / rel).is_file():
+            continue
+        r = subprocess.run(["git", "-C", str(root), "check-ignore", "-v", "--", rel], capture_output=True, text=True)
+        rule = r.stdout.split("\t")[0].strip()
+        if r.returncode == 0 and not rule.split(":", 2)[-1].startswith("!"):
+            found.append((rel, rule))
+    if found:
+        rep.warn("agents ignored", "git ignores subagent files, so a commit leaves them out and other clones lack "
+                 "them: " + "; ".join(f"{rel} by {rule}" for rel, rule in found),
+                 "add to .gitignore: " + " ".join(f"!{rel}" for rel, _ in found)
+                 + " (and git check-ignore -v <path> until none is ignored)")
+
+
 def run(root):
     rep = Report()
     cfg = check_config(rep, root)
@@ -1225,6 +1260,8 @@ def run(root):
     check_media_folder(rep, root)
     check_media_tools(rep, root)
     check_related_tests(rep, cfg)
+    check_workflow_clone(rep, root, cfg)
+    check_agent_files_ignored(rep, root)
     proposals = check_proposals(rep, root)
     check_skills(rep, root, version, proposals, cfg)
     check_session(rep, root)

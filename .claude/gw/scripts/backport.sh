@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.8.2
 # Brings commits from a minor's branch onto the current PATCH branch (D81).
 #   bash backport.sh [--from <branch>] [--refs <id>[,<id>]] [<sha>...]
 #  - Refuses to start (exit 2, with the command that fixes it) on: no shas, an unknown sha or branch, a dirty tree

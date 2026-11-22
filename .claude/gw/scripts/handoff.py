@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.8.2
 """Hand-off log rules. The branch-row rules need `"logRows": true` in .claude/gw.json (a no-op otherwise); the
 size and "Done" rules of `check`, and the `done` subcommand, work on any log.
 
@@ -82,7 +82,8 @@ contradicting "Next" lines, so each branch writes only in its own row and the ro
   handoff.py set-row TEXT [--branch BRANCH]     rewrite the text of BRANCH's row (default: the current branch) without
                                                  closing it; fails, and writes nothing, if the row is missing, TEXT is
                                                  empty or has a newline, or it passes 600 characters; prints the
-                                                 row as written and n/limit (set-row and close-row)
+                                                 row as written and n/limit (set-row and close-row); both also set
+                                                 today's date in the "Updated" row, if the log has one (D154)
   handoff.py closed BASE SHA                    every task closed in the plan between BASE and SHA ("- [x] **ID**"
                                                  or struck through) is also recorded in the "Done" section of SHA's
                                                  log: struck through there, or named on a line that starts with a date
@@ -119,7 +120,8 @@ contradicting "Next" lines, so each branch writes only in its own row and the ro
                                                  tree, the index or any local or remote-tracking branch, so a new task
                                                  does not take an id another branch already took (`clash` finds that
                                                  only at the push). --fetch runs `git fetch --all` first and fails if
-                                                 it fails. Works without logRows; needs a plan
+                                                 it fails. Also skips the ids named in `pendingFile` (D157). Works
+                                                 without logRows; needs a plan
 
 Common options: --root PATH (default: from this script's folder, via config.py), --plan PATH (repeatable; a file or a
 folder with the plan/roadmap; env GW_PLAN, ':'-separated; config `plan`), --id-regex REGEX (task ids; env GW_TASK_ID;
@@ -763,6 +765,15 @@ def worktree_ids(ctx):
     return found
 
 
+def pending_ids(ctx):
+    """D157: ids named in the pending file (`pendingFile`), so next-id never proposes one already used there."""
+    rel = gwconfig.pending_file(ctx.config)
+    path = ctx.root / rel if rel else None
+    if not path or not path.is_file():
+        return set()
+    return set(ctx.ids(path.read_text(encoding="utf-8", errors="replace")))
+
+
 def cmd_next_id(ctx, args):
     if not ctx.plans:
         raise Usage("no plan to read task ids from; set `plan` in .claude/gw.json or pass --plan PATH")
@@ -777,9 +788,10 @@ def cmd_next_id(ctx, args):
     revs = refs + ([INDEX] if ctx.git("rev-parse", "-q", "--verify", "HEAD").stdout.strip() else [])
     prefix = args.prefix
     sep = "-" if prefix.endswith("-") or (ctx.id.fullmatch(f"{prefix}-1") and not ctx.id.fullmatch(f"{prefix}1")) else ""
-    nxt = free_id(ctx, revs, prefix, worktree_ids(ctx), sep)
+    used = worktree_ids(ctx) | pending_ids(ctx)
+    nxt = free_id(ctx, revs, prefix, used, sep)
     if not ctx.id.fullmatch(nxt):
-        known = {id_prefix(i) for i in worktree_ids(ctx) | {i for rev in revs for i in ctx.titles(rev)}}
+        known = {id_prefix(i) for i in used | {i for rev in revs for i in ctx.titles(rev)}}
         known = sorted(k for k in known if ctx.id.fullmatch(f"{k}1") or ctx.id.fullmatch(f"{k}-1"))
         seen = (f"the prefixes this plan accepts: {', '.join(known)}; for example: handoff.py next-id {known[0]}"
                 if known else "no id in the plan matches that pattern")
@@ -1023,6 +1035,9 @@ def write_atomic(path, data):
             pass
 
 
+UPDATED_ROW = re.compile(r"(\|\s*\*\*(?:Actualizado|Updated)\*\*\s*\|\s*[`*]*)\d{4}-\d{2}-\d{2}")
+
+
 def rewrite_row(ctx, branch, text):
     """Replace the text of `branch`'s row in the log file. Returns (rows found, the new row); writes only if exactly 1."""
     path = ctx.root / ctx.log
@@ -1040,6 +1055,12 @@ def rewrite_row(ctx, branch, text):
             lines[i] = new = f"| **{m.group('label')} · `{branch}`** | {text} |"
             hit += 1
     if hit == 1:
+        today = datetime.date.today().isoformat()  # D154: the commit-msg rejects a stale "Updated" row
+        for i, line in enumerate(lines):
+            m = UPDATED_ROW.match(line)
+            if m:
+                lines[i] = f"{m.group(1)}{today}{line[m.end():]}"
+                break
         with open(path, "w", encoding="utf-8", newline="") as f:  # Path.write_text(newline=) is Python 3.10+
             f.write(eol.join(lines))
     return hit, new

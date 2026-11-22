@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.8.2
 """PreToolUse hook (C8, `modes.careful`): ask the user before Claude runs a destructive Bash command.
 
 It never denies: it returns `ask` (the same JSON as config-guard.py, whose parser it reuses), so the user decides in the
