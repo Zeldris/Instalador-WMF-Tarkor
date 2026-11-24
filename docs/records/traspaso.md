@@ -18,7 +18,7 @@ cada commit.**
 | **Tarea en curso · `claude/gw-update-0.8.0`** | Al fusionarse, rama terminada: no queda nada pendiente en ella. |
 | **Tarea en curso · `claude/flu-13-ledger-ci`** | Rama abandonada sin fusionar: `FLU-13` la cerró `FLU-15` (v0.8.2 del flujo). |
 | **Tarea en curso · `claude/gw-update-0.8.1`** | Al fusionarse, rama terminada: no queda nada pendiente en ella. |
-| **Tarea en curso · `claude/gw-update-0.8.2`** | FLU-15 en curso: flujo v0.9.0 aplicado (apply.py --check en verde, doctor sin FAIL); fase 1 sin hallazgos y fase 2 hecha (retro aprobada: docs/records/retro-2026-11-24-flu-15.md; FLU-16 y FLU-17 al plan). Falta: reviewed.sh, descripción del PR y abrirlo. |
+| **Tarea en curso · `claude/gw-update-0.8.2`** | FLU-15: PR #34 abierto; añadido parche de cookie 0.18.3 y url 2.5.9 (RUSTSEC-2026-0594/0592 rompían auditoria, también en main). Falta: CI en verde y fusionar (la usuaria lo autorizó con CI verde). |
 | **Tests** | 2026-11-12: núcleo `cargo test -p tarkor-nucleo` 149 y el check del proyecto en verde. Asistente `vitest` y E2E con el Ollama falso: último verde el 2026-10-25 (`vitest` 27 entonces). |
 
 ## Dónde está todo (para saber qué sigue)
