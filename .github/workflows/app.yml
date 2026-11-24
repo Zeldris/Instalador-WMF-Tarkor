@@ -87,7 +87,7 @@ jobs:
       - name: Variante del error de red (E2E_ESPERA_ERROR_RED=1)
         run: E2E_ESPERA_ERROR_RED=1 bash tools/qa/e2e.sh app/e2e/asistente.e2e.mjs
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-logs-y-capturas
           path: ${{ runner.temp }}/e2e
@@ -161,7 +161,7 @@ jobs:
         run: |
           $setup = Get-ChildItem target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
           pwsh -NoProfile -File ../tools/qa/desinstalar-windows.ps1 $setup.FullName
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: tarkor-windows-setup
           path: app/target/release/bundle/nsis/*-setup.exe
@@ -212,7 +212,7 @@ jobs:
           tarkor --info-desinstalar "$RUNNER_TEMP/deb.ini"
           iconv -f UTF-16 -t UTF-8 "$RUNNER_TEMP/deb.ini" | grep -q "ruta=$TARKOR_DATOS/ia"
           ls /usr/share/applications | grep -i tarkor
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: tarkor-linux
           path: |
