@@ -18,7 +18,7 @@ cada commit.**
 | **Tarea en curso · `claude/gw-update-0.8.0`** | Al fusionarse, rama terminada: no queda nada pendiente en ella. |
 | **Tarea en curso · `claude/flu-13-ledger-ci`** | Rama abandonada sin fusionar: `FLU-13` la cerró `FLU-15` (v0.8.2 del flujo). |
 | **Tarea en curso · `claude/gw-update-0.8.1`** | Al fusionarse, rama terminada: no queda nada pendiente en ella. |
-| **Tarea en curso · `claude/gw-update-0.8.2`** | FLU-15 en curso: flujo en v0.9.0 aplicado y completo (apply.py --check en verde, doctor sin FAIL); gw-seo se queda (Q-8) hasta que el flujo tenga una clave para excluir skills: pedirla en Galivelop-workflow (no se toca desde aquí). Falta: tres fases antes de main y el PR. |
+| **Tarea en curso · `claude/gw-update-0.8.2`** | FLU-15 en curso: flujo v0.9.0 aplicado (apply.py --check en verde, doctor sin FAIL); fase 1 sin hallazgos y fase 2 hecha (retro aprobada: docs/records/retro-2026-11-24-flu-15.md; FLU-16 y FLU-17 al plan). Falta: reviewed.sh, descripción del PR y abrirlo. |
 | **Tests** | 2026-11-12: núcleo `cargo test -p tarkor-nucleo` 149 y el check del proyecto en verde. Asistente `vitest` y E2E con el Ollama falso: último verde el 2026-10-25 (`vitest` 27 entonces). |
 
 ## Dónde está todo (para saber qué sigue)
