@@ -4,7 +4,7 @@ description: Run the main session as an orchestrator that deals work out to clea
 license: MIT
 compatibility: Claude Code or any Agent Skills agent with subagents; git; reads .claude/gw.json
 metadata:
-  version: "0.8.2"
+  version: "0.9.0"
   source: "Galivelop workshop; generalised from the Tarkor, installer and portal gw-orchestrate-dealer"
 ---
 
@@ -14,10 +14,10 @@ If `.claude/gw/gw-orchestrate-dealer.md` exists in the project, read it first: i
 
 The main session is the **orchestrator**: it holds the plan, the decisions and the thread with the user, and deals each
 chunk of work to a subagent that starts with an empty context. Every deal is an automatic `/clear`: the main session
-receives a short summary and grows slowly. Reply to the user in the project's `language`. Its own model is that of its own work (plan, decide, review: usually Sonnet `medium`), weighed with `metrics.py quality`; Opus only for design or a non-obvious cause (`gw-selector`).
+receives a short summary and grows slowly. Reply to the user in the project's docs language (`languages.docs.primary`). Its own model is that of its own work (plan, decide, review: usually Sonnet `medium`), weighed with `metrics.py quality`; Opus only for design or a non-obvious cause (`gw-selector`).
 
-Config values used below come from `.claude/gw.json`: `check` (list of commands), `log` (handover file),
-`protectedBranch`, `language`. Read it once at the start.
+Config values used below come from `.claude/gw.json`: `check`, `log` (handover file), `protectedBranch`,
+`languages.docs.primary`. Read it once at the start.
 
 ## Who does what
 
@@ -41,8 +41,8 @@ A read of more than ~200 lines, or a long output, in the main session is a chunk
    waits for the first. With more than ~5 chunks, a cheap-model subagent may review the split before launch (missing
    blockers, shared files, criteria that cannot be checked). Cap a subagent at ~30 tool calls (one or two proposal rows); at the cap it saves its state in `log` and the
    next one resumes from it. A subagent's context grows with every call: chunks of 44-55 calls averaged 100-116k;
-   splitting them costs one more ~50k startup but far less than the drag. A one-file fix whose place the reviewer already gave is not a chunk: the main session
-   makes it, with its tests (a subagent pays ~50k just to start and rediscovers what the session knows).
+   splitting them costs one more ~50k startup but far less than the drag. A one-file fix whose place the reviewer gave is
+   not a chunk: the main session makes it, with its tests (a subagent pays ~50k to start and rediscovers what it knows).
 2. **Deal.** One subagent per chunk with the Agent tool, in the foreground when the next chunk depends on it. Model and
    effort follow the `gw-selector` ladder: `sonnet` to implement, `opus` to debug something non-obvious, skipping
    any model in `models.disabled` (`subagent-cap.py` denies it). Every call passes the rung as both `model` and
@@ -68,8 +68,8 @@ A read of more than ~200 lines, or a long output, in the main session is a chunk
    never touch the log (the main session does both). Leave nothing uncommitted when you reply: every change is in
    your last commit. If a push is rejected, `git fetch` and `git merge` (never rebase), then push again.
    At ~25 tool calls, commit (`WIP:` if red), push, and reply with what is left under MISSING.
-   Final push: in the foreground with a `timeout` of 600000 ms, never in the background; other long waits: background
-   plus `Monitor` (ToolSearch first), never a `sleep`. Reply once, with nothing of yours running. To stop a process
+   Final push and other long waits: in the background with a `timeout` of 5400000 ms (a full check takes over 10
+   minutes, the foreground cap), waited for with its notice or `Monitor` (ToolSearch first), never a `sleep`. Wait for the background push with `Monitor` until it ends, never by ending your turn, and reply once, with nothing of yours running, only after `git ls-remote` confirms the push. To stop a process
    you started, `TaskStop` with its id (load it with ToolSearch); `kill` and `pkill` are denied to subagents.
    Push with its output to a file outside the tree (`git push … > "$(git rev-parse --git-dir)/push.log" 2>&1`); if it
    fails, read the pre-push reason in that file before retrying.
@@ -88,12 +88,12 @@ A read of more than ~200 lines, or a long output, in the main session is a chunk
    Your branch is named `agent/<id>-<topic>` (`<id>` = the task id, e.g. `agent/D11-commit-format`); if isolation
    created another name, rename it first: `git branch -m agent/<id>-<topic>`.
    Applying a document from another repo: each point's literal text and path go to a scratchpad file; reply its path.
-   If the bug is a pattern (a wrong check, a missing quote, a case left out), grep its other occurrences and fix
-   them too, or list them under MISSING.
+   If the bug is a pattern (a wrong check, a missing quote, a case left out), grep its other occurrences, also in the
+   siblings of the files you touch (twin, other language, copy), and fix them too, or list them under MISSING.
    If you touch processes, paths or permissions, write it for every platform the project supports.
    If something needs a user decision, stop and return it as a question (never ask the user yourself). Never merge into {protectedBranch}.
    Write your reply and commit message in {language}. Reply in at most 15 lines:
-   DONE: … · COMMIT: <sha> · EVIDENCE: <command and summarised result> · MISSING: … · QUESTIONS: …
+   DONE: <per point of the task: whole or partial, and what is left> · COMMIT: <sha> · EVIDENCE: <command and summarised result> · MISSING: … · QUESTIONS: …
    If the chunk cannot be tested, reply NOT_TESTABLE: <reason> + the command that checks it another way, in place of
    EVIDENCE. Every number you report you counted yourself.
    Add FOUND: (one line per finding) and TOOLS: (failures of the project's scripts, hooks or CI) only if you have any.
@@ -134,13 +134,15 @@ A read of more than ~200 lines, or a long output, in the main session is a chunk
   and the scripts they call; also code a subagent commits on the working branch, not only worktree branches)
   passes a short `/code-review` by a reviewer subagent as soon as the chunk returns, before the next chunk starts
   (commit it first, as `WIP:` if needed). The reviewer compares the diff with the contract (step 3); its fixes land
-  before moving on.
-  If the review of the whole branch follows right away and is decided, the last block is not reviewed separately.
+  before moving on. If the whole-branch review follows right away and is decided, the last block skips its own.
 - **Before the PR, only what matters:** fix what is serious or medium, and what the fix itself breaks; log the minor
-  findings in the pending file (`pendingFile`, else `log`) and do not review them again in this PR (`/code-review --max-findings all` still
-  serves to list them). Otherwise every fix is reviewed again, brings new findings and the PR grows without end.
-  The fixes of that review are dealt too, as in the next rule; only a one-file fix whose place the reviewer gave
-  stays in the main session.
+  findings in the pending file (`pendingFile`, else `log`), not reviewed again in this PR (`/code-review --max-findings
+  all` lists them), or every fix brings new findings and the PR never ends. Its fixes are dealt too (next rule); only a
+  one-file fix whose place the reviewer gave stays in the main session.
+- **A big phase 1 review is dealt too (E86):** a trivial diff (`review-scope.py --trivial` exits 0) never splits.
+  Count the changed lines of the files it lists (`git diff --shortstat <base> -- <files>`); above `python3 scripts/config.py
+  get review.splitLines` (`0` = never) form the groups yourself (a shared contract stays in one), deal one `gw-reviewer`
+  per group plus a short one for what crosses them, each with `pendingFile`; join the findings.
 - **Approved review findings are dealt by group of files:** after the user approves the findings of a `/code-review`,
   group them by the files they touch (findings that share a file go together; a group stays within the ~30-call cap)
   and deal one subagent per group, in series on the working branch or in parallel worktrees as in the rules above.
@@ -180,21 +182,19 @@ A read of more than ~200 lines, or a long output, in the main session is a chunk
   is visual; otherwise the text tool's output. Batches share the environment, so each leaves it in a state the
   next can resume from and says so under `MISSING`. **Before dealing a batch, check that the starting state gives
   each check its precondition** (scenario, data, account); if not, the first chunk prepares it.
-- **Repos only read are cloned apart,** outside the tree, unregistered.
-- **A subagent never talks to the user:** what it needs from them returns as `QUESTIONS`.
+- **Repos only read are cloned apart,** outside the tree, unregistered. **A subagent never talks to the user:** its
+  questions return as `QUESTIONS`.
 - **A subagent cut off by a usage or API limit is resumed, not restarted:** send it a message (SendMessage to its id)
-  once the limit resets; it continues from its transcript. A new subagent would redo the work. Commit its partial
-  work as `WIP:` meanwhile.
+  once the limit resets; it continues from its transcript (a new one would redo the work). Commit its partial work as
+  `WIP:` meanwhile.
 - **Intermediate state stays out of git:** dumps, screenshots, scratch logs and bench outputs go to a scratch folder
   (or a path in `.gitignore`); only results, tests and the log are committed. Each subagent gets its own
-  `{scratch}/<id>-<topic>/` (named like its branch): in one shared folder an agent overwrote another's files.
-- **Measure:** `/gw-opt-tokens` before each PR compares context per call, compactions and per-model split with the
-  previous session; if they do not fall, the dealing is staying in the main session.
+  `{scratch}/<id>-<topic>/` (like its branch): in a shared folder an agent overwrote another's files.
+- **Measure:** `/gw-opt-tokens` before each PR compares context, compactions and model split; if they do not fall, dealing stays here.
 - **A batch of approved rows is dealt, not worked inline:** the rows of an approved proposal or a findings list go
-  one per subagent (or 2 small related rows per subagent), in series on the working branch, each reviewed as in
-  step 3. A row the main session keeps (a one-file fix) counts against a stretch: every 4-5 rows, or as soon as the
-  context passes ~150k, it writes the handover in `log` and recommends a `/clear`. Working 18 rows inline cost a 191k
-  average context over 157 calls.
+  one per subagent (or 2 small related rows), in series on the working branch, each reviewed as in step 3. A row the
+  main session keeps (a one-file fix) counts against a stretch: every 4-5 rows, or at ~150k context, it writes the
+  handover in `log` and recommends a `/clear`. 18 rows inline cost a 191k average context over 157 calls.
 - **Automatic compaction is the net, not the plan:** at task boundaries write the handover in `log` and recommend
   a `/clear` to the user rather than letting the context grow. In the cloud the net may be missing: the session
   starts outside the repo and does not load its `.claude/settings.json` (`doctor.py` warns).

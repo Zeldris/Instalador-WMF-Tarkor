@@ -1,4 +1,4 @@
-# galivelop-workflow v0.8.2
+# galivelop-workflow v0.9.0
 # The project's check in CI: each `ciInstall` command (else each `install` command), then each `check` command of
 # .claude/gw.json, on every push outside the protected branch and on every pull request (`ciOnPush`: false, only on
 # pull requests: apply.py renders the push filter as ['**'], which matches every branch). On a pull request it also
@@ -10,6 +10,8 @@
 # workflow's, untouched; `ciPython` makes Python a matrix); another toolchain (rust-toolchain...) goes before the rust-cache step, which is before "Install".
 # `workflow_call` (D63): a release.yml of the project runs this check first with `check: {uses: ./.github/workflows/check.yml}`
 # and `needs: check` on its release job, instead of copying these steps.
+# E7: with `front.tokens` set, Node is set up and a "Front" step after "Check" runs `front.py install --matrix
+# --with-deps` and `front.py run full` (Stylelint, the visual tests and the whole browser matrix; the runner is Linux).
 name: Check
 
 on:
@@ -33,6 +35,7 @@ jobs:
       node: ${{ steps.dirs.outputs.node }}
       rust: ${{ steps.dirs.outputs.rust }}
       rust_workspaces: ${{ steps.dirs.outputs.rust_workspaces }}
+      front: ${{ steps.dirs.outputs.front }}
     steps:
       - uses: actions/checkout@v4
       - id: python
@@ -66,6 +69,10 @@ jobs:
               workspaces="$workspaces$dir"$'\n'
             fi
           done <<<"$(python3 .claude/gw/scripts/config.py get ciRustDirs)"
+          # E7: front.tokens set means front tests, which need Node whatever ciNodeDirs says.
+          front=false
+          tokens="$(python3 .claude/gw/scripts/config.py get front.tokens)"
+          case "$tokens" in ''|null|None) ;; *) front=true; node=true ;; esac
           echo "node=$node" >> "$GITHUB_OUTPUT"
           echo "rust=$rust" >> "$GITHUB_OUTPUT"
           {
@@ -73,6 +80,7 @@ jobs:
             printf '%s' "$workspaces"
             echo "GW_EOF"
           } >> "$GITHUB_OUTPUT"
+          echo "front=$front" >> "$GITHUB_OUTPUT"
   check:
     # `check` as ever without `ciPython`; `check (<version>)` with it (required checks and `ciIgnore` match the name).
     name: "${{ matrix.python == '3.x' && 'check' || format('check ({0})', matrix.python) }}"
@@ -122,6 +130,18 @@ jobs:
             echo "== $cmd"
             bash -c "$cmd"
           done <<<"$cmds"
+      - name: Install actionlint (actionlintVersion of .claude/gw.json)
+        # E71: `ci-local.py --validate` (in `check`) lints the workflows with it unless `ciActionlint` is off. Only on
+        # GitHub (ci-local.py runs this file on a machine expected to have its own tools), in a venv under RUNNER_TEMP
+        # so the runner's system Python is not touched.
+        run: |
+          if [ "${GITHUB_ACTIONS:-}" = true ] && [ "$(python3 .claude/gw/scripts/config.py get ciActionlint)" != off ] \
+              && compgen -G '.github/workflows/*.y*ml' >/dev/null; then
+            version="$(python3 .claude/gw/scripts/config.py get actionlintVersion)"
+            python3 -m venv "$RUNNER_TEMP/actionlint"
+            "$RUNNER_TEMP/actionlint/bin/pip" install --quiet "actionlint-py${version:+==$version.*}"
+            echo "$RUNNER_TEMP/actionlint/bin" >> "$GITHUB_PATH"
+          fi
       - name: Git hooks path
         # `doctor.py` in `check` fails on an unset core.hooksPath; the hooks are in the checkout, so point git at them.
         run: git config core.hooksPath .githooks
@@ -133,6 +153,13 @@ jobs:
             echo "== $cmd"
             bash -c "$cmd"
           done <<<"$cmds"
+      - name: Front (E7) - front.py run full
+        # Only with front.tokens: the packages of front.dir outside the tree, every browser of the matrix with its
+        # system libraries (sudo, as on GitHub's runners), then the whole front suite, visual tests included (E-10).
+        if: needs.versions.outputs.front == 'true'
+        run: |
+          python3 .claude/gw/scripts/front.py install --matrix --with-deps
+          python3 .claude/gw/scripts/front.py run full
       - name: Base branch's pre-commit over the pull request
         if: github.event_name == 'pull_request'
         run: |

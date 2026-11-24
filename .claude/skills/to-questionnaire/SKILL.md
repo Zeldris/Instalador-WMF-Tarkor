@@ -4,7 +4,7 @@ description: Turn a decision you can't fully answer into a questionnaire for som
 disable-model-invocation: true
 license: MIT (see LICENSE-mattpocock-skills)
 metadata:
-  version: "0.8.2"
+  version: "0.9.0"
   source: "mattpocock/skills@5beb35b"
 ---
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.2
+# galivelop-workflow v0.9.0
 """The commit message rules of the commit-msg hook that need more than grep (D11, D12, D15).
 
   python3 commit-message.py [--root PATH] MSGFILE
@@ -16,7 +16,7 @@ and applies, from .claude/gw.json (read through config.py):
                                id opens an entry (table row or list item, the `entry` expression of handoff.py) with
                                the shape of `taskId` in one of `refsSources` (empty: `plan` plus `log`). The STAGED
                                version of each file is read, so a commit that adds the id can cite it.
-  commitNext true              the trailer block has a non-empty next-step trailer, named after `language`: `Siguiente:` (es)
+  commitNext true              the trailer block has a non-empty next-step trailer, named after `languages.docs.primary`: `Siguiente:` (es)
                                or `Next:` (en; NEXT_TRAILERS). WIP: commits need it too; `fixup! `, `squash! `,
                                `amend! `, `Revert "` and `Reapply "` lines are exempt, and so is a
                                merge/revert/cherry-pick/rebase in progress (merge-branch.sh requires it itself).
@@ -55,7 +55,8 @@ budget, one line on stderr asks for /clear (a long context is almost all the spe
 heading has a backticked version (`## `0.6` ...`, its `###` included) has every task row (a table row whose status,
 the last cell, starts with its `done` word or an `open` one) with a status that starts with `done` in the STAGED
 version, and not at HEAD; or (b) the value of the log's state table row «Fase en curso» / «Phase in progress» /
-«Current phase» differs between HEAD and the staged log. Closing a single row is not enough. The budget and the
+«Current phase» differs between HEAD and the staged log; or (c, D176, `clearOnTaskClose`, default true) a task row of
+that file is open at HEAD and done in the staged version. Closing a single row counts only through (c). The budget and the
 compactions are recover.py's (budget_overrun: `Compaction budget: N` in the log, the newest transcript of the repo).
 Any missing piece (roadmap, recover.py, transcript, budget line) means no warning.
 
@@ -88,10 +89,10 @@ GIT_LINES = ("fixup! ", "squash! ", "amend! ", 'Revert "', 'Reapply "', "Merge "
 MODEL_NAMES = frozenset(("claude", "anthropic", "opus", "sonnet", "haiku", "fable", "gpt", "chatgpt", "openai",
                          "gemini", "llama", "mistral", "qwen", "deepseek"))
 MODEL_SHAPES = re.compile(r"gpt\d.*|o\d+|\d+o")
-# The next-step trailer per config `language` (the word the templates/<lang>/AGENTS.md use); other languages: English.
+# The next-step trailer per config `languages.docs.primary` (the word the templates/<lang>/AGENTS.md use); other languages: English.
 NEXT_TRAILERS = {"es": "Siguiente", "en": "Next"}
 MERGE_STATES = ("MERGE_HEAD", "REVERT_HEAD", "CHERRY_PICK_HEAD")
-# The subject reviewed.sh writes for the review-mark commit (by `language`; SHA-1 or SHA-256 object names): it has no
+# The subject reviewed.sh writes for the review-mark commit (by `languages.docs.primary`; SHA-1 or SHA-256 object names): it has no
 # task of its own, so format and Refs are not asked of it (the next-step trailer is, and reviewed.sh writes it).
 REVIEW_MARK = re.compile(r"(?:Revisado|Reviewed): [0-9a-f]{40}(?:[0-9a-f]{24})?")
 
@@ -211,7 +212,7 @@ def check_agent(found, msgfile, rules=None):
 
 def check_next(config, message, found, msgfile):
     wip = wip_of(config)
-    word = NEXT_TRAILERS.get(config.get("language"), NEXT_TRAILERS["en"])
+    word = NEXT_TRAILERS.get(gwconfig.languages(config)["docs"]["primary"], NEXT_TRAILERS["en"])
     subject = next((line for line in message.splitlines() if line.strip()), "")
     rest = without_wip(subject, wip)
     # "Merge " is not exempt here: a real merge is skipped by its MERGE_HEAD, and a plain commit titled "Merge ..." is not one.
@@ -473,8 +474,25 @@ def version_sections(text, done, open_words):
     return {h: all(v) for h, v in rows.items()}
 
 
+def task_rows(text, done, open_words, task_id):
+    """{id (first cell): whether the row is done} for every table row whose last cell starts with the `done` word or an
+    `open` one (D176; the rows version_sections groups by section)."""
+    import roadmap
+    words = (done,) + tuple(w.lower() for w in open_words)
+    rows = {}
+    for line in text.splitlines():
+        spans = roadmap.cells(line)
+        if spans and len(spans) >= 3:
+            status = roadmap.status_of(line).lower()
+            key = line[spans[0][0]:spans[0][1]].strip(" *`~")
+            if status.startswith(words) and task_id.fullmatch(key):
+                rows[key] = status.startswith(done)
+    return rows
+
+
 def closing(root, config, message):
-    """What this commit closes (see the header): a roadmap version section or the log's phase; None otherwise."""
+    """What this commit closes (see the header): a roadmap version section, a task row (clearOnTaskClose) or the log's
+    phase; None otherwise."""
     wip = wip_of(config)
     subject = next((line for line in message.splitlines() if line.strip()), "")
     if wip and subject.startswith(wip):
@@ -487,6 +505,14 @@ def closing(root, config, message):
         closed = [h for h, ok in after.items() if ok and before.get(h) is False]
         if closed:
             return f"the roadmap section {closed[0][3:]}"
+        if config.get("clearOnTaskClose", True):  # D176: a single task row turned done counts too
+            import handoff
+            tid = re.compile(gwconfig.non_capturing(handoff.task_id_pattern(config)))
+            rows_before = task_rows(staged_or_head(root, "HEAD", path), done, words, tid)
+            rows_after = task_rows(staged_or_head(root, "", path), done, words, tid)
+            rows = [t for t, ok in rows_after.items() if ok and rows_before.get(t) is False]
+            if rows:
+                return f"the roadmap task {rows[0]}"
     log = config.get("log")
     if log:
         old, new = phase_cell(staged_or_head(root, "HEAD", log)), phase_cell(staged_or_head(root, "", log))

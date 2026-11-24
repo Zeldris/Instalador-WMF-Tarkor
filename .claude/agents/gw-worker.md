@@ -1,5 +1,5 @@
 ---
-# galivelop-workflow v0.8.2
+# galivelop-workflow v0.9.0
 name: gw-worker
 description: Light worker for the briefs of gw-orchestrate-dealer. Does one scoped chunk (read, edit, run tests, commit) in a clean context; no MCP tools. Use it for each dealt chunk instead of general-purpose.
 tools: Read, Edit, Write, Glob, Grep, Bash, ToolSearch, Monitor, TaskStop

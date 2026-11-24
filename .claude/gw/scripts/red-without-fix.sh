@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.8.2
+# galivelop-workflow v0.9.0
 # Checks that a new test FAILS without the fix it covers (a test that passes either way proves nothing).
 # With the fix still uncommitted: it copies the fix files aside (no git stash), puts back their HEAD version, runs the test command (it must fail), restores them and
 # runs it again (it must pass).

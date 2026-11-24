@@ -4,7 +4,7 @@ description: Pick the skill and models for the task that is starting. Use at the
 license: MIT
 compatibility: Claude Code or any Agent Skills agent; reads keys of .claude/gw.json through config.py when present
 metadata:
-  version: "0.8.2"
+  version: "0.9.0"
   source: "Galivelop workshop; generalised from the Tarkor, installer and portal selectors"
 ---
 
@@ -12,10 +12,10 @@ metadata:
 
 If `.claude/gw/gw-selector.md` exists in the project, read it first: it holds what is specific to the project.
 
-Classify the task with the table, then act on its row. Reply in the project's `language`.
+Classify the task with the table, then act on its row. Reply in the project's docs language (`languages.docs.primary` in `.claude/gw.json`).
 
 **Config:** read only the keys this skill uses, one command each, never `.claude/gw.json` whole (it costs ~5k tokens
-per task): `python3 .claude/gw/scripts/config.py get language`, `get selector.cases --json` (project rows, below),
+per task): `python3 .claude/gw/scripts/config.py get languages.docs.primary`, `get selector.cases --json` (project rows, below),
 `get designReferences --json`, `get log`, and `python3 .claude/gw/scripts/models.py list` (disabled models). In the
 workflow's own repo the scripts are in `scripts/`.
 
@@ -65,8 +65,9 @@ do the case without it and say so.
 - **An orchestrating session** (one that deals work out with `gw-orchestrate-dealer`) takes the model and effort of
   the work it does itself (plan, decide, review: usually `medium` (Sonnet) `medium`), not those of the rows it deals;
   it asks for `large` (Opus) only when that work is design or a cause that is not obvious. Weigh the model metrics
-  before picking, always: `python3 .claude/gw/scripts/metrics.py quality --period month` (its by-model table: the
-  rework, findings and retries of the ids each model spent on, beside its spend) says which model did best, or gave
+  before picking, always, reading only the by-model table, not the whole report (about 3.7k tokens):
+  `python3 .claude/gw/scripts/metrics.py quality --period month | sed -n '/^## By model/,$p'` (the rework, findings
+  and retries of the ids each model spent on, beside its spend) says which model did best, or gave
   the best quality for its cost, in that kind of case; follow it over the default rung and say so in the line. No
   data in the period: the table.
 - **Models outside Anthropic** (GPT, Gemini, DeepSeek…): Claude Code cannot launch them, so never pass one to an
@@ -84,6 +85,9 @@ do the case without it and say so.
   and decisions stay in the main session.
 - **Closed plan, scoped implementation:** goes to a `sonnet` subagent and the main session reviews its diff before
   the commit. The fixes from a review are a closed plan too (`sonnet`); `opus` only to debug something non-obvious. Anything of more than one step runs through `gw-orchestrate-dealer`.
+- **Sweeps and review fixes of 2 or more points:** at their start, recommend dealing them to a `gw-worker` subagent
+  (`subagent_type: gw-worker`, with `model` and `effort`) where `.claude/agents/gw-worker.md` exists, not doing them
+  in the main session: the main session reviews the worker's diff. The session-start hook repeats it (`workerHint`).
 - **Subagent ladder:** `sonnet low` → `sonnet medium` → `opus medium` → `opus high`. Start at the lowest rung that
   fits; when a subagent does not finish its brief, the next attempt climbs one rung. **Two failures at one rung: stop
   and ask the user.** A subagent that never starts (tool error) is retried on the same rung and does not count as a

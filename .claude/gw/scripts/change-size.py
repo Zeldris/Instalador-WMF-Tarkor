@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.2
+# galivelop-workflow v0.9.0
 """Size of a commit and of a review block, in changed lines, with a warning above `changeSize` (D43).
 
   python3 change-size.py              # warnings for the staged change and for the open block (staged included)

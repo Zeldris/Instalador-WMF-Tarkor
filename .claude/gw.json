@@ -1,10 +1,20 @@
 {
   "$schema": "gw/schema/gw.schema.json",
-  "version": "0.8.2",
+  "version": "0.9.0",
   "workflowClone": "../galivelop-workflow",
-  "schemaVersion": 1,
-  "language": "es",
-  "visibleLanguages": [],
+  "schemaVersion": 2,
+  "languages": {
+    "code": "en",
+    "docs": {
+      "primary": "es",
+      "others": []
+    },
+    "public": {
+      "primary": "es",
+      "others": []
+    },
+    "ui": []
+  },
   "log": "docs/records/traspaso.md",
   "logRows": true,
   "protectedBranch": "main",

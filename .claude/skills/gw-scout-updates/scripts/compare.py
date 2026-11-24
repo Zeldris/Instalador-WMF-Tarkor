@@ -10,7 +10,7 @@ Usage:
 Without <architecture.md>, it is `architecture.md` in the `scoutDir` folder of the project's `.claude/gw.json`
 (read with `.claude/gw/scripts/config.py`; default `.claude/gw/scout`).
 
-The words the script looks for come in English and in Spanish (the `language` values of the config), whichever the
+The words the script looks for come in English and in Spanish (the `languages.docs.primary` values of the config), whichever the
 project uses: seal `seal`/`sello`, section `Constraints`/`Restricciones`, report section `Coverage`/`Cobertura`,
 table header `Component`/`Componente`.
 

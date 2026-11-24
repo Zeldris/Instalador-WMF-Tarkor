@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.8.2
+# galivelop-workflow v0.9.0
 # What pre-push checks about the hand-off log of each branch it pushes (for projects with "logRows": true; a no-op
 # otherwise). Called by .githooks/pre-push as:   prepush-branches.sh <changed-files-file> <pushed-commits-file>
 # with git's ref lines ("local-ref local-sha remote-ref remote-sha" per ref) on stdin. For each pushed ref:
@@ -140,10 +140,20 @@ while read -r local_ref sha_local remote_ref sha_remote; do
       git show "$sha_local:$pending" > "$ptmp" 2>/dev/null || rm -f "$ptmp"
       pend=(--pending "$ptmp")
     fi
-    if ! handoff check "$tmp" --at push ${date[@]+"${date[@]}"} ${pend[@]+"${pend[@]}"}; then
-      echo "handoff: in commit $(git log -1 --format='%h %s' "$sha_local")"; rm -f "$tmp" "$tmp.pending"; exit 1
+    # The roadmap (roadmapFiles[0]) as the pushed tip has it, for the closed-id check (not the working tree's).
+    road=()
+    rpath="$(python3 "$config" --root "$root" get roadmapFiles 2>/dev/null | python3 -c 'import json,sys
+try: print(json.loads(sys.stdin.readline())["path"])
+except Exception: pass' 2>/dev/null)"
+    if [ -n "$rpath" ]; then
+      rtmp="$tmp.roadmap"
+      git show "$sha_local:$rpath" > "$rtmp" 2>/dev/null || : > "$rtmp"
+      road=(--roadmap "$rtmp")
     fi
-    rm -f "$tmp" "$tmp.pending"
+    if ! handoff check "$tmp" --at push ${road[@]+"${road[@]}"} ${date[@]+"${date[@]}"} ${pend[@]+"${pend[@]}"}; then
+      echo "handoff: in commit $(git log -1 --format='%h %s' "$sha_local")"; rm -f "$tmp" "$tmp.pending" "$tmp.roadmap"; exit 1
+    fi
+    rm -f "$tmp" "$tmp.pending" "$tmp.roadmap"
   fi
 done
 sort -u -o "$changed" "$changed"

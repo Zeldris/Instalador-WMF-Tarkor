@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.8.2
+# galivelop-workflow v0.9.0
 # Claude Code SessionStart hook (startup|resume|clear): leaves the project ready to work. Idempotent.
 #   - git hooks: sets core.hooksPath to .githooks when it is unset and .githooks exists; when another hook manager
 #     owns the hooks (core.hooksPath elsewhere, or hooks installed in .git/hooks), it says how to chain the
@@ -16,8 +16,12 @@
 #     while git user.email is noreply@anthropic.com (D21).
 #   - spend alert (B6): with a valid config, prints the lines of `metrics.py alert` (a model whose spend today or
 #     yesterday passes metrics.alert.factor x its daily mean); its errors are dropped.
+#   - worker hint (E68): with a valid config, .claude/agents/gw-worker.md and workerHint not false, one line that deals
+#     sweeps and review fixes of 2 or more points to a gw-worker subagent instead of the main session.
 #   - open questions (C3): with a valid config, prints `questions.py notice`: only "N open questions (path)", or the whole
 #     list when some open question was never shown (mark in the git dir, gw/questions-shown); a broken questions file is a one-line warning.
+#   - agent language (A12): with a valid config, "Agent language: <code>" from ~/.claude/gw.json (agentLanguage, keyed by
+#     the repo's git user.email; GW_USER_CONFIG overrides the path), else languages.docs.primary; a bad file is a warning.
 #   - session model (D142): with a valid config and the hook's transcript_path, prints `models.py session-check`: a
 #     warning when the last gw-selector line in the transcript recommends another model family than the session's
 #     (the hook's `model`, else the last assistant message); models.sessionCheck false turns it off.
@@ -113,6 +117,13 @@ version_lt() {  # version_lt A B: true when A < B (numeric X.Y.Z; pre-release su
   return 1
 }
 config_ok=""
+agent_language_fallback() {
+  # A12 (Q-18): without a usable project config the language comes from the user file, else en; say why.
+  [ -f "$config" ] || return 0
+  fb="$(python3 "$config" --root "$root" agent-language 2>/dev/null)"
+  echo "Agent language: ${fb:-en}"
+  warn "Agent language: the project config is unusable, so '${fb:-en}' comes from ~/.claude/gw.json or the default 'en', not from languages.docs.primary; fix the config as said above, then restart the session"
+}
 if [ ! -f "$root/.claude/gw.json" ]; then
   warn ".claude/gw.json is missing, so the workflow is not configured for this repo; apply it (docs/en/apply.md): /gw-init"
 elif [ ! -f "$config" ]; then
@@ -132,12 +143,20 @@ else
   if [ -f "$here/metrics.py" ]; then
     python3 "$here/metrics.py" alert --root "$root" 2>/dev/null | while IFS= read -r line; do warn "$line"; done
   fi
+  lang_err="$(mktemp 2>/dev/null)" || lang_err=/dev/null
+  if agent_lang="$(python3 "$config" --root "$root" agent-language 2>"$lang_err")" && [ -n "$agent_lang" ]; then
+    echo "Agent language: $agent_lang"
+  fi
+  [ "$lang_err" = /dev/null ] || { [ ! -s "$lang_err" ] || warn "$(head -n 2 "$lang_err" | tr '\n' ' ')"; rm -f "$lang_err"; }
   if [ -f "$here/mode.py" ]; then
     if mout="$(python3 "$here/mode.py" --root "$root" line 2>&1)"; then
       [ -z "$mout" ] || printf '%s\n' "$mout"
     else
       warn "$(printf '%s' "$mout" | head -n 3 | tr '\n' ' ')- the active modes are not shown until it is fixed; check it: python3 $here/mode.py --root $root list"
     fi
+  fi
+  if [ -f "$root/.claude/agents/gw-worker.md" ] && [ "$(python3 "$config" --root "$root" get workerHint 2>/dev/null)" != false ]; then
+    echo "Workers: deal sweeps and review fixes of 2 or more points to a gw-worker subagent (subagent_type: gw-worker, with model and effort; gw-orchestrate-dealer), not in the main session; to hide this line: \"workerHint\": false"
   fi
   if [ -f "$here/questions.py" ]; then
     if qout="$(python3 "$here/questions.py" --root "$root" notice 2>&1)"; then
@@ -163,6 +182,7 @@ for v in (d.get("transcript_path"), m): print(v if isinstance(v,str) else "")' 2
     fi
   fi
 fi
+[ -n "$config_ok" ] || agent_language_fallback
 
 # run_limited <seconds> <command> <log>: runs the command with bash in its own process group (set -m), output to the
 # log. A watchdog sleeps <seconds> and then marks the run as timed out, sends TERM to the group and, $kill_grace s

@@ -18,7 +18,7 @@ cada commit.**
 | **Tarea en curso · `claude/gw-update-0.8.0`** | Al fusionarse, rama terminada: no queda nada pendiente en ella. |
 | **Tarea en curso · `claude/flu-13-ledger-ci`** | Rama abandonada sin fusionar: `FLU-13` la cerró `FLU-15` (v0.8.2 del flujo). |
 | **Tarea en curso · `claude/gw-update-0.8.1`** | Al fusionarse, rama terminada: no queda nada pendiente en ella. |
-| **Tarea en curso · `claude/gw-update-0.8.2`** | FLU-15 en curso: flujo en v0.8.2 aplicado; v0.9.0 publicada: ensayo de apply.py hecho y preguntas Q-3..Q-7 (rama, --update, gw-seo, AGENTS.md, CLAUDE.md/REVIEW.md) esperando a la usuaria. Falta: aplicar 0.9.0 según respuestas, tres fases antes de main y el PR. |
+| **Tarea en curso · `claude/gw-update-0.8.2`** | FLU-15 en curso: flujo en v0.9.0 aplicado (Q-3..Q-7 respondidas: misma rama, --update, AGENTS/CLAUDE/REVIEW fusionados, marcas a v0.9.0; apply.py --check en verde, doctor sin FAIL). Falta: quitar gw-seo (Q-5), tres fases antes de main y el PR. |
 | **Tests** | 2026-11-12: núcleo `cargo test -p tarkor-nucleo` 149 y el check del proyecto en verde. Asistente `vitest` y E2E con el Ollama falso: último verde el 2026-10-25 (`vitest` 27 entonces). |
 
 ## Dónde está todo (para saber qué sigue)

@@ -5,7 +5,7 @@ disable-model-invocation: true
 license: MIT
 compatibility: Claude Code or any Agent Skills agent; git, bash and python3 3.8+; the Galivelop-workflow repo cloned or added to the session
 metadata:
-  version: "0.8.2"
+  version: "0.9.0"
   source: "Galivelop workshop"
 ---
 
@@ -20,7 +20,7 @@ Follow it step by step. This skill only fixes where to find things and what to c
 files and returns the step-1 decision table, each candidate value with its source path, and the conflicts with the
 project (existing `CLAUDE.md`, hook managers, a red check). The main session decides from that summary and never
 reads the workflow's guides or scripts whole.
-Reply to the user in the language they use; the project's `language` is decided in step 3.
+Reply to the user in the language they use; the project's docs language (`languages.docs.primary`) is decided in step 3.
 
 ## 1. Find the workflow repo
 
@@ -46,8 +46,8 @@ project: `cd <project> && claude`.
 
 ## 3. Decide what needs judgement
 
-Follow section 1 of the guide: `language`, `log`, `install`, `check`, protected branch, `direct` or `pr`, `content`
-regexes, the agent signatures (`agentSignatures`), and the optional skills `gw-opt-ai` and `gw-scout-updates` (only
+Follow section 1 of the guide: `languages.docs.primary`, `log`, `install`, `check`, protected branch, `direct` or `pr`, `content`
+regexes, the agent signatures (`agentSignatures`), the own skills prefix (`projectSkillPrefix`), and the optional skills `gw-opt-ai` and `gw-scout-updates` (only
 if the user asks).
 
 - Infer `install` and `check` from `package.json`, `pyproject.toml`, `Cargo.toml`, `pom.xml`, `go.mod` or
@@ -55,9 +55,14 @@ if the user asks).
 - Ask whether the project accepts agent signatures (`Co-Authored-By` of Claude, session links). If not, add
   `--agent-signatures false`: the `commit-msg` hook then rejects them and `apply.py` writes the "No Claude signatures"
   rule into the project's `CLAUDE.md`, which overrides the environment's attribution reminder.
+- Ask which prefix the project gives its own skills (e.g. `gvg-`; never `gw-`, the workflow's). If it has or will
+  have its own skills, add `--project-skill-prefix <prefix>`: `doctor.py` then warns of an own skill without it.
 - Offer a licence (an offer, never imposed; skip it if the project already has a `LICENSE` or the user declines): the
   dual licence of this workflow, MIT for the code and CC BY-NC-SA 4.0 for the content, with a third-party note. Ask for
   the copyright year and holder; the files are copied in step 4, after `--init`.
+- Mention that the project can give people or roles their own config through profiles (`profile.py`, the `profiles` block;
+  convenience, not access control): nothing to set now; if the user wants one, `python3 .claude/gw/scripts/profile.py new <name>`
+  then `assign <email> --profile <name>`, and the config reference (`docs/*/config.md`) has the rest.
 - Ask the user whenever a value is a guess. Offer numbered candidates; one question per unknown.
 
 Done when every fact has an answer the user confirmed.

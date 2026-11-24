@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.2
+# galivelop-workflow v0.9.0
 """Frozen scope (C13, `scopeGuard`): a change of requirements is another task.
 
   scope-guard.py                     PreToolUse hook on Edit, Write, MultiEdit and NotebookEdit (event JSON on stdin)

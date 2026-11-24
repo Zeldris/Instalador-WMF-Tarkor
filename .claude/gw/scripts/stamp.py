@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.2
+# galivelop-workflow v0.9.0
 """Stamped-version lines (B44, B45): the one reader of what the version stamp changes in a diff.
 
 `version.py` writes the workflow version in a `galivelop-workflow vX.Y.Z` header (apply.HEADER), in the `version`

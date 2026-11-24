@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.8.2
+# galivelop-workflow v0.9.0
 # Git pre-commit hook (copied into projects as .githooks/pre-commit; enable with: git config core.hooksPath .githooks).
 #   - No secrets in a commit: by file (.env except .env.example/.sample/.template, *.pem, *.key, *.p12, *.pfx, *.jks,
 #     id_rsa and friends, .netrc, and the local private list .claude/gw.local.json) and by added content (well-known
@@ -28,6 +28,8 @@
 #   - C13 (scopeGuard, not off): staged files outside `## Files` of the current task's record (branch agent/<id>-..., else
 #     the mark gw/current-task) are warned about, or refused in block mode (scope-guard.py --staged; outside Claude Code
 #     too). Skipped while closing a merge/cherry-pick/rebase, and with no task, no record or no Files section.
+#   - D169 (installedCopyWarn, default on): a staged scripts/<file> that differs from its copy .claude/gw/scripts/<file> is
+#     warned about (never refused): the copy is stale, run python3 scripts/apply.py . Not in CI mode.
 #   - With logRows on, while concluding a merge: it does not keep two different tasks under one task id, one from each
 #     side (handoff.py clash --merging; the pre-push checks every new merge and the protected branch).
 # CI mode: pre-commit --range BASE..HEAD scans what the range adds instead of the staged changes (run the base
@@ -202,6 +204,28 @@ if [ "${CLAUDECODE:-}" = "1" ] && [ "$ci" = "0" ]; then
       first="$(printf '%s' "$refused" | head -n 1)"
       echo "pre-commit: unstage them: git restore --staged -- '$first'" >&2
       exit 1
+    fi
+  fi
+fi
+
+# D169: a staged scripts/ file that differs from its installed copy (apply.py . not run yet): warn, never refuse.
+if [ "$ci" = "0" ] && [ -d "$root/.claude/gw/scripts" ] && [ -d "$root/scripts" ] \
+   && python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import config; sys.exit(0 if config.is_workflow(sys.argv[2]) else 1)' \
+        "$root/.claude/gw/scripts" "$root" 2>/dev/null; then
+  # only in the workflow repo: a project's own scripts/ has no copy to refresh (and no apply.py to refresh it with)
+  scripts="$root/.claude/gw/scripts"
+  if [ "$(python3 "$scripts/config.py" --root "$root" get installedCopyWarn 2>/dev/null)" != "false" ]; then
+    stale=""
+    while IFS= read -r path; do
+      case "$path" in scripts/*) ;; *) continue ;; esac
+      # the copy as staged, not as on disk: `git add scripts/<f>` without the copy must still warn
+      copy_id="$(git rev-parse -q --verify ":.claude/gw/$path" 2>/dev/null)" || continue
+      [ "$(git rev-parse ":$path")" = "$copy_id" ] || stale="$stale$path"$'\n'
+    done <<<"$(git diff --cached --no-renames --name-only --diff-filter=ACM)"
+    if [ -n "$stale" ]; then
+      echo "pre-commit: WARNING: these staged scripts/ files differ from their installed copy in .claude/gw/scripts/, so the hooks run the old ones:" >&2
+      printf '%s' "$stale" | sed 's/^/  /' >&2
+      echo "pre-commit: refresh the copies and stage them: python3 scripts/apply.py . && git add -A" >&2
     fi
   fi
 fi

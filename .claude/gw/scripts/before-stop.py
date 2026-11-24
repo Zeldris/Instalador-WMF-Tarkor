@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.2
+# galivelop-workflow v0.9.0
 """Stop hook: do not let Claude finish with commits that are not pushed, or with changes the log does not mention.
 
 "What is not pushed does not exist" (AGENTS.md) is the workflow's most important rule and, until this hook, only the
@@ -7,7 +7,7 @@ agent remembered it. It blocks the stop when:
 
   a. the current branch has commits its upstream does not (`git rev-list @{u}..HEAD --not <remote>/<protectedBranch>`,
      the upstream's remote: what a merged-in `main` brings is already pushed; without that ref, just `@{u}..HEAD`);
-     with no upstream, commits no remote branch has (`git rev-list HEAD --not --remotes`). The reason names `bash <root>/.claude/gw/scripts/push.sh <branch>` (config.push_command). On the
+     with no upstream, commits no remote branch has (`git rev-list HEAD --not --remotes`). The reason names `bash <root>/.claude/gw/scripts/push.sh <branch>` (config.push_command); when the head commit starts with `WIP:` (E84: a red one) it adds `push.sh --wip <branch>`, which skips the check. On the
      protected branch (`protectedBranch`) it does not: AGENTS.md says a push there needs the user's confirmation and
      the three phases, so Claude cannot fix it alone and a block would only make it push without asking. There it is a
      warning to the user (`systemMessage`: the commits are not pushed, and pushing needs their confirmation), never
@@ -41,6 +41,11 @@ per transcript, so two sessions in one worktree do not overwrite each other's), 
 turn comes back with stop_hook_active, which never blocks, so it cannot loop. Its reason joins the others on its own
 line. Silent if the transcript cannot be read (context_guard.near_cutoff_once). The Stop hook fires at the end of
 every turn, so it comes before the compaction; recover.py --state comes after it.
+
+E66: once the rest is in order (nothing else to block or note), it blocks once per closed task when a roadmap row
+turned done in a commit of the current stretch and the conversation the stretch added since its startup reaches
+`contextGuard.clearAfterTask` of the cutoff: the reason asks Claude to request /clear in one line instead of
+chaining the next task (context_guard.clear_after_task_once; <git dir>/gw-clear-warn, per transcript).
 
 Output format (https://code.claude.com/docs/en/hooks.md, "Stop decision control"): a block is a JSON object on stdout
 with exit 0, `{"decision": "block", "reason": "..."}`; Claude Code feeds `reason` back to Claude as the explanation
@@ -141,6 +146,49 @@ def unpushed(root, protected=None):
         count = int(git(root, "rev-list", "--count", "HEAD", "--not", "--remotes")[1].strip() or 0)
         where = "no upstream branch, and not on any remote branch"
     return (branch, count, where) if count else None
+
+
+def green_recorded(root, cfg):
+    """True when the HEAD tree has a green check recorded (scripts/check.sh and a green push write it, check-green.sh);
+    any doubt (no helper, no record, an error) is False: the hint is then given."""
+    helper = os.path.join(HERE, "check-green.sh")
+    if not os.path.isfile(helper):
+        return False
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    def run(args, text, cwd=None):
+        return subprocess.run(["bash", helper, *args], input=text, capture_output=True, text=True, cwd=cwd or str(root),
+                              env=env, timeout=GIT_TIMEOUT or config.schema_default("stopGitTimeout"))
+    try:
+        tree = git(root, "rev-parse", "HEAD^{tree}")[1].strip()
+        inputs = run(["inputs", str(root)], "\n".join(cfg.get("checkCacheInputs") or []) + "\n")
+        if inputs.returncode != 0:
+            return False
+        key = run(["key", tree, (cfg.get("checkWrapper") or "").strip(), inputs.stdout.strip()],
+                  "\n".join(cfg.get("check") or []) + "\n")
+        return key.returncode == 0 and run(["has", key.stdout.strip()], None).returncode == 0
+    except (OSError, subprocess.SubprocessError, GitError):
+        return False
+
+
+def wip_hint(root, branch, cfg=None):
+    """E84: when the head commit starts with `WIP:` (a commit that goes red, per AGENTS.md) and its tree has no green
+    check recorded, the push may skip the check: the extra sentence naming `push.sh --wip`. Empty for any other head, a
+    green one or a project without push.sh; with a push.sh that does not know `--wip` (an older copy) it says to update."""
+    try:
+        subject = git(root, "log", "-1", "--format=%s", "HEAD")[1].strip()
+    except GitError:
+        return ""
+    if not subject.startswith("WIP:") or not config.push_command(root, branch) \
+            or not config.push_command(root, branch).startswith("bash "):
+        return ""
+    if cfg is not None and green_recorded(root, cfg):
+        return ""
+    cmd = config.push_command(root, branch, wip=True)
+    if not cmd:
+        return (" The last commit is a WIP (its check is red), but this project's push.sh does not know --wip; "
+                "update the workflow copy: /gw-update")
+    return (f" The last commit is a WIP (its check is red): push it without waiting for the check, "
+            f"never to the protected branch: {cmd}")
 
 
 def push_in_progress(root):
@@ -399,6 +447,20 @@ def near_compaction(root, cfg, transcript):
         return None
 
 
+def clear_after_task(root, cfg, transcript):
+    """E66: context_guard.clear_after_task_once for this transcript, remembered in <git dir>/gw-clear-warn (per
+    transcript) so it blocks once per closed task; None when there is nothing to say or anything fails: silent."""
+    try:
+        import context_guard
+        gitdir = git(root, "rev-parse", "--absolute-git-dir")[1].strip() if transcript else ""
+        if not gitdir:  # never a marker relative to the current directory
+            return None
+        state = os.path.join(gitdir, "gw-clear-warn")
+        return context_guard.clear_after_task_once(root, cfg, transcript, state, cfg.get("stopTranscriptBytes"))
+    except Exception:
+        return None
+
+
 def main():
     global GIT_TIMEOUT, PUSH_MARKER_MAX_AGE
     doctor = f"python3 {os.path.join(HERE, 'doctor.py')}"
@@ -458,7 +520,7 @@ def main():
                     elif pushing is None:
                         unpushed_to.append(f"Branch '{branch}' has {plural(count, 'commit')} not pushed ({where}). What is "
                                       f"not pushed does not exist for the next session; push it now: "
-                                      f"{config.push_command(root, branch)}")
+                                      f"{config.push_command(root, branch)}" + wip_hint(root, branch, cfg))
                         if checking is not None:  # a check of another commit or worktree: it does not push this one
                             notes.append(f"A check of another commit or worktree is running (pid {checking[0]}, log "
                                          f"{checking[1] or '-'}, sha {checking[2] or '-'}); it does not cover this "
@@ -470,6 +532,7 @@ def main():
                                      f"again: wait for it and check git status -sb afterwards.")
         except GitError as exc:
             warns.append(str(exc))
+        paths = None  # unknown (git failed) is not "clean"
         try:
             paths = changed_paths(root, {posixpath.normpath(config.metrics(cfg)["ledger"])})
             if paths and log not in paths:
@@ -481,6 +544,10 @@ def main():
         near = near_compaction(root, cfg, event.get("transcript_path"))
         if near:  # a block: only `reason` reaches Claude; once per stretch, and stop_hook_active ends it
             blocks.append(near)
+        if not blocks and not notes and paths == set():  # E66: only once the rest is in order (pushed, nothing uncommitted)
+            done = clear_after_task(root, cfg, event.get("transcript_path"))
+            if done:  # a block: only `reason` reaches Claude; once per closed task, and stop_hook_active ends it
+                blocks.append(done)
 
     answer = {}
     if blocks:

@@ -1,4 +1,4 @@
-<!-- galivelop-workflow v0.8.2 -->
+<!-- galivelop-workflow v0.9.0 -->
 # Guía de revisión
 
 Lo que el revisor (`/code-review`) comprueba en cada diff del instalador, además de los fallos de
@@ -94,7 +94,7 @@ que se repite, se añade aquí con su `FLU-n` o `INS-n`.
 
 ## Idiomas visibles
 
-- Si `.claude/gw.json` declara `visibleLanguages`, todo texto nuevo que vea un usuario existe en cada uno de esos
+- Si `languages.ui` (`.claude/gw.json`) no está vacío, todo texto nuevo que vea un usuario existe en cada uno de esos
   idiomas (etiquetas, textos alternativos, títulos de página, mensajes), y una traducción es de verdad, no el mismo
   texto. (criterio)
 

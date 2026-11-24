@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.2
+# galivelop-workflow v0.9.0
 """PreToolUse hook: ask the user when a session has launched many subagents, so a loop does not burn tokens unseen,
 and deny a subagent that would run on a model in `models.disabled` (B7, below).
 

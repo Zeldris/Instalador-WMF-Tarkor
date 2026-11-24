@@ -1,5 +1,5 @@
 {
-  "$comment": "galivelop-workflow v0.8.2",
+  "$comment": "galivelop-workflow v0.9.0",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/zeldris/Galivelop-workflow/main/schema/gw.schema.json",
   "title": "Galivelop-workflow project config (.claude/gw.json)",
@@ -8,7 +8,7 @@
   "additionalProperties": false,
   "required": [
     "version",
-    "language",
+    "languages",
     "protectedBranch",
     "pushToProtected",
     "check",
@@ -28,20 +28,33 @@
       "minimum": 0,
       "description": "Version of the gw.json format; absent = 0 (written before 0.5). An older one is migrated in memory by config.py and written by /gw-update; a newer one than the workflow knows fails closed."
     },
-    "language": {
-      "enum": [
-        "es",
-        "en"
-      ],
-      "description": "Templates and reply language."
-    },
-    "visibleLanguages": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "minLength": 2
-      },
-      "description": "Languages every user-visible text must exist in (REVIEW.md)."
+    "languages": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {"code": "en", "docs": {"primary": "en", "others": []}, "public": {"primary": "en", "others": []}, "ui": []},
+      "description": "A12: the language of each thing, as ISO 639-1 two-letter lowercase codes. `code`: code, identifiers and script messages; `docs`: internal documentation (primary: the log, roadmap, commit trailer and templates; others: the translations kept paired); `public`: public documentation (README, release); `ui`: languages every user-visible text must exist in (REVIEW.md). Replaces `language` and `visibleLanguages` (schemaVersion 2).",
+      "properties": {
+        "code": {"type": "string", "pattern": "^[a-z]{2}$", "default": "en", "description": "Language of code, identifiers and script messages (names-check.py only checks with en)."},
+        "docs": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "primary": {"type": "string", "pattern": "^[a-z]{2}$", "default": "en", "description": "Main language of the internal documentation: templates (templates/<primary>/), log, roadmap and next-step trailer."},
+            "others": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z]{2}$"}, "default": [], "description": "Other languages the internal documentation is kept in, paired with the primary one."}
+          },
+          "description": "Internal documentation languages."
+        },
+        "public": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "primary": {"type": "string", "pattern": "^[a-z]{2}$", "default": "en", "description": "Main language of the public documentation (README, release)."},
+            "others": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z]{2}$"}, "default": [], "description": "Other languages the public documentation is kept in."}
+          },
+          "description": "Public documentation languages."
+        },
+        "ui": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"}, "default": [], "description": "Languages every user-visible text must exist in (REVIEW.md); BCP 47 tags such as pt-BR or es-419 are allowed here (as visibleLanguages allowed)."}
+      }
     },
     "log": {
       "type": "string",
@@ -89,6 +102,16 @@
       "type": "string",
       "pattern": "^$|^(?!/)(?!(.*/)?\\.\\.(/|$)).+[^/]$",
       "description": "Repo-relative path of the file that holds the log's Pending items (D104); the log keeps one pointer line with the count, and handoff.py check --strict fails if the log holds items itself. Absent or empty: the items stay in the log. No schema default on purpose (an older project keeps its Pending section); the template sets docs/records/pending.md."
+    },
+    "pendingClosedIdCheck": {
+      "type": "boolean",
+      "default": true,
+      "description": "true: handoff.py check warns (an error with --strict) about an open entry (`- [ ]`) of pendingFile that cites a task id whose roadmapFiles row is closed (D177); exempt: an entry that starts with `Related: <id>` and an id written right after ver / see / see also / related / revisión / review (with an optional colon) and an id inside a parenthesis (\"(B42, D3)\"). false: no check."
+    },
+    "clearOnTaskClose": {
+      "type": "boolean",
+      "default": true,
+      "description": "true: the commit-msg /clear warning (D108, D176) also counts a commit that turns a roadmapFiles task row from open to closed, not only a version section or the log's phase; it is still shown only when the session passed its compaction budget. false: only sections and phase."
     },
     "logArchive": {
       "type": "string",
@@ -388,6 +411,7 @@
         "commandKillGrace",
         "installLockfiles",
         "installLocal",
+        "workerHint",
         "prepushClashBranches",
         "reviewBeforeMainListFiles",
         "checkTailLines",
@@ -402,8 +426,12 @@
         "wholeReadSkipExtensions",
         "wholeReadPaths",
         "readPointers",
+        "wholeReadDenyPaths",
+        "otherRepoReadWarn",
         "wholeReadRepeatOnly",
         "wholeReadStaleDays",
+        "wholeReadShortLines",
+        "screenshotSheet",
         "scoutMaxAgeDays",
         "harvest",
         "applyDiffLines",
@@ -415,6 +443,7 @@
         "patchCommitTypes",
         "measure",
         "mediaContent",
+        "review",
         "modes",
         "taskRecord",
         "scopeGuard"
@@ -591,6 +620,32 @@
       "type": "boolean",
       "default": true,
       "description": "true: `ci-local.py --validate` (in the check) parses every .github/workflows/*.yml|yaml and fails when one is invalid YAML (GitHub never runs it, so no CI goes red). false: it says it is off and passes."
+    },
+    "generated": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "required": ["command", "paths"],
+        "additionalProperties": false,
+        "properties": {
+          "command": {"type": "string", "minLength": 1},
+          "paths": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+        }
+      },
+      "description": "E72: files the project commits but a command generates. `generated-check.py` (in the check) runs each `command` at the repo root and fails when it changes, adds or removes a file under its `paths` (relative to the root): the committed copies are stale. doctor.py warns when it is set and no `check` command runs generated-check.py."
+    },
+    "ciActionlint": {
+      "type": "string",
+      "enum": ["auto", "require", "off"],
+      "default": "auto",
+      "description": "E71: `ci-local.py --validate` (in the check) runs `actionlint -shellcheck=` over the workflows once they parse. auto: a missing actionlint is a warning with the command that installs it; require: a failure; off: not run (doctor.py says so instead of warning). The CI template installs it on GitHub unless off."
+    },
+    "actionlintVersion": {
+      "type": "string",
+      "pattern": "^([0-9]+\\.[0-9]+\\.[0-9]+)?$",
+      "default": "1.7.12",
+      "description": "E71: the actionlint version (X.Y.Z) the CI template installs (pip install actionlint-py==X.Y.Z.*) and `ci-local.py --validate` expects: another local version is a warning with that command. Empty: not pinned."
     },
     "ciKeepSteps": {
       "type": "boolean",
@@ -1052,6 +1107,14 @@
       },
       "default": {"maxSubjects": 20}
     },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "splitLines": {"type": "integer", "minimum": 0, "default": 600, "description": "E86: changed lines of the files review-scope.py lists (vendored ones left out; a trivial diff never splits) above which gw-orchestrate-dealer deals the phase 1 review to two or more reviewers by review-scope.py file groups plus a short one that crosses the contracts; a single reviewer is held to the ~30-call cap. 0 = never split."}
+      },
+      "default": {"splitLines": 600}
+    },
     "testScanSkipDirs": {
       "type": "array",
       "items": {"type": "string", "minLength": 1},
@@ -1167,10 +1230,11 @@
         "bigWindow": {"type": "integer", "minimum": 1000, "default": 1000000},
         "systemAdvice": {"type": "boolean", "default": true},
         "nearRatio": {"type": "number", "minimum": 0, "maximum": 1, "default": 0.8},
-        "warnedMax": {"type": "integer", "minimum": 1, "default": 32}
+        "warnedMax": {"type": "integer", "minimum": 1, "default": 32},
+        "clearAfterTask": {"type": "number", "minimum": 0, "maximum": 1, "default": 0.25}
       },
-      "default": {"cutoff": 0, "window": 200000, "autocompactShare": 0.8, "warn": 25, "alarm": 50, "charsPerToken": 3.5, "bigWindow": 1000000, "systemAdvice": true, "nearRatio": 0.8, "warnedMax": 32},
-      "description": "Startup-context guard (B21): recover.py --state compares the first turn after a /clear or a compaction with the compaction cutoff (cutoff tokens, or 0 = window x autocompactShare) and warns above warn percent and alarms above alarm percent; a second startup over alarm after a compaction is a loop. systemAdvice: when a big startup (over warn) weighs most in the system (prompt, tools, MCP), the loop alarm and the compaction-budget warning ask to disable unused connectors instead of /clear (D122). nearRatio (B31): when the task's compaction budget is already spent and the current context reaches this fraction of the cutoff, the Stop hook (before-stop.py) blocks once per stretch telling the agent to close the step before the next compaction; only with a known window (cutoff or window written in the project's contextGuard, or a [1m] model id); 0 = off. warnedMax (B31): sessions (transcripts) whose warned stretch that once-per-stretch marker (<git dir>/gw-context-warn) remembers; the oldest is dropped first."
+      "default": {"cutoff": 0, "window": 200000, "autocompactShare": 0.8, "warn": 25, "alarm": 50, "charsPerToken": 3.5, "bigWindow": 1000000, "systemAdvice": true, "nearRatio": 0.8, "warnedMax": 32, "clearAfterTask": 0.25},
+      "description": "Startup-context guard (B21): recover.py --state compares the first turn after a /clear or a compaction with the compaction cutoff (cutoff tokens, or 0 = window x autocompactShare) and warns above warn percent and alarms above alarm percent; a second startup over alarm after a compaction is a loop. systemAdvice: when a big startup (over warn) weighs most in the system (prompt, tools, MCP), the loop alarm and the compaction-budget warning ask to disable unused connectors instead of /clear (D122). nearRatio (B31): when the task's compaction budget is already spent and the current context reaches this fraction of the cutoff, the Stop hook (before-stop.py) blocks once per stretch telling the agent to close the step before the next compaction; only with a known window (cutoff or window written in the project's contextGuard, or a [1m] model id); 0 = off. warnedMax (B31): sessions (transcripts) whose warned stretch that once-per-stretch marker (<git dir>/gw-context-warn) remembers; the oldest is dropped first. clearAfterTask (E66): when a roadmap row turned done in a commit of the current stretch and the conversation the stretch added since its startup (what a /clear drops) reaches this fraction of the cutoff, recover.py --state says so and the Stop hook blocks once per closed task (<git dir>/gw-clear-warn) asking for /clear before the next task; 0 = off."
     },
     "metrics": {
       "type": "object",
@@ -1269,6 +1333,17 @@
       "type": "boolean",
       "default": false,
       "description": "false: install/setup run only in cloud sessions (CLAUDE_CODE_REMOTE=true); true: also in a local session."
+    },
+    "workerHint": {
+      "type": "boolean",
+      "default": true,
+      "description": "true: session-start.sh prints one line recommending a gw-worker subagent for sweeps and review fixes of 2 or more points, when .claude/agents/gw-worker.md exists (E68); false: no line."
+    },
+    "projectSkillPrefix": {
+      "type": "string",
+      "default": "",
+      "pattern": "^$|^(?!gw-)[a-z0-9]+(?:-[a-z0-9]+)*-$",
+      "description": "E73: prefix of the project's own skills (e.g. \"gvg-\"), never the workflow's \"gw-\"; gw-init asks for it and apply.py --init --project-skill-prefix writes it. doctor.py warns of each .claude/skills/<name>/ whose SKILL.md is not a workflow copy (its metadata.source does not name the workflow) and whose name lacks it. Empty: no check."
     },
     "prepushCiWarn": {
       "type": "boolean",
@@ -1378,16 +1453,51 @@
       "default": {},
       "description": "{\"<repo-relative file, or folder ending with />\": \"<command>\"}: files the whole-read warning watches (Read and Bash) and the command its note gives instead of reading them whole; it wins over the note for the log or a record."
     },
+    "wholeReadDenyPaths": {
+      "type": "object",
+      "propertyNames": {"minLength": 1},
+      "additionalProperties": {"type": "string", "minLength": 1},
+      "default": {},
+      "description": "{\"<repo-relative file, or folder ending with />\": \"<command>\"}: files whose whole read (Read without offset or limit, cat and the like by Bash) whole-read.py rejects, whatever their size, with a reason that gives the command instead (E70); a partial read passes and the denial wins over the warnings."
+    },
+    "otherRepoReadWarn": {
+      "type": "boolean",
+      "default": true,
+      "description": "true: other-repo-read.py warns, without blocking, when the main session reads a path inside another git repository (Read, Grep, Glob or a Bash command), since another repo is read through a subagent that returns a summary with paths (E74); false turns the warning off."
+    },
     "wholeReadRepeatOnly": {
       "type": "boolean",
       "default": true,
       "description": "true: the whole-read warning speaks only when this session already read the same file whole and it has not changed since (same size and modification time); false: on every whole read over wholeReadWarnBytes."
+    },
+    "installedCopyWarn": {
+      "type": "boolean",
+      "default": true,
+      "description": "true: the pre-commit hook warns, without refusing, when a staged scripts/<file> differs from its installed copy .claude/gw/scripts/<file> (apply.py . has not been run); false: it does not look (D169)."
     },
     "wholeReadStaleDays": {
       "type": "integer",
       "minimum": 1,
       "default": 7,
       "description": "Days without a write after which whole-read.py deletes the other sessions' gw-reads-*.json files (own regular files only) when it creates a new one."
+    },
+    "wholeReadShortLines": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 40,
+      "description": "Lines above which a Bash range read (sed -n A,Bp, head -n N) of the hand-off log or a roadmapFiles file bigger than wholeReadWarnBytes counts as a whole read for whole-read.py (E85); a shorter range says nothing. 0 = every range warns."
+    },
+    "screenshotSheet": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "description": "E50: whole-read.py counts the distinct images a session reads with Read and, at `after` and each multiple of it, advises (never blocks) to mount the ones still needed in one sheet and Read that instead. The count lives in the session's gw-reads-*.json and restarts after /clear or a compaction; with no session_id nothing is counted.",
+      "properties": {
+        "after": {"type": "integer", "minimum": 0, "default": 3, "description": "Distinct images read one by one before the advice (and each multiple of it); 0 turns it off."},
+        "extensions": {"type": "array", "items": {"type": "string", "minLength": 1, "pattern": "^\\.[A-Za-z0-9]+$"}, "default": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"], "description": "File extensions (with the dot, compared in lower case) that count as images. The list replaces the default one."},
+        "command": {"type": "string", "default": "", "description": "The project's command that mounts images in one sheet, named in the advice; empty: the advice gives a generic example and names this key."},
+        "ignorePaths": {"type": "array", "items": {"type": "string", "minLength": 1}, "default": [], "description": "Repo-relative files or folders (a folder ends with /) whose images do not count, such as the sheet itself."}
+      }
     },
     "questions": {
       "type": "object",
@@ -1456,6 +1566,60 @@
       },
       "default": {"mode": "warn"},
       "description": "Frozen scope (C13): scope-guard.py, a PreToolUse hook on Edit/Write/MultiEdit/NotebookEdit, compares the edited file with the `## Files` section of the current task's record (taskRecord.path/<id>.md; the current task as in questions-guard.py). A file outside it: warn = allowed with a warning once per task and file, and a line in <git common dir>/gw/deviations.jsonl (task.py deviations); block = denied; auto = block while modes.questions is true (restrictive), else warn; off = nothing. The record, its folder, the questions file and the log are always allowed; no task, no record or no Files section = allowed. The pre-commit hook checks the staged files the same way (outside Claude Code too): warns, or refuses in block mode. To go on: add the file to Files and explain it in the record's Change log, or open a new task: python3 scripts/task.py new <newid> --related <id>."
+    },
+    "profiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dir": {"type": "string", "minLength": 1, "pattern": "^(?!/)(?!(.*/)?\\.\\.(/|$))(?!(\\.(/+|$))+$).+$", "default": ".claude/gw/profiles"},
+        "roles": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"}, "default": {}},
+        "people": {"type": "object", "additionalProperties": {"type": "object", "additionalProperties": false, "properties": {"role": {"type": "string", "minLength": 1}, "profile": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"}}}, "default": {}}
+      },
+      "default": {"dir": ".claude/gw/profiles", "roles": {}, "people": {}},
+      "description": "E4: per-person and per-role profiles. Layers: the project config (default) -> the profile of the person's role -> the person's own profile; each profile (<dir>/<name>.json) holds only the keys it changes, objects merge deep, lists are replaced, the last layer wins. `roles` maps a role to a profile name; `people` maps the SHA-256 of a person's git user.email (trimmed, lower case; never the address: python3 scripts/profile.py assign writes it) to {role?, profile?}. A profile may change any key except the ones that decide what is installed or the config's shape (version, schemaVersion, $schema, profiles, languages, agentsSkillsDir, projectSkillPrefix, gitignoreStacks, front (E5: it decides the bytes of the generated files, which must be the same for everyone and CI) and the ci* template keys). CI (the CI environment variable) always runs with the default. Convenience, not access control: git's e-mail can be changed and hooks skipped with --no-verify."
+    },
+    "front": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tokens": {"anyOf": [{"type": "string", "minLength": 1, "pattern": "^(?!/)(?!(.*/)?\\.\\.(/|$)).+$"}, {"enum": [null]}], "default": null},
+        "out": {"type": "string", "minLength": 1, "pattern": "^(?!/)(?!(.*/)?\\.\\.(/|$))(?!(\\.(/+|$))+$).+$", "default": "front/generated"},
+        "breakpointGroup": {"type": "string", "minLength": 1, "pattern": "^[^.{}$]+$", "default": "breakpoint"},
+        "mainBreakpoints": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true, "default": []},
+        "dir": {"type": "string", "minLength": 1, "pattern": "^(?!/)(?!(.*/)?\\.\\.(/|$)).+$", "default": ".", "description": "E5: repo-relative folder with the front tests' package.json and Playwright config (the copied templates/front); `front.py run` installs its packages outside the tree and runs from a temporary copy of it."},
+        "stylelintFiles": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}, "default": ["**/*.{css,scss}"], "description": "E5: the repo-relative globs Stylelint checks in `front.py run` (from the root of the temporary copy, with the Stylelint config of `dir`); none matching a tracked file fails."},
+        "visualTag": {"type": "string", "minLength": 1, "default": "@visual", "description": "E5: the Playwright tag of the visual (screenshot) tests: `run fast` leaves them out (--grep-invert), `run full` runs them."},
+        "dockerImage": {"type": "string", "minLength": 1, "default": "mcr.microsoft.com/playwright:v{playwright}-noble", "description": "E5: the image `run full` uses outside Linux when Docker is running; `{playwright}` is the @playwright/test version pinned in `dir`/package.json."},
+        "snapshotGlob": {"type": "string", "minLength": 1, "default": "**/*-snapshots/*.png", "description": "E5: pattern of the tracked screenshot baselines doctor.py looks at (fnmatch on the repo path, so `*` also crosses `/`); written as .gitattributes reads it, it is also what doctor.py suggests to `git lfs track`."},
+        "snapshotStamp": {"type": "string", "minLength": 1, "pattern": "^(?!/)(?!(.*/)?\\.\\.(/|$)).+$", "default": "front/snapshots.version", "description": "E5: repo-relative file with the Playwright version the baselines were taken with; doctor.py warns when it is not the one pinned in `dir`/package.json. `front.py run full --update-snapshots` writes it (E78)."},
+        "lfsThresholdKb": {"type": "integer", "minimum": 1, "default": 200, "description": "E5: doctor.py warns about a baseline larger than this (KiB) that .gitattributes does not put in Git LFS."},
+        "nodeCacheDays": {"type": "integer", "minimum": 0, "default": 30, "description": "E5: `front.py` removes the package caches of <git common dir>/gw/front-node/ (one per package-lock) not used for this many days, other than the current one and any being installed; 0 = never."},
+        "defaultHeight": {"type": "integer", "minimum": 1, "default": 800, "description": "Viewport height of a breakpoint without `$extensions.gw.height`."},
+        "stylelint": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "colorProperties": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}, "default": ["color", "background-color", "border-color", "border-top-color", "border-right-color", "border-bottom-color", "border-left-color", "outline-color", "fill", "stroke"]},
+            "spacingProperties": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}, "default": ["/^margin/", "/^padding/", "/^gap/", "/^row-gap/", "/^column-gap/"]},
+            "sizeProperties": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}, "default": ["font-size"]},
+            "ignoreValues": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}, "default": ["inherit", "initial", "unset", "revert", "none", "transparent", "currentColor", "currentcolor", "0", "auto"]},
+            "expandShorthand": {"type": "boolean", "default": true}
+          },
+          "default": {"colorProperties": ["color", "background-color", "border-color", "border-top-color", "border-right-color", "border-bottom-color", "border-left-color", "outline-color", "fill", "stroke"], "spacingProperties": ["/^margin/", "/^padding/", "/^gap/", "/^row-gap/", "/^column-gap/"], "sizeProperties": ["font-size"], "ignoreValues": ["inherit", "initial", "unset", "revert", "none", "transparent", "currentColor", "currentcolor", "0", "auto"], "expandShorthand": true},
+          "description": "E5: the Stylelint fragment `generate` writes (stylelint-declaration-strict-value): properties that must use a token variable or function (`colorProperties`, `spacingProperties`, `sizeProperties`; `/regex/` strings allowed), values always allowed (`ignoreValues`) and `expandShorthand` (also checks the parts of `background`, `border`, `outline`, `margin`, `padding`...). Literal values inside functions (`rgb(...)`, `calc(13px)`) are always reported."
+        },
+        "browsers": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "all": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "enum": ["chromium", "firefox", "webkit"]}, "default": ["chromium"]},
+            "main": {"type": "array", "uniqueItems": true, "items": {"type": "string", "enum": ["chromium", "firefox", "webkit"]}, "default": ["webkit", "firefox"]}
+          },
+          "default": {"all": ["chromium"], "main": ["webkit", "firefox"]}
+        }
+      },
+      "default": {"tokens": null, "out": "front/generated", "breakpointGroup": "breakpoint", "mainBreakpoints": [], "defaultHeight": 800, "stylelint": {"colorProperties": ["color", "background-color", "border-color", "border-top-color", "border-right-color", "border-bottom-color", "border-left-color", "outline-color", "fill", "stroke"], "spacingProperties": ["/^margin/", "/^padding/", "/^gap/", "/^row-gap/", "/^column-gap/"], "sizeProperties": ["font-size"], "ignoreValues": ["inherit", "initial", "unset", "revert", "none", "transparent", "currentColor", "currentcolor", "0", "auto"], "expandShorthand": true}, "browsers": {"all": ["chromium"], "main": ["webkit", "firefox"]}, "dir": ".", "stylelintFiles": ["**/*.{css,scss}"], "visualTag": "@visual", "dockerImage": "mcr.microsoft.com/playwright:v{playwright}-noble", "snapshotGlob": "**/*-snapshots/*.png", "snapshotStamp": "front/snapshots.version", "lfsThresholdKb": 200, "nodeCacheDays": 30},
+      "description": "E5: front-end tests. `tokens` is the repo-relative path to a design-tokens JSON (a subset of the W3C DTCG format: nested groups, leaves with `$value` and `$type`, aliases `{group.token}`); null = the project has no front and `front.py` does nothing. `python3 scripts/front.py check` validates it and `generate` writes `tokens.css`, `_tokens.scss`, `stylelint.tokens.json` and `playwright.projects.json` into `out` (declare them in `generated` so the check compares them). `breakpointGroup` is the token group whose leaves are the breakpoints (px widths; optional viewport height in `$extensions.gw.height`, default 800). `mainBreakpoints` names the breakpoints that also run in `browsers.main`; empty = the smallest and the largest. `browsers.all` runs at every breakpoint."
     }
   }
 }

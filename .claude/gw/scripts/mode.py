@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.2
+# galivelop-workflow v0.9.0
 """One switch for the workflow's modes: the `modes` section of .claude/gw.json (C6, C7).
 
   python3 mode.py list                 # each mode with its value and what it does; then the list settings, read-only

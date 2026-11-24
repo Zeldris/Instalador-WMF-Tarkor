@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.2
+# galivelop-workflow v0.9.0
 """Which models the workflow may use: `models.disabled` in .claude/gw.json (B7).
 
   python3 models.py list                  # the disabled entries, one per line (nothing when none)
@@ -28,11 +28,12 @@ blocks, as subagent-cap.py reads them). The recommendation is the last `Session:
 block holds (the gw-selector line; `large`/`medium`/`light` stand for opus/sonnet/haiku, `X or Y` allows both); the
 current model is `--model` (the hook's input), else the model of the last assistant message. It compares families only
 (effort is not in the transcript). Known limit: only that tail is read, so on a long resumed session whose selector
-line is older than the tail nothing is said (raising subagentTranscriptBytes reaches further back). Unknown or unreadable data, or `models.sessionCheck` false, prints nothing: a
+line is older than the tail it prints a note that the check did not run (raising subagentTranscriptBytes reaches further back). Unknown or unreadable data, or `models.sessionCheck` false, prints nothing: a
 SessionStart hook cannot block, and a wrong warning costs more than a missing one. Python 3.8+ standard library only.
 """
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -100,6 +101,14 @@ def recommended_families(text):
     return None
 
 
+def transcript_size(path):
+    """The size in bytes of the transcript at `path` (0 when it cannot be read)."""
+    try:
+        return os.path.getsize(path)
+    except (OSError, TypeError, ValueError):
+        return 0
+
+
 def transcript_tail(path, tail_bytes):
     """The JSON rows of the last `tail_bytes` of the transcript at `path` ([] when it cannot be read)."""
     try:
@@ -118,6 +127,39 @@ def transcript_tail(path, tail_bytes):
         if isinstance(row, dict):
             rows.append(row)
     return rows
+
+
+def session_text_before_tail(path, tail_bytes, chunk=1 << 20):
+    """True when the text `Session: ` appears before the last `tail_bytes` of the transcript: the evidence that a selector
+    line exists but is out of reach. A resumed or compacted session that never had one has none (no note then)."""
+    needle = b"Session: "
+    try:
+        with open(path, "rb") as fh:
+            left = max(0, os.path.getsize(path) - tail_bytes)
+            carry = b""
+            while left > 0:
+                data = fh.read(min(chunk, left))
+                if not data:
+                    break
+                left -= len(data)
+                if needle in carry + data:
+                    return True
+                carry = data[-(len(needle) - 1):]
+    except (OSError, TypeError, ValueError):
+        return False
+    return False
+
+
+def session_line_seen(rows):
+    """True when a main-session assistant text in `rows` has a `Session: <model> ...` line naming known models."""
+    for row in rows:
+        message = row.get("message") if row.get("type") == "assistant" and not row.get("isSidechain") else None
+        content = message.get("content") if isinstance(message, dict) else None
+        texts = [b.get("text") for b in content if isinstance(b, dict) and b.get("type") == "text"] \
+            if isinstance(content, list) else [content] if isinstance(content, str) else []
+        if any(isinstance(t, str) and recommended_families(t) for t in texts):
+            return True
+    return False
 
 
 def session_check(rows, hook_model=None):
@@ -189,9 +231,16 @@ def main(argv=None):
         if config.models(conf).get("sessionCheck") is False or not args.transcript:
             return 0
         tail = config.subagent_settings(conf["_root"])["subagentTranscriptBytes"]
-        line = session_check(transcript_tail(args.transcript, tail), args.model or None)
+        rows = transcript_tail(args.transcript, tail)
+        line = session_check(rows, args.model or None)
         if line:
             print(line)
+        elif not session_line_seen(rows) and transcript_size(args.transcript) > tail \
+                and session_text_before_tail(args.transcript, tail):
+            # D142: the selector line may be older than the tail; say the check did not run rather than stay silent
+            print(f"gw models: the session model check did not run: no `Session:` line in the last {tail} bytes of a "
+                  f"longer transcript; raise subagentTranscriptBytes in .claude/gw.json to look further back, or "
+                  f"turn this off with models.sessionCheck false")
         return 0
     try:
         conf = config.load(args.root)

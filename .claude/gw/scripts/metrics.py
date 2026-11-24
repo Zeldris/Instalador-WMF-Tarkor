@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.2
+# galivelop-workflow v0.9.0
 """Token ledger (B1/B2): `metrics.py record` appends the tokens the Claude Code transcripts show to a ledger in the repo.
 
 Run as a `Stop` hook (hook JSON on stdin: `session_id`, `transcript_path`, `stop_hook_active`) or by hand

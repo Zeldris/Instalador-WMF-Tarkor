@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.2
+# galivelop-workflow v0.9.0
 """The task record (C11): the contract of a task (`<taskRecord.path>/<id>.md`) and its decision log, one file per
 entry in the folder `<taskRecord.path>/<id>/` that nobody edits afterwards.
 
@@ -22,7 +22,7 @@ The shape the commit-msg hook (commit-message.py, with `taskRecord.enabled`) ask
 contract_errors. The commit of an entry is NOT written into the file (that would dirty the tree after the commit, or
 need a second commit): the header keeps `taskRecord.pendingMarker` and `resolve` reads the commit with
 `git log --diff-filter=A` on that file, which also survives a rebase or a squash. The templates in
-templates/<language>/task.md and task-entry.md are the same text this script writes (a test pins it).
+templates/<lang>/task.md and task-entry.md are the same text this script writes (a test pins it).
 Exit 0 ok, 1 refused (each message ends with the command that fixes it). Python 3.8+, stdlib only.
 """
 import argparse
@@ -67,7 +67,7 @@ def questions_ref(config, root, base):
 
 def contract_text(config, task_id, title=None, root=None):
     tr = gwconfig.task_record(config)
-    lang = "es" if config.get("language") == "es" else "en"
+    lang = "es" if gwconfig.languages(config)["docs"]["primary"] == "es" else "en"
     head = f"# {task_id}{SEP}{title or ('<título>' if lang == 'es' else '<title>')}"
     parts = [head]
     for name in tr["sections"]:
