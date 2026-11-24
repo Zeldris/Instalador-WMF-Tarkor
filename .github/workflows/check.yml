@@ -37,7 +37,7 @@ jobs:
       rust_workspaces: ${{ steps.dirs.outputs.rust_workspaces }}
       front: ${{ steps.dirs.outputs.front }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: python
         run: |
           python3 .claude/gw/scripts/config.py validate >/dev/null
@@ -91,7 +91,7 @@ jobs:
       matrix:
         python: ${{ fromJSON(needs.versions.outputs.python) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: actions/setup-node@v4
