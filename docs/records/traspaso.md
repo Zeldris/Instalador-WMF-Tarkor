@@ -18,7 +18,7 @@ cada commit.**
 | **Tarea en curso · `claude/gw-update-0.8.0`** | Al fusionarse, rama terminada: no queda nada pendiente en ella. |
 | **Tarea en curso · `claude/flu-13-ledger-ci`** | Rama abandonada sin fusionar: `FLU-13` la cerró `FLU-15` (v0.8.2 del flujo). |
 | **Tarea en curso · `claude/gw-update-0.8.1`** | Al fusionarse, rama terminada: no queda nada pendiente en ella. |
-| **Tarea en curso · `claude/gw-update-0.8.2`** | FLU-15: PR #34 abierto; parches de cookie/url (cargo audit) y PyYAML en instalar-entorno.sh (el runner ya no lo trae: test_workflows_yaml fallaba en check). Falta: CI en verde y fusionar (autorizado por la usuaria con CI verde). |
+| **Tarea en curso · `claude/gw-update-0.8.2`** | FLU-15: PR #34 abierto; parches de cookie/url (cargo audit) y PyYAML en instalar-entorno.sh, ahora por apt (python3-yaml) porque pip falla en el Python del sistema del runner. Falta: CI en verde y fusionar (autorizado por la usuaria con CI verde). |
 | **Tests** | 2026-11-12: núcleo `cargo test -p tarkor-nucleo` 149 y el check del proyecto en verde. Asistente `vitest` y E2E con el Ollama falso: último verde el 2026-10-25 (`vitest` 27 entonces). |
 
 ## Dónde está todo (para saber qué sigue)

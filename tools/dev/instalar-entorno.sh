@@ -58,8 +58,11 @@ ver_actionlint=1.7.12.25
 [ "$(python3 -m pip show actionlint-py 2>/dev/null | sed -n 's/^Version: //p')" = "$ver_actionlint" ] \
   || python3 -m pip install -q --disable-pip-version-check "actionlint-py==$ver_actionlint" \
   || echo "AVISO: no se pudo instalar actionlint-py $ver_actionlint; el check no valida los workflows."
-# PyYAML para tools/qa/tests/test_workflows_yaml.py: el Python del runner de GitHub ya no lo trae (FLU-15).
+# PyYAML para tools/qa/tests/test_workflows_yaml.py: el Python del runner de GitHub ya no lo trae (FLU-15). Primero
+# con apt (ese Python es el del sistema y pip lo rechaza por PEP 668); si no, con pip.
 python3 -c 'import yaml' 2>/dev/null \
+  || { command -v apt-get >/dev/null && { [ "$(id -u)" = 0 ] || [ ${#como_root[@]} -gt 0 ]; } \
+       && instalar_apt python3-yaml && python3 -c 'import yaml' 2>/dev/null; } \
   || python3 -m pip install -q --disable-pip-version-check pyyaml \
   || echo "AVISO: no se pudo instalar PyYAML; test_workflows_yaml no carga."
 # La versión de Rust, con rustfmt, clippy y el destino de Windows, la fija app/rust-toolchain.toml (FLU-6); se instala
