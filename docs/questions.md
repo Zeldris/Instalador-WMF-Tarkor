@@ -65,3 +65,12 @@ file (format: header of scripts/questions.py). Answer by number: `questions.py a
 - Recommendation: ok: en CLAUDE.md, la línea de idioma nueva (Agent language: / languages.docs.primary); en REVIEW.md, visibleLanguages → languages.ui; y la línea de marca a v0.9.0 en REVIEW, GLOSSARY y las tres notas
 - Answer: ok
 - Answered: 2026-11-24
+
+## Q-8
+- Refs: FLU-15
+- Status: answered
+- Asked: 2026-11-24
+- Question: Q-5 sin clave: el flujo no tiene forma de excluir gw-seo; si se borra, apply.py --check falla y el próximo /gw-update la vuelve a crear. ¿a) dejarla y pedir la clave al flujo b) borrarla igualmente y aceptar el --check en rojo?
+- Recommendation: a) dejar gw-seo instalada y pedir en el repo del flujo una clave para excluir skills (p. ej. skipSkills); se quita cuando exista
+- Answer: a
+- Answered: 2026-11-24
