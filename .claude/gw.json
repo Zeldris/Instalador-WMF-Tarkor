@@ -3,6 +3,7 @@
   "version": "0.9.0",
   "workflowClone": "../galivelop-workflow",
   "schemaVersion": 2,
+  "ciActionlint": "off",
   "languages": {
     "code": "en",
     "docs": {
