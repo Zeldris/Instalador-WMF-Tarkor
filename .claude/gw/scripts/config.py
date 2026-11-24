@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.9.0
 """The only reader of a project's .claude/gw.json (one fact, one place).
 
 Validates the config against schema/gw.schema.json (a stdlib validator for the subset the schema uses) and fills the
@@ -44,6 +44,7 @@ Python 3.8+ (macOS ships 3.9).
 import argparse
 import fnmatch
 import functools
+import hashlib
 import json
 import os
 import posixpath
@@ -66,7 +67,7 @@ ALIAS = re.compile(r"^private-project-\d+$")
 # The format of gw.json (its `schemaVersion`; absent = 0, written before 0.5). load() migrates an older config in
 # memory, so every reader sees the current shape; apply.py (/gw-update) writes the migration to disk. A newer one
 # fails closed: this copy of the workflow cannot know what changed.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class ConfigError(Exception):
@@ -86,9 +87,58 @@ def _migrate_to_1(raw):
     return out
 
 
+def _migrate_to_2(raw):
+    """1 -> 2 (A12, Q-14): `language` -> `languages.docs.primary` and `languages.public.primary`, `visibleLanguages` ->
+    `languages.ui`, `languages.code` = "en", the `others` lists []; both old keys are removed. A `languages` block
+    already there wins: the old keys only fill what it lacks. The block takes the place of `language`; a config with
+    neither old key gets none (the schema then says `languages` is missing). `schemaVersion` becomes 2 in place."""
+    old_language = raw.get("language")
+    old_visible = raw.get("visibleLanguages")
+    has_old = "language" in raw or "visibleLanguages" in raw
+    block = raw.get("languages")
+    if has_old and not isinstance(block, dict):
+        if "languages" in raw:  # not an object: the old keys stay, and the schema rejects `languages` with its reason
+            out = dict(raw)
+            out["schemaVersion"] = 2
+            return out
+        block = {}
+    out = {}
+    placed = False
+    for key, value in raw.items():
+        if key in ("language", "visibleLanguages"):
+            if not placed and has_old:
+                out["languages"] = block
+                placed = True
+            continue
+        if key == "languages" and placed:
+            continue
+        out[key] = value
+        if key == "languages":
+            placed = True
+    if has_old and not placed:
+        out["languages"] = block
+    if has_old:
+        block = out["languages"]
+        block.setdefault("code", "en")
+        for part in ("docs", "public"):
+            sub = block.setdefault(part, {})
+            if isinstance(sub, dict):
+                if "language" in raw:
+                    sub.setdefault("primary", old_language)
+                sub.setdefault("others", [])
+        if "visibleLanguages" in raw:
+            block.setdefault("ui", old_visible)
+        else:
+            block.setdefault("ui", [])
+    out["schemaVersion"] = 2
+    return out
+
+
 # (target schemaVersion, what it changes in one line, function(raw dict) -> raw dict), in order.
 MIGRATIONS = [
     (1, "schemaVersion written (the format is versioned from now on)", _migrate_to_1),
+    (2, "language and visibleLanguages become the languages block (docs.primary, public.primary, ui; code en)",
+     _migrate_to_2),
 ]
 
 
@@ -135,14 +185,23 @@ def git_toplevel(path):
 PUSH_SCRIPTS = (".claude/gw/scripts/push.sh", "scripts/push.sh")
 
 
-def push_command(root, branch):
+def push_command(root, branch, wip=False):
     """The shell command that pushes `branch` of the project at `root` (D94): `bash <root>/<copy>/push.sh <branch>`
-    with the project's own push.sh (PUSH_SCRIPTS), shell-quoted; without one, `git push -u origin <branch>`."""
+    with the project's own push.sh (PUSH_SCRIPTS), shell-quoted; without one, `git push -u origin <branch>`.
+    `wip` (E84) adds `--wip` (a WIP: head pushed without the check); it is None when the project has no push.sh or its
+    copy does not know `--wip` (an older one)."""
     for rel in PUSH_SCRIPTS:
         path = os.path.join(str(root), rel)
         if os.path.isfile(path):
-            return f"bash {shlex.quote(path)} {shlex.quote(branch)}"
-    return f"git push -u origin {shlex.quote(branch)}"
+            if wip:
+                try:
+                    with open(path, encoding="utf-8", errors="replace") as f:
+                        if "--wip" not in f.read():
+                            return None
+                except OSError:
+                    return None
+            return f"bash {shlex.quote(path)} {'--wip ' if wip else ''}{shlex.quote(branch)}"
+    return None if wip else f"git push -u origin {shlex.quote(branch)}"
 
 
 def git_common_dir(root):
@@ -302,6 +361,68 @@ def _section(config, key):
     given = config.get(key)
     given = given if isinstance(given, dict) else {}
     return {k: given.get(k, prop["default"]) for k, prop in props.items()}
+
+
+def languages(config):
+    """A12: the `languages` block of the config, normalized: {"code": "en", "docs": {"primary", "others"}, "public":
+    {"primary", "others"}, "ui": [...]}, each missing key filled from the schema default (the readers' one accessor;
+    a partial or absent block, or a caller that fell back to `{}`, still gets every key)."""
+    props = _schema()["properties"]["languages"]["properties"]
+    given = config.get("languages") if isinstance(config, dict) else None
+    given = given if isinstance(given, dict) else {}
+    out = {"code": given.get("code", props["code"]["default"])}
+    for part in ("docs", "public"):
+        inner = given.get(part) if isinstance(given.get(part), dict) else {}
+        out[part] = {"primary": inner.get("primary", props[part]["properties"]["primary"]["default"]),
+                     "others": list(inner.get("others", props[part]["properties"]["others"]["default"]))}
+    out["ui"] = list(given.get("ui", props["ui"]["default"]))
+    return out
+
+
+def user_config_path():
+    """A12 (Q-18): the per-user file (not the project config): $GW_USER_CONFIG, else ~/.claude/gw.json."""
+    given = os.environ.get("GW_USER_CONFIG")
+    return Path(given) if given else Path.home() / ".claude" / "gw.json"
+
+
+def agent_language(config):
+    """A12 (Q-18): (code, warning) of the language the agent talks in: the user file's `agentLanguage[<git config
+    user.email of the repo>]` (emails compared trimmed and lowercase), else `languages.docs.primary`. A missing file,
+    entry or email falls back silently; an unreadable file, a bad `agentLanguage` or a code that does not match the
+    schema's language pattern falls back with a one-line warning (never an exception)."""
+    fallback = languages(config)["docs"]["primary"]
+    path = user_config_path()
+    if not path.is_file():
+        return fallback, None
+    fix = '{"agentLanguage": {"<git config user.email>": "<code>"}}'
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("it must be a JSON object")
+        table = data.get("agentLanguage")
+        if "agentLanguage" in data and not isinstance(table, dict):
+            raise ValueError("`agentLanguage` must be an object of {email: language code}")
+    except (OSError, ValueError) as exc:  # JSONDecodeError is a ValueError
+        return fallback, f"{path} is not usable ({exc}); using '{fallback}' (languages.docs.primary); fix it: {fix}"
+    r = subprocess.run(["git", "-C", str(config.get("_root", ".")), "config", "--get", "user.email"],
+                       capture_output=True, text=True)
+    email = r.stdout.strip().lower()
+    if not email:
+        return fallback, None
+    value = {str(k).strip().lower(): v for k, v in (table or {}).items()}.get(email)
+    if value is None:
+        return fallback, None
+    pattern = _schema()["properties"]["languages"]["properties"]["docs"]["properties"]["primary"]["pattern"]
+    if not isinstance(value, str) or not re.fullmatch(pattern, value):
+        return fallback, (f"{path}: agentLanguage for {email} is {value!r}, not a language code matching {pattern}; "
+                          f"using '{fallback}' (languages.docs.primary); fix it: {fix}")
+    return value, None
+
+
+def agent_language_line(config):
+    """A12 (Q-18): (the `Agent language: <code>` line, warning or None) printed at session start and after a compaction."""
+    code, warning = agent_language(config)
+    return f"Agent language: {code}", warning
 
 
 def _bounded_section(config, key):
@@ -515,6 +636,19 @@ def harvest(config):
     return _bounded_section(config, "harvest")
 
 
+def front(config):
+    """E5: the `front` block normalized ({"tokens", "out", "breakpointGroup", "mainBreakpoints", "browsers":
+    {"all", "main"}}), every missing inner key filled from the schema default (front.py's one accessor)."""
+    out = _section(config, "front")
+    for key in ("browsers", "stylelint"):
+        props = _schema()["properties"]["front"]["properties"][key]["properties"]
+        given = out[key] if isinstance(out[key], dict) else {}
+        out[key] = {k: (list(given.get(k, prop["default"])) if isinstance(prop["default"], list)
+                        else given.get(k, prop["default"])) for k, prop in props.items()}
+    out["mainBreakpoints"] = list(out["mainBreakpoints"])
+    return out
+
+
 def commit_types(config):
     """The `commitTypes` key (A13): the Conventional Commits types, the schema default when absent or invalid."""
     return _string_list_key(config, "commitTypes")
@@ -613,7 +747,7 @@ def doctor_test_dirs_ignore(config):
 
 def context_guard(config):
     """The `contextGuard` key as a dict (cutoff, window, autocompactShare, warn, alarm,
-    charsPerToken, bigWindow, systemAdvice, nearRatio, warnedMax)."""
+    charsPerToken, bigWindow, systemAdvice, nearRatio, warnedMax, clearAfterTask)."""
     return _section(config, "contextGuard")
 
 
@@ -689,6 +823,25 @@ def test_scan_skip_dirs(config):
     return list(_schema()["properties"]["testScanSkipDirs"]["default"])
 
 
+WORKFLOW_NAME = "galivelop-workflow"  # the `name` of the workflow's own .claude-plugin/plugin.json
+
+
+def plugin_field(cand, field):
+    """A field of `<cand>/.claude-plugin/plugin.json`, or None when it is unreadable or not an object."""
+    try:
+        data = json.loads((Path(cand) / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data.get(field) if isinstance(data, dict) else None
+
+
+def is_workflow(cand):
+    """A folder is the workflow repo only when it has the workflow layout and its plugin.json names the workflow (a
+    project that vendors the scripts has scripts/apply.py and skills/ too, and must not be taken for the workflow)."""
+    return (bool(cand) and (Path(cand) / "scripts" / "apply.py").is_file() and (Path(cand) / "skills").is_dir()
+            and plugin_field(cand, "name") == WORKFLOW_NAME)
+
+
 def workflow_clone(config):
     """The `workflowClone` key (D132): where a project looks for its workflow clone (relative to the repo root)."""
     given = config.get("workflowClone")
@@ -712,6 +865,17 @@ def review_trivial_lines(config):
     if isinstance(given, int) and not isinstance(given, bool) and given >= 0:
         return given
     return _schema()["properties"]["reviewTrivialLines"]["default"]
+
+
+def review_split_lines(config):
+    """The `review.splitLines` key (E86): the changed lines above which the phase 1 review is dealt to several
+    reviewers (0 = never split); the schema default when the block or the value is absent or invalid."""
+    default = _schema()["properties"]["review"]["properties"]["splitLines"]["default"]
+    block = config.get("review")
+    given = block.get("splitLines") if isinstance(block, dict) else None
+    if isinstance(given, int) and not isinstance(given, bool) and given >= 0:
+        return given
+    return default
 
 
 def scout_settings(config):
@@ -773,6 +937,15 @@ def whole_read_warn_bytes(config):
     if isinstance(given, int) and not isinstance(given, bool) and given >= 0:
         return given
     return _schema()["properties"]["wholeReadWarnBytes"]["default"]
+
+
+def whole_read_short_lines(config):
+    """The `wholeReadShortLines` key (E85): lines above which a Bash range read of the log or a roadmap file warns
+    (0 = every range), the schema default when absent or invalid."""
+    given = config.get("wholeReadShortLines")
+    if isinstance(given, int) and not isinstance(given, bool) and given >= 0:
+        return given
+    return _schema()["properties"]["wholeReadShortLines"]["default"]
 
 
 def hook_stdin_wait(root=None):
@@ -889,6 +1062,14 @@ def semantic_errors(config):
     regex), an agentMap prefix that is not one folder name, an instructionLines `warn` above its `fail`, a handoff `cellHardLimit` set by the project (not 0) below its `cellLimit`, an
     ownedFiles pattern that is absolute or has a `..`."""
     errors = []
+    people = (config.get("profiles") or {}).get("people") if isinstance(config.get("profiles"), dict) else None
+    for key, person in (people or {}).items() if isinstance(people, dict) else ():
+        if not EMAIL_HASH.match(key):
+            errors.append(f"$.profiles.people: key {key[:3]}... is not the SHA-256 of an e-mail (64 hex digits); never "
+                          f"write the address: python3 {HERE / 'profile.py'} assign <email> --role <role> writes the hash")
+        elif isinstance(person, dict) and not (person.get("role") or person.get("profile")):
+            errors.append(f"$.profiles.people.{key[:12]}...: needs a role or a profile; assign one: "
+                          f"python3 {HERE / 'profile.py'} assign <email> (--role <role> | --profile <name>)")
     warn, fail = instruction_lines(config)
     if warn > fail:
         errors.append(f"$.instructionLines: warn ({warn}) must not be above fail ({fail}); lower warn or raise fail "
@@ -903,6 +1084,13 @@ def semantic_errors(config):
         errors.append(f"$.handoff: cellHardLimit ({sizes['cellHardLimit']}) must not be below cellLimit "
                       f"({sizes['cellLimit']}): the hard cap would fail cells the soft limit still accepts; raise "
                       "cellHardLimit, lower cellLimit, or set cellHardLimit to 0 (off) in .claude/gw.json")
+    block = config.get("languages") if isinstance(config.get("languages"), dict) else {}
+    for part in ("docs", "public"):
+        inner = block.get(part) if isinstance(block.get(part), dict) else {}
+        primary = inner.get("primary", "en")
+        if isinstance(primary, str) and isinstance(inner.get("others"), list) and primary in inner["others"]:
+            errors.append(f"$.languages.{part}.others: {primary!r} is already languages.{part}.primary; remove it from "
+                          f"`others` in .claude/gw.json")
     agents_dir = config.get("agentsSkillsDir")
     if isinstance(agents_dir, str) and agents_dir:
         norm = posixpath.normpath(agents_dir.replace("\\", "/")).strip("/")
@@ -1147,13 +1335,135 @@ def _commit(root, rev):
     return r.stdout.strip() if r.returncode == 0 else ""
 
 
-def load(root=None, rev=None, paths_at=None):
+PROFILE_DENIED = ("$schema", "version", "schemaVersion", "profiles", "languages", "agentsSkillsDir", "projectSkillPrefix",
+                  "gitignoreStacks", "ciInstall", "ciPython", "ciNodeDirs", "ciRustDirs", "ciKeepSteps", "ciOnPush",
+                  "actionlintVersion", "front")
+PROFILE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+EMAIL_HASH = re.compile(r"^[0-9a-f]{64}$")
+EMAIL_ADDRESS = re.compile(r"^[^@\s]+@[^@\s]+$")  # E4: what profile.py accepts as an address to hash
+# E4 (Q-27): an address inside free text (doctor.py): a TLD of letters that ends the word, so `prettier@3.0.0` and
+# `git@github.com:org/repo` (npm specs, scp-style remotes) are not taken for addresses.
+EMAIL_IN_TEXT = re.compile(r'[^@\s"]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}(?![A-Za-z0-9:/@-])')
+PROFILE_OBJECT_MSG = "must be a JSON object with the keys it changes, e.g. {\"logSize\": 5000}"
+
+
+def profile_shape_problems(data, props):
+    """The problems of a profile's content before it is merged (one list for apply_profiles and doctor.py): not an
+    object, a key the schema (`props`) does not know, or a denied one (PROFILE_DENIED)."""
+    if not isinstance(data, dict):
+        return [PROFILE_OBJECT_MSG]
+    problems = [f"$: unknown key '{k}' (check spelling against schema/gw.schema.json)" for k in data if k not in props]
+    problems += [f"$.{k}: a profile cannot change what is installed or the config's shape (it is committed for "
+                 f"everyone); change it in {CONFIG_REL} instead" for k in data if k in PROFILE_DENIED]
+    return problems
+
+
+def email_hash(email):
+    """E4 (Q-27): the SHA-256 (hex) of an e-mail address, trimmed and in lower case: what `profiles.people` keys."""
+    return hashlib.sha256(email.strip().lower().encode("utf-8")).hexdigest()
+
+
+def in_ci():
+    """Whether this runs in CI (the CI environment variable set and not false/0): CI always uses the default (Q-28)."""
+    return os.environ.get("CI", "").strip().lower() not in ("", "0", "false")
+
+
+def git_email(root):
+    """The `git config user.email` of `root` ("" when unset or git fails)."""
+    env = {k: v for k, v in os.environ.items() if k not in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")}
+    try:
+        r = subprocess.run(["git", "-C", str(root), "config", "user.email"], capture_output=True, text=True, env=env)
+    except OSError:
+        return ""
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def deep_merge(base, over):
+    """`base` with `over` on top: objects merge key by key (deep), anything else (lists too) is replaced."""
+    out = dict(base)
+    for key, value in over.items():
+        out[key] = deep_merge(out[key], value) if isinstance(out.get(key), dict) and isinstance(value, dict) else value
+    return out
+
+
+def _read_profile(root, rev, rel):
+    """The text of the profile file `rel` in the working tree, or in commit `rev`; None when it is not there."""
+    if not rev:
+        path = Path(root) / rel
+        return path.read_text(encoding="utf-8") if path.is_file() else None
+    env = {k: v for k, v in os.environ.items() if k not in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")}
+    try:
+        r = subprocess.run(["git", "-C", str(root), "show", f"{rev}:{rel}"], capture_output=True, text=True, env=env)
+    except OSError as exc:
+        raise ConfigError(f"cannot run git to read {rel} at {rev}: {exc}")
+    return r.stdout if r.returncode == 0 else None
+
+
+def choose_profile(config, email):
+    """The profiles that apply to `email` under the config's `profiles` block, as {"layer": "default" | "role" |
+    "person", "profile": name or None, "role"?: role, "roleProfile"?: name}, plus "_chain": [names] (role first)."""
+    block = config.get("profiles") if isinstance(config.get("profiles"), dict) else {}
+    person = (block.get("people") or {}).get(email_hash(email)) if email else None
+    if not person:
+        return {"layer": "default", "profile": None, "_chain": []}
+    role = person.get("role")
+    chain, out = [], {}
+    if role:
+        roles = block.get("roles") or {}
+        if role not in roles:
+            raise ConfigError(f"profiles: role '{role}' is assigned but has no profile in profiles.roles; give it one: "
+                              f"python3 {HERE / 'profile.py'} role {role} <profile>")
+        chain.append(roles[role])
+        out.update(role=role, roleProfile=roles[role], layer="role", profile=roles[role])
+    if person.get("profile"):
+        chain.append(person["profile"])
+        out.update(layer="person", profile=person["profile"])
+    if out.get("layer") == "role":
+        del out["roleProfile"]
+    out["_chain"] = chain
+    return out
+
+
+def apply_profiles(config, root, rev, schema, email=None, force=False):
+    """E4: `config` (raw, already valid) with the profiles of the person (git user.email, or `email`) layered on top,
+    each validated; and the choice (choose_profile, for `config.py profile`). CI and no assignment: the config as it
+    is. `force` skips the CI and no-assignment shortcuts (profile.py checks a profile chain with it). Raises ConfigError
+    (fail closed) for a missing, broken or invalid profile or one naming a denied key."""
+    if not force and (in_ci() or not (config.get("profiles") or {}).get("people")):
+        return config, {"layer": "default", "profile": None}
+    choice = choose_profile(config, git_email(root) if email is None else email)
+    folder = (config.get("profiles") or {}).get("dir") or schema["properties"]["profiles"]["default"]["dir"]
+    props = schema.get("properties", {})
+    for name in choice.pop("_chain"):
+        rel = posixpath.join(folder.rstrip("/"), f"{name}.json")
+        where = f"{rev}:{rel}" if rev else rel
+        text = _read_profile(root, rev, rel)
+        if text is None:
+            raise ConfigError(f"profile '{name}' ({where}) not found; create it: python3 {HERE / 'profile.py'} new {name}")
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ConfigError(f"{where}: invalid JSON at line {exc.lineno}: {exc.msg}")
+        if not isinstance(data, dict):
+            raise ConfigError(f"{where}: {PROFILE_OBJECT_MSG}")
+        problems = profile_shape_problems(data, props)
+        merged = deep_merge(config, data) if not problems else config
+        problems = problems or validate(merged, schema) or semantic_errors(merged)
+        if problems:
+            raise ConfigError(f"{where} is invalid:\n  " + "\n  ".join(problems) +
+                              f"\n  fix the profile, then check: python3 {HERE / 'config.py'} profile")
+        config = merged
+    return config, choice
+
+
+def load(root=None, rev=None, paths_at=None, profiles=True):
     """Return the validated config with defaults, plus '_root' (Path) and '_schemaFrom' (the schemaVersion it had
     before load() migrated it in memory to SCHEMA_VERSION; an absent one is 0, a newer one fails closed). With `rev`,
     the config as that commit has it instead of the working tree's. `paths_at` (a commit) is where the old-Spanish-path fallback looks for files: a
     policy config read from the protected branch's tip still resolves the paths of the commit being pushed or
     merged, so every reader gets the same path for the same commit; an old path the tip names explicitly follows
-    that commit's move to the English default (with_defaults, follow_moves). Raises ConfigError."""
+    that commit's move to the English default (with_defaults, follow_moves). `profiles=False` skips the profile layers
+    (E4: profile.py loads the project's config alone, so its commands can fix a broken profile). Raises ConfigError."""
     root = find_root(root)
     path = root / CONFIG_REL
     if rev:
@@ -1175,7 +1485,14 @@ def load(root=None, rev=None, paths_at=None):
     schema = json.loads(schema_path().read_text(encoding="utf-8"))
     errors = validate(config, schema) or semantic_errors(config)
     if errors:
-        raise ConfigError(f"{path} is invalid:\n  " + "\n  ".join(errors))
+        hint = ""
+        if any(e.startswith("$.languages") and "does not match" in e for e in errors):
+            hint = ("\n  languages: write two-letter lowercase ISO 639-1 codes (\"es\", \"en\"; `ui` also takes tags like "
+                    "\"pt-BR\") in .claude/gw.json, e.g. "
+                    "{\"code\": \"en\", \"docs\": {\"primary\": \"es\", \"others\": [\"en\"]}, \"public\": {\"primary\": "
+                    "\"en\", \"others\": []}, \"ui\": []}, then validate: python3 " + str(HERE / "config.py") + f" --root {root} validate")
+        raise ConfigError(f"{path} is invalid:\n  " + "\n  ".join(errors) + hint)
+    config, choice = apply_profiles(config, root, rev, schema) if profiles else (config, {"layer": "default", "profile": None})
     if paths_at:
         env = {k: v for k, v in os.environ.items() if k not in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")}
         try:
@@ -1191,6 +1508,7 @@ def load(root=None, rev=None, paths_at=None):
     config = with_defaults(config, schema, path_exists_fn(root, paths_at or rev), follow_moves=follow)
     config["_root"] = root
     config["_schemaFrom"] = schema_from  # the schemaVersion on disk (or at `rev`) before the in-memory migration
+    config["_profile"] = choice  # E4: the layer and profile applied (config.py profile)
     return config
 
 
@@ -1377,6 +1695,8 @@ def main(argv=None):
                                                "fallback when the config cannot be read")
     default_p.add_argument("key")
     sub.add_parser("root")
+    sub.add_parser("agent-language", help="the agent's language for this user (~/.claude/gw.json, A12); a warning goes to stderr")
+    sub.add_parser("profile", help="E4: the layer (default, role or person) and profile the config was loaded with, as JSON")
     sub.add_parser("local", help="the validated local file .claude/gw.local.json as JSON (null when absent)")
     related = sub.add_parser("related", help="relatedTests commands that apply to the files on stdin")
     related.add_argument("--kind", choices=("fast", "slow"), required=True)
@@ -1406,6 +1726,11 @@ def main(argv=None):
     try:
         config = load(args.root, args.rev, args.paths_at)
     except ConfigError as exc:
+        if args.command == "agent-language":  # an unusable project config still gets the user file's language, else en
+            code, warning = agent_language({"_root": args.root or "."})
+            print(f"gw config: {exc}", file=sys.stderr)
+            print(code)
+            return 0
         print(f"gw config: {exc}", file=sys.stderr)
         return 2
     if args.command == "validate":
@@ -1413,6 +1738,15 @@ def main(argv=None):
         return 0
     if args.command == "root":
         print(config["_root"])
+        return 0
+    if args.command == "agent-language":
+        code, warning = agent_language(config)
+        if warning:
+            print(f"gw config: {warning}", file=sys.stderr)
+        print(code)
+        return 0
+    if args.command == "profile":
+        print(json.dumps(config["_profile"], ensure_ascii=False))
         return 0
     if args.command == "local":
         try:
@@ -1464,11 +1798,12 @@ def main(argv=None):
         print(f"{scope} {reason}" if reason else scope)
         return 0
     value = dict(config, metrics=metrics(config), models=models(config), measure=measure(config), mediaContent=media_content(config),
+                 selector=_section(config, "selector"),
                  recover=recover(config), handoff=handoff(config), harvest=harvest(config),
                  contextGuard=context_guard(config), modes=modes(config),
                  stopSeverity=stop_severity(config), changeSize=change_size(config),
                  retro=retro(config), redWithoutFix=red_without_fix(config), branchPrefixes=branch_prefixes(config),
-                 taskRecord=task_record(config))  # inner keys fill from the schema too
+                 taskRecord=task_record(config), languages=languages(config))  # inner keys fill from the schema too
     for part in args.key.split("."):
         if not isinstance(value, dict) or part not in value or part.startswith("_"):
             print(f"gw config: key '{args.key}' is not set and has no default", file=sys.stderr)

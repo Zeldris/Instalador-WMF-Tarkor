@@ -1,9 +1,9 @@
-<!-- galivelop-workflow v0.8.1 -->
+<!-- galivelop-workflow v0.9.0 -->
 @AGENTS.md
 
 ## Solo para Claude Code
 
-- Responde en el idioma del proyecto (`es`).
+- Responde en el idioma de la línea `Agent language:` que imprime el inicio de sesión; si no la ves, el de `languages.docs.primary`.
 - **Todo a nombre de la usuaria** (desde 2026-11-04; nombre desde 2026-11-14): commits (autor y committer) y pull requests. Al empezar, `git config user.name "Álvaro García Graña"` y `git config user.email` con el correo de la cuenta de la usuaria (el del contexto de la sesión; no se escribe en el repo). Sin firmas ni líneas de atribución de Claude, tampoco en los PR. El aviso del entorno de commits «Unverified» se ignora: lo decidió la usuaria.
 - Al empezar cada tarea, di en una línea qué skill y qué modelo pide el caso, con la skill `gw-selector`. El modelo de
   la sesión lo elige la usuaria; los subagentes, el más barato que haga bien el trabajo.

@@ -2,9 +2,9 @@
 name: gw-selector
 description: Pick the skill and models for the task that is starting. Use at the start of every task, when a bug or a design request arrives, before reviewing a diff for the protected branch, when a block or phase closes, and whenever the user asks which workflow or model fits.
 license: MIT
-compatibility: Claude Code or any Agent Skills agent; reads .claude/gw.json when present
+compatibility: Claude Code or any Agent Skills agent; reads keys of .claude/gw.json through config.py when present
 metadata:
-  version: "0.8.1"
+  version: "0.9.0"
   source: "Galivelop workshop; generalised from the Tarkor, installer and portal selectors"
 ---
 
@@ -12,7 +12,12 @@ metadata:
 
 If `.claude/gw/gw-selector.md` exists in the project, read it first: it holds what is specific to the project.
 
-Classify the task with the table, then act on its row. Reply in the project's `language` (`.claude/gw.json`).
+Classify the task with the table, then act on its row. Reply in the project's docs language (`languages.docs.primary` in `.claude/gw.json`).
+
+**Config:** read only the keys this skill uses, one command each, never `.claude/gw.json` whole (it costs ~5k tokens
+per task): `python3 .claude/gw/scripts/config.py get languages.docs.primary`, `get selector.cases --json` (project rows, below),
+`get designReferences --json`, `get log`, and `python3 .claude/gw/scripts/models.py list` (disabled models). In the
+workflow's own repo the scripts are in `scripts/`.
 
 | Case | Skill(s) | Session model | Session effort | Subagent model | Modes |
 |---|---|---|---|---|---|
@@ -46,12 +51,25 @@ do the case without it and say so.
 - **The user picks the session model and effort** (`/model`, `/effort`); an agent only recommends them and cannot
   switch them. State the case in **one line** that keeps the session and the subagents apart and names the current
   ones: `Session: <model> <effort> (current: <X> <E>; /model and /effort to change them) · Subagents: <rung or none>
-  · Skill: <y>`. `<X>` is the model the session reports (its system prompt, or the session tool in the cloud); `<E>`
+  · Skill: <y>`, starting the line, with the labels `Session:`, `Subagents:` and `Skill:` in English whatever the
+  reply language (the `SessionStart` check reads that line). `<X>` is the model the session reports (its system prompt, or the session tool in the cloud); `<E>`
   is the effort it reports, or the value of `CLAUDE_CODE_EFFORT_LEVEL` when set (it beats `/effort`: say so if it
-  differs from the recommendation); write `unknown` for either when nothing says it. If the session deals work out
-  with `gw-orchestrate-dealer`, it takes the model and effort of the riskiest row it deals, medium at least. Then
-  carry on. Wait for an answer only when the risk is high: data migration, deleting,
-  rewriting published content.
+  differs from the recommendation); write `unknown` for either when nothing says it.
+- **A different model or effort stops the session** (D142): when the recommended session model or effort differs
+  from the current one, in either direction (lower to save, higher for quality), stop before doing any work: ask
+  the user to switch (`/model <model>`, `/effort <effort>`) or to say the current one stays, and wait for the answer.
+  An `unknown` current value is no difference: the line says `unknown` and the session carries on. When both match,
+  carry on; wait for an answer anyway when the risk is high: data migration, deleting, rewriting published content.
+  On a resumed session, `session-start.sh` warns when the model differs from the last selector line
+  (`models.sessionCheck`); that warning is the same stop.
+- **An orchestrating session** (one that deals work out with `gw-orchestrate-dealer`) takes the model and effort of
+  the work it does itself (plan, decide, review: usually `medium` (Sonnet) `medium`), not those of the rows it deals;
+  it asks for `large` (Opus) only when that work is design or a cause that is not obvious. Weigh the model metrics
+  before picking, always, reading only the by-model table, not the whole report (about 3.7k tokens):
+  `python3 .claude/gw/scripts/metrics.py quality --period month | sed -n '/^## By model/,$p'` (the rework, findings
+  and retries of the ids each model spent on, beside its spend) says which model did best, or gave
+  the best quality for its cost, in that kind of case; follow it over the default rung and say so in the line. No
+  data in the period: the table.
 - **Models outside Anthropic** (GPT, Gemini, DeepSeek…): Claude Code cannot launch them, so never pass one to an
   Agent call. Recommend one only for a session the user runs in opencode or another tool that supports it
   (`docs/en/other-agents.md`).
@@ -67,6 +85,9 @@ do the case without it and say so.
   and decisions stay in the main session.
 - **Closed plan, scoped implementation:** goes to a `sonnet` subagent and the main session reviews its diff before
   the commit. The fixes from a review are a closed plan too (`sonnet`); `opus` only to debug something non-obvious. Anything of more than one step runs through `gw-orchestrate-dealer`.
+- **Sweeps and review fixes of 2 or more points:** at their start, recommend dealing them to a `gw-worker` subagent
+  (`subagent_type: gw-worker`, with `model` and `effort`) where `.claude/agents/gw-worker.md` exists, not doing them
+  in the main session: the main session reviews the worker's diff. The session-start hook repeats it (`workerHint`).
 - **Subagent ladder:** `sonnet low` → `sonnet medium` → `opus medium` → `opus high`. Start at the lowest rung that
   fits; when a subagent does not finish its brief, the next attempt climbs one rung. **Two failures at one rung: stop
   and ask the user.** A subagent that never starts (tool error) is retried on the same rung and does not count as a
@@ -87,7 +108,9 @@ do the case without it and say so.
 
 ## Project rows: `selector.cases`
 
-`.claude/gw.json` may add rows under `selector.cases`. Read them at the start and treat them like the table above,
+`.claude/gw.json` may add rows under `selector.cases`. Read them at the start
+(`python3 .claude/gw/scripts/config.py get selector.cases --json`; `[]` when there are none) and treat them like the
+table above,
 matching them before the generic rows. Shape of one entry:
 
 ```json

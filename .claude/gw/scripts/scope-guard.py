@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.9.0
 """Frozen scope (C13, `scopeGuard`): a change of requirements is another task.
 
   scope-guard.py                     PreToolUse hook on Edit, Write, MultiEdit and NotebookEdit (event JSON on stdin)
@@ -74,9 +74,13 @@ IN_PROGRESS = ("MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "REBASE_HEAD", "
 
 def flow_files(cfg):
     """The files the workflow itself writes and commits (from the config, never fixed): the questions file, the log, the
-    token ledger that the pre-commit stages (metrics.ledger), the review mark and the local CI record."""
+    token ledger that the pre-commit stages (metrics.ledger), the review mark, the local CI record, the roadmap files
+    (`roadmapFiles`, D149) and the pending file (`pendingFile`): closing any task touches them."""
     out = {config.questions_path(cfg), cfg.get("log") or config.schema_default("log"), cfg.get("reviewMark"),
-           cfg.get("ciLocalLog")}
+           cfg.get("ciLocalLog"), config.pending_file(cfg)}
+    for entry in config.roadmap_files(cfg):
+        if isinstance(entry, dict):
+            out.add(entry.get("path"))
     try:
         out.add(config.metrics(cfg)["ledger"])
     except Exception:  # noqa: BLE001 (a broken metrics key leaves the rest)
@@ -126,16 +130,36 @@ def warn_once(top, key):
         qg.WARNED = saved
 
 
-def vendored_set(top):
-    """B44: the files the project holds as unchanged copies of the workflow (`apply.py --vendored`, through
+def vendored_lookup(top):
+    """B44: (files, why): the files the project holds as unchanged copies of the workflow (`apply.py --vendored`, through
     review-scope.py), written by `apply.py` and not by the task. Only the pre-commit uses it: before an edit a copy is
     always unchanged, so the hook cannot tell it from a file the task is about to change. Empty when the workflow repo or
-    the answer is not available (a timeout included): then they count as before (the safe side)."""
+    the answer is not available (a timeout included): then they count as before (the safe side). WHY (D150) is the
+    one-line notice naming the fix (`workflowClone` when no clone was found, the by-hand command when apply failed), else None."""
     try:
         workflow = rs.workflow_dir(None, top, config.load(str(top)))
-        return rs.vendored(top, workflow, timeout=VENDORED_TIMEOUT)
-    except (rs.ScopeError, config.ConfigError, OSError, subprocess.SubprocessError):
-        return set()  # no workflow copy, a failed lookup or a timeout only mean nothing is skipped (a bug still shows)
+    except rs.ScopeError as exc:  # no (usable) clone: the fix is where it is looked for
+        return set(), (f"copies of the workflow were not skipped ({first_sentence(exc)}); set `workflowClone` in "
+                       f".claude/gw.json or export GW_WORKFLOW=<clone>")
+    except (config.ConfigError, OSError, subprocess.SubprocessError):
+        return set(), None
+    try:
+        return rs.vendored(top, workflow, timeout=VENDORED_TIMEOUT), None
+    except rs.ScopeError as exc:  # the clone was found but `apply.py --vendored` failed or timed out: not a clone problem
+        return set(), (f"copies of the workflow were not skipped ({first_sentence(exc)}); run it by hand: "
+                       f"python3 {Path(workflow) / 'scripts' / 'apply.py'} --vendored {top}")
+    except (OSError, subprocess.SubprocessError):
+        return set(), None  # a failed lookup only means nothing is skipped (a bug still shows)
+
+
+def first_sentence(exc):
+    """The first sentence of a ScopeError on one line (review-scope.py's commands come after its first `;`)."""
+    return " ".join(str(exc).split(";")[0].split())
+
+
+def vendored_set(top):
+    """B44: the unchanged copies of the workflow (see vendored_lookup); empty when they cannot be told."""
+    return vendored_lookup(top)[0]
 
 
 def stamp_only_staged(top, rel):
@@ -281,8 +305,10 @@ def staged_check(top, cfg, mode):
     outside = [p for p in names if not always_allowed(p, cfg, base, ids) and not task.in_files(p, patterns)]
     guard = config.scope_guard(cfg)
     if outside:  # B44: copies of the workflow and version-stamp-only changes are not deviations (a `chore(H..)` stamp commit
-        vendored = vendored_set(top) if guard["skipVendored"] else set()  # is all of them, so it needs no record either)
+        vendored, why = vendored_lookup(top) if guard["skipVendored"] else (set(), None)  # is all of them, so it needs no record either)
         outside = [p for p in outside if p not in vendored and not (guard["skipStamps"] and stamp_only_staged(top, p))]
+        if outside and why:  # D150: say that the copies of the workflow were not skipped, and how to fix it
+            print(f"{NAME}: {why}", file=sys.stderr)
     grown = unlogged(top, record, cfg) if record in names else []
     if not outside and not grown:
         return 0

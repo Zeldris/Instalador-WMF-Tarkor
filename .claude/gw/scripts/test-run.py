@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.9.0
 """Run the Python test suites in parallel, one test class per process (E45).
 
   python3 test-run.py [DIR ...] [--jobs N] [--python CMD] [--times N]
@@ -40,6 +40,7 @@ sys.path.insert(0, str(HERE))
 import config  # noqa: E402
 
 RAN = re.compile(r"^Ran (\d+) tests? in ", re.M)
+CLASS_SKIP = re.compile(r"^OK \(skipped=\d+\)$", re.M)
 # Printed by the child: one test id per line; a module that does not import shows as unittest.loader._FailedTest.
 LIST = (
     "import sys, unittest\n"
@@ -100,6 +101,8 @@ def run_unit(root, python, unit):
     p = subprocess.run(cmd, cwd=str(root), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                        check=False)
     ran = sum(int(n) for n in RAN.findall(p.stdout))
+    if cls and ran == 0 and p.returncode == 0 and CLASS_SKIP.search(p.stdout):
+        ran = unit[3]  # setUpClass raised SkipTest: unittest counts no test, but the class's tests were all skipped
     return unit, p.returncode, time.time() - start, ran, p.stdout
 
 

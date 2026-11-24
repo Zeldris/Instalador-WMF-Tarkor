@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.9.0
 # Merges a subagent's branch into the current one (merge, never rebase: branches are pushed), runs the config's
 # `check` commands and the related tests (`relatedTests`) on the result and, if they pass, cleans up the subagent's
 # worktree and branch.
@@ -34,7 +34,7 @@
 #  - Refs (D16): the ids of the branch (the one in a name agent/<id>-<topic>, if it looks like a task id, and the
 #    `Refs:` trailers of the commits it brings, read with git interpret-trailers) are joined with the ones the
 #    message already has into ONE `Refs: A, B` trailer, without repeats; with no ids the message stays as it is.
-#  - With `commitNext: true` the message must end in the next-step trailer (`Siguiente:` for language es, `Next:`
+#  - With `commitNext: true` the message must end in the next-step trailer (`Siguiente:` for languages.docs.primary es, `Next:`
 #    otherwise); without it the script stops before merging (exit 2). GW_NO_NEXT=1 skips that requirement.
 #  - --reviewed = the main session already had the diff reviewed; without it, it reminds you.
 #  - --defer-check (D117) = for every branch of a wave but the last: it merges (same conflict handling, same Refs)
@@ -76,8 +76,8 @@ trap 'rm -rf "$logs"' EXIT
 commit_next="$(python3 "$config" --root "$root" get commitNext 2>/dev/null)" || {
   echo "merge-branch: cannot read commitNext; fix the config: python3 $config --root $root validate" >&2; exit 2; }
 if [ "$commit_next" = "true" ] && [ "${GW_NO_NEXT:-}" != "1" ]; then
-  lang="$(python3 "$config" --root "$root" get language 2>/dev/null)" || {
-    echo "merge-branch: cannot read language; fix the config: python3 $config --root $root validate" >&2; exit 2; }
+  lang="$(python3 "$config" --root "$root" get languages.docs.primary 2>/dev/null)" || {
+    echo "merge-branch: cannot read languages.docs.primary; fix the config: python3 $config --root $root validate" >&2; exit 2; }
   case "$lang" in es) next_word="Siguiente" ;; *) next_word="Next" ;; esac
   parsed="$(printf '%s\n' "$message" | git interpret-trailers --parse --no-divider)" || {
     echo "merge-branch: cannot read the trailers of the merge message (git interpret-trailers failed); update git or fix the message, then retry: bash $0 $branch \"<merge message>\"" >&2; exit 2; }

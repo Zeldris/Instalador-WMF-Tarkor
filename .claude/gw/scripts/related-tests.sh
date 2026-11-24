@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.9.0
 # The tests of what changes, in the push. Called by .githooks/pre-push as:
 #   related-tests.sh <changed-files-file> [<checkout-dir>]
 # (one repo-relative path per line; git's ref lines on stdin are ignored). <checkout-dir> is where the pushed commit

@@ -23,6 +23,8 @@ resort: the log folder of the home directory's cloud start (`-home-user`). Pass 
 Short current session (B29): without `--session`, if the session found has fewer than `measure.minCalls` calls in the
 period (default 5, config `measure.minCalls`, 0 = off; e.g. right after a `/clear`), the newest previous session of the
 same git branch (log lines carry `gitBranch`) with calls in the period is measured instead, and the output says so.
+With an explicit period, logs of another branch are never picked; when the current log has no `gitBranch` yet, the
+repo's checked-out branch stands in for it (a detached HEAD: no branch filter).
 
 Tokens of a result are estimated from its size (characters / contextGuard.charsPerToken, 3.5 by default; an image counts ~1,600). API usage is exact.
 """
@@ -89,10 +91,11 @@ def session_logs(root):
 
 def default_min_calls(root):
     """The schema default of `measure.minCalls` (one datum, one place): from the workflow's schema next to this
-    script (the repo's `schema/` or an installed `.claude/gw/schema/`) or the project's own; 0 (off) if none is found."""
+    script (the repo's `schema/` or an installed `.claude/gw/schema/`, also from the `.agents/skills/` copy) or the project's own; 0 (off) if none is found."""
     here = os.path.dirname(os.path.abspath(__file__))
     for path in (os.path.join(here, '..', '..', '..', 'schema', 'gw.schema.json'),
                  os.path.join(here, '..', '..', '..', 'gw', 'schema', 'gw.schema.json'),
+                 os.path.join(here, '..', '..', '..', '..', '.claude', 'gw', 'schema', 'gw.schema.json'),  # the .agents/skills copy
                  os.path.join(root, '.claude', 'gw', 'schema', 'gw.schema.json')):
         try:
             with open(path, encoding='utf-8') as f:
@@ -157,6 +160,39 @@ def chars_per_token(root):
     return CHARS_PER_TOKEN
 
 
+def fixed_startup(root, path):
+    """E76: tokens of the fixed startup (system prompt, tools, MCP) of the last measured startup of `path`, from the
+    workflow's own estimate (context_guard.py, installed copy first, then this repo's: one datum, one place). It is the
+    startup minus the project's part (log, AGENTS.md/CLAUDE.md, skills, conversation carried over); the SessionStart
+    hook output stays in it, since the session log does not keep it. Returns
+    (tokens or None, reason when None); fails open: a copy that fails (an old install without `Measure`) gives way
+    to the next one, and with none left the result is None."""
+    failed = None
+    for rel in ('.claude/gw/scripts', 'scripts'):
+        guard = os.path.join(root, rel, 'context_guard.py')
+        if not os.path.isfile(guard):
+            continue
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location('gw_context_guard', guard)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            try:
+                cfg = mod.config.load(root)
+            except Exception:  # no or bad config: the estimate takes the defaults
+                cfg = None
+            parts = mod.Measure(root, cfg, path).culprits()
+        except BaseException as exc:  # fails open (SystemExit too, from an import): try the next copy
+            if isinstance(exc, KeyboardInterrupt):
+                raise
+            failed = f'{rel}/context_guard.py failed: {exc!r}'
+            continue
+        if not parts:
+            return None, 'no measured startup in the session log'
+        return next((t for label, t, _ in parts if label == mod.SYSTEM), None), 'no system part in the estimate'
+    return None, failed or 'no context_guard.py of the workflow in .claude/gw/scripts/ or scripts/'
+
+
 def branch_of(path):
     """The LAST `gitBranch` a log has (a session may switch branch: its branch is the one it ends on), or None."""
     branch = None
@@ -195,19 +231,25 @@ def previous_session(path, root, since, cut=False):
 
 
 def default_session(root, since=None, cut=False):
-    """Newest `.jsonl` of the root's log folder or of a parent folder's; exits if there is none.
-    With `since`, the one with most responses from that moment on (the newest file may be a later session that
+    """The session in progress: the newest `.jsonl` of the root's log folder, of a parent folder's or of the cloud
+    start folder (D144; on a tie in mtime the repo's own folder wins, D139); exits if there is none.
+    With the default period (`cut`) that session whatever its calls; with an explicit period the one with most responses from that moment on (the newest file may be a later session that
     does not cover the period); the newest if none has any."""
     root = os.path.abspath(root)
     candidates = session_logs(root)
     if not candidates:
         sys.exit(f'No sessions in ~/.claude/projects/{folder_of(root)}/ or its parent folders (use --session)')
-    path = max(candidates, key=os.path.getmtime)
-    if since:
+    own_folder = folder_of(root)
+    path = max(candidates, key=lambda p: (os.path.getmtime(p), os.path.basename(os.path.dirname(p)) == own_folder))
+    if since and not cut:  # explicit period: the log covering it, D139's folder preference, never another branch's (D151)
+        # the log's own branch; a session without `gitBranch` (just started) falls back to the repo's current branch
+        branch = branch_of(path) or git('symbolic-ref', '--short', '-q', 'HEAD', cwd=root)
+        if branch:  # a log of another branch is out; one without `gitBranch` is not discarded
+            candidates = [p for p in candidates if p == path or branch_of(p) in (None, branch)]
         covered = {p: len(responses_of(p, cut_since(p, since, cut))) for p in candidates}
         # D139: the repo's own log folder first; a parent folder's (a session opened above the repo) only when
         # none of the repo's logs has calls in the period.
-        own = [p for p in candidates if os.path.basename(os.path.dirname(p)) == folder_of(root) and covered[p] > 0]
+        own = [p for p in candidates if os.path.basename(os.path.dirname(p)) == own_folder and covered[p] > 0]
         if own:
             candidates = own
         if max(covered[p] for p in candidates) > 0:
@@ -391,7 +433,7 @@ def main():
         description='Where the tokens of a Claude Code session went: API usage, context curve, heavy results, '
                     'repeats, per-file reads, per-model and per-subagent split. Standard library only.')
     ap.add_argument('--session', metavar='PATH.jsonl',
-                    help='session log to read (default: newest of the repo folder or its parent folders)')
+                    help='session log to read (default: the newest, the session in progress, of the repo folder, its parent folders and the cloud start folder)')
     ap.add_argument('--hours', type=float, default=None,
                     help='period in hours, 0 = the whole session (default: from the last /clear or compaction of the '
                          'session log, else 24)')
@@ -541,6 +583,21 @@ def main():
     print(f'Average context per call: {total_in / api_calls:,.0f} tokens  ->  every extra call costs that '
           f'(at cache price, ~{total_in / api_calls / 10:,.0f} tokens of normal input)')
     print(f'Average output per call: {usage["output_tokens"] / api_calls:,.0f} tokens (includes reasoning)')
+    # E76: the fixed startup (system prompt, tools, MCP) rides on every call and hides what the project can cut.
+    # A subagent's log has only sidechain lines, which context_guard skips: its startup is not measured there.
+    system, why = (None, 'the split does not apply to a subagent log') if own_log else fixed_startup(root, path)
+    if system is None:
+        print(f'Fixed startup: unknown ({why})')
+    else:
+        # Only real calls carry it: the synthetic messages (API errors, "No response requested") have no model.
+        real_calls = sum(1 for model, ctx in zip(call_models, contexts) if model and ctx)
+        fixed = min(system * real_calls, total_in)
+        print(f'Fixed startup (system prompt, tools, MCP; per call, neither /clear nor the project shrinks it, so the '
+              f'total falls only with fewer calls or fewer MCP servers and connectors; it also holds the SessionStart '
+              f'hook output, which the log does not keep): ~{system:,} tokens per call x {real_calls} calls = '
+              f'{fixed:,} input ({100 * fixed / max(total_in, 1):.0f} %)')
+        print(f'Project cost (the rest: instructions, log, skills, conversation, results): '
+              f'{total_in - fixed:,} input ({100 * (total_in - fixed) / max(total_in, 1):.0f} %)')
     # Curve between compactions: the floor is the fixed context (instructions, tools, summary) and the ceiling is
     # how far it grows before compacting. A ceiling far above the floor says compaction comes too late.
     stretches, closed, start = [], [], 0  # closed: the stretch ended in a compaction (it peaked where compaction fires)

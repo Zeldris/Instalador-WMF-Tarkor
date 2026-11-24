@@ -1,4 +1,4 @@
-<!-- galivelop-workflow v0.8.1 -->
+<!-- galivelop-workflow v0.9.0 -->
 # gw-opt-tokens — notas del proyecto
 
 Las lee la skill `gw-opt-tokens` antes de proponer nada, y se actualizan cuando la usuaria aprueba un cambio. El flujo
@@ -55,6 +55,8 @@ antes de la `/retro`; todo en español, y solo lo que confirme la usuaria entra 
   leído entero 24 veces arrastró ~238k.
 - **Los tags los sube la usuaria** (opt-tokens de `FLU-10`): el proxy da 403 al subir un tag desde la sesión, también
   tras `add_repo`. Se le da la orden (`git tag -a vX.Y.Z <sha> && git push origin vX.Y.Z`); probarlo arrastró ~44k.
+- **Leer otro repo con `gw-worker` o `gw-reviewer`, no con `Explore`** (opt-tokens de `FLU-15`): arrancan con ~23k
+  frente a ~45k, y el `Explore` de `FLU-15` leyó 483k en 8 llamadas.
 
 ## Costes conocidos
 
@@ -97,6 +99,10 @@ antes de la `/retro`; todo en español, y solo lo que confirme la usuaria entra 
 - **El registro de la sesión** pesa cientos de MB: medirlo con `measure.py` de la skill, nunca leerlo.
   Con varias sesiones a la vez, `measure.py --session <ruta del .jsonl>`: sin ella coge la última modificada,
   que puede ser otra (opt-tokens de `FLU-14`).
+- **Un push que parece colgado suele esperar al check del `pre-push`** (opt-tokens de `FLU-15`): antes de matarlo,
+  mirar `.git/gw/check.lock` y el registro `/tmp/gw-pre-push-check.*`; matarlo obligó a repetir el check entero.
+- **El arranque fijo (sistema, herramientas, MCP) es ~80k por llamada, el 71 % de la entrada** (`FLU-15`): solo baja
+  desactivando los conectores y MCP que no se usan (`/context`); lo hace la usuaria.
 
 ## Ajustes en vigor
 
@@ -137,3 +143,7 @@ antes de la `/retro`; todo en español, y solo lo que confirme la usuaria entra 
   contexto medio 113k (suelo 93k, techo 143k), 2 compactaciones, 15,4M de entrada; 2 subagentes Sonnet, 57 llamadas
   y 3,2M. Contexto fijo de arranque ~78k de ~90k (sistema y MCP). Acordado: CI por trabajos solo si falló, diff de
   subagente por archivo y `roadmap.py show --detail` propuesto al flujo.
+- **2026-11-24, `FLU-15` (flujo a v0.9.0)**: sesión principal 47 llamadas, contexto medio 113k, arranque fijo ~80,5k
+  (71 % de la entrada), 34 compactaciones en la sesión (bucle por el arranque fijo); un `Explore` haiku con 483k de
+  entrada y un `gw-reviewer` (arranque 23k). Acordado: desactivar conectores sin uso, otros repos con `gw-worker` y
+  mirar el lock del check antes de dar un push por colgado.

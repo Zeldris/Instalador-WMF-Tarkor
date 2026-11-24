@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.9.0
 """Hand-off log rules. The branch-row rules need `"logRows": true` in .claude/gw.json (a no-op otherwise); the
 size and "Done" rules of `check`, and the `done` subcommand, work on any log.
 
@@ -82,7 +82,8 @@ contradicting "Next" lines, so each branch writes only in its own row and the ro
   handoff.py set-row TEXT [--branch BRANCH]     rewrite the text of BRANCH's row (default: the current branch) without
                                                  closing it; fails, and writes nothing, if the row is missing, TEXT is
                                                  empty or has a newline, or it passes 600 characters; prints the
-                                                 row as written and n/limit (set-row and close-row)
+                                                 row as written and n/limit (set-row and close-row); both also set
+                                                 today's date in the "Updated" row, if the log has one (D154)
   handoff.py closed BASE SHA                    every task closed in the plan between BASE and SHA ("- [x] **ID**"
                                                  or struck through) is also recorded in the "Done" section of SHA's
                                                  log: struck through there, or named on a line that starts with a date
@@ -119,7 +120,8 @@ contradicting "Next" lines, so each branch writes only in its own row and the ro
                                                  tree, the index or any local or remote-tracking branch, so a new task
                                                  does not take an id another branch already took (`clash` finds that
                                                  only at the push). --fetch runs `git fetch --all` first and fails if
-                                                 it fails. Works without logRows; needs a plan
+                                                 it fails. Also skips the ids named in `pendingFile` (D157). Works
+                                                 without logRows; needs a plan
 
 Common options: --root PATH (default: from this script's folder, via config.py), --plan PATH (repeatable; a file or a
 folder with the plan/roadmap; env GW_PLAN, ':'-separated; config `plan`), --id-regex REGEX (task ids; env GW_TASK_ID;
@@ -149,6 +151,16 @@ import config as gwconfig  # noqa: E402
 
 # The size limits (a branch row, a state-table cell, the Done items) are the config key `handoff` (config.handoff).
 INDEX = ""  # a "rev" for show()/plan_files(): the staged version
+# The "Updated" row of the log: group 1 is what comes before the date, group 2 the date (check and set-row share it).
+UPDATED_ROW = re.compile(r"(\|\s*\*\*(?:Actualizado|Updated)\*\*\s*\|\s*[`*]*)(\d{4}-\d{2}-\d{2})")
+
+
+def today():
+    """D154: today's date in LOCAL time, like the commit-msg hook's `date +%F` that `check --date` compares against
+    (both follow TZ), so a row written here is never "stale" for the hook."""
+    return datetime.date.today().isoformat()
+
+
 FREE_ROWS = {"Actualizado", "Tests", "Updated"}  # shared rows every commit may touch
 ROW = re.compile(r"^\|\s*\*\*(?P<label>.+?) · `(?P<branch>[^`]+)`\*\*\s*\|(?P<text>.*)\|\s*$")
 STATE_HEADING = re.compile(r"^##\s+(Estado actual|Current state|Status)\b.*$", re.M | re.I)
@@ -432,6 +444,78 @@ def pending_problems(ctx, text, me, pending=None):
     return []
 
 
+CLOSED_ID_EXEMPT = re.compile(r"(?:\bver|\bsee|\bsee also|\brelated|\brevisi[oó]n|\breview)[*`]*\s*:?\s*[*`]*$", re.I)
+
+
+def inside_parenthesis(before):
+    """Q-39: whether the id that follows `before` sits inside an open parenthesis of its entry ("(B42, D3)"), even
+    when the parenthesis opened on an earlier line."""
+    return before.count("(") > before.count(")")
+
+
+def closed_roadmap_ids(ctx, roadmap_path=None):
+    """The ids of the rows of the first `roadmapFiles` file whose status starts with its `done` word, as a set; empty
+    without roadmapFiles. `roadmap_path`: read the file from this path instead (the pushed one)."""
+    import roadmap
+    files = gwconfig.roadmap_files(ctx.config)
+    path = (Path(roadmap_path) if roadmap_path is not None else ctx.root / files[0]["path"]) if files and files[0].get("done") else None
+    if not path or not path.is_file():
+        return set()
+    done = files[0]["done"].lower()
+    out = set()
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        spans = roadmap.cells(line)
+        if not spans or len(spans) < 3:
+            continue
+        key = line[spans[0][0]:spans[0][1]].strip(" *`~")
+        if ctx.id.fullmatch(key) and roadmap.status_of(line).lower().startswith(done):
+            out.add(key)
+    return out
+
+
+def closed_id_problems(ctx, pending=None, roadmap=None):
+    """D177: with `pendingClosedIdCheck` (default true), one soft problem per open entry (`- [ ]`, with its indented
+    continuation lines) of the pending file that cites an id whose roadmap row is closed, as if it were still to do.
+    Exempt: an entry that starts with `Related: <id>`, an id written right after ver / see / see also / related /
+    revisión / review (with an optional colon) and an id inside a parenthesis ("(B42, D3)", Q-39): those point at the
+    closed task on purpose."""
+    rel = gwconfig.pending_file(ctx.config)
+    if not rel or not ctx.config.get("pendingClosedIdCheck", True):
+        return []
+    target = Path(pending) if pending is not None else ctx.root / rel
+    try:
+        found = target.read_text(encoding="utf-8", errors="replace") if target.is_file() else ""
+        closed = closed_roadmap_ids(ctx, roadmap) if found else set()
+    except (OSError, ImportError):
+        return []
+    if not closed:
+        return []
+    entries, cur = [], None
+    for line in found.splitlines():
+        if re.match(r"\s*- \[ \]", line):
+            cur = [line]
+            entries.append(cur)
+        elif cur is not None and line.startswith((" ", "\t")) and line.strip():
+            cur.append(line)
+        else:
+            cur = None
+    out = []
+    for entry in entries:
+        text = "\n".join(entry)
+        body = re.sub(r"^\s*- \[ \]\s*", "", text)
+        body = re.sub(r"^[*`\s]*\d+(?:\.\d+)*[*`\s]*·\s*", "", body)  # a version prefix ("`0.10` · ")
+        if re.match(rf"[*`]*related\s*:", body, re.I):
+            continue
+        for m in ctx.id.finditer(text):
+            if (m.group(0) in closed and (m.start() == 0 or not text[m.start() - 1].isalnum())
+                    and not CLOSED_ID_EXEMPT.search(text[:m.start()]) and not inside_parenthesis(text[:m.start()])):
+                out.append(f"the open pending entry \"{entry[0].strip()[:70]}\" in {rel} cites {m.group(0)}, whose roadmap row "
+                           f"is closed; close the entry, or write \"see {m.group(0)}\" / start it with \"Related: "
+                           f"{m.group(0)}\" if the mention is on purpose (pendingClosedIdCheck in .claude/gw.json)")
+                break
+    return out
+
+
 def cmd_check(ctx, args):
     path = Path(args.file) if args.file else ctx.root / ctx.log
     me = f"python3 {HERE / 'handoff.py'}"
@@ -456,6 +540,7 @@ def cmd_check(ctx, args):
                      f"any other cell: edit {ctx.log})" for label, size in over]
     soft += done_problems(text, f"{me} done \"<text>\"", f"{me} check {path} --strict", sizes["doneItems"])
     soft += pending_problems(ctx, text, me, args.pending)
+    soft += closed_id_problems(ctx, args.pending, getattr(args, "roadmap", None))
     cap = gwconfig.log_size(ctx.config)
     if cap > 0 and len(text) > cap:  # a warning only: it never fails the commit, not even with --strict
         if gwconfig.pending_file(ctx.config):  # `archive` works on pendingFile: it cannot shrink the log
@@ -517,8 +602,7 @@ def rows_problems(ctx, args, lines):
     problems = []
     limit = gwconfig.handoff(ctx.config)["rowLimit"]
     if args.date:
-        found = next((m.group(1) for m in (re.match(r"\|\s*\*\*(?:Actualizado|Updated)\*\*\s*\|\s*[`*]*(\d{4}-\d{2}-\d{2})", l)
-                                           for l in lines) if m), None)
+        found = next((m.group(2) for m in map(UPDATED_ROW.match, lines) if m), None)
         if not found:
             problems.append("the \"Updated\" row is missing; add \"| **Updated** | YYYY-MM-DD |\" with today's date")
         elif found < args.date:
@@ -763,6 +847,16 @@ def worktree_ids(ctx):
     return found
 
 
+def pending_ids(ctx):
+    """D157: ids named in the pending file (`pendingFile`), so next-id never proposes one already used there."""
+    rel = gwconfig.pending_file(ctx.config)
+    path = ctx.root / rel if rel else None
+    if not path or not path.is_file():
+        return set()
+    text = path.read_text(encoding="utf-8", errors="replace")
+    return {m.group(0) for m in re.finditer(rf"(?<![A-Za-z0-9_]){ctx.id_src}", text)}  # "abcD99" is not D99; works for ids starting with a non-word char
+
+
 def cmd_next_id(ctx, args):
     if not ctx.plans:
         raise Usage("no plan to read task ids from; set `plan` in .claude/gw.json or pass --plan PATH")
@@ -777,9 +871,10 @@ def cmd_next_id(ctx, args):
     revs = refs + ([INDEX] if ctx.git("rev-parse", "-q", "--verify", "HEAD").stdout.strip() else [])
     prefix = args.prefix
     sep = "-" if prefix.endswith("-") or (ctx.id.fullmatch(f"{prefix}-1") and not ctx.id.fullmatch(f"{prefix}1")) else ""
-    nxt = free_id(ctx, revs, prefix, worktree_ids(ctx), sep)
+    used = worktree_ids(ctx) | pending_ids(ctx)
+    nxt = free_id(ctx, revs, prefix, used, sep)
     if not ctx.id.fullmatch(nxt):
-        known = {id_prefix(i) for i in worktree_ids(ctx) | {i for rev in revs for i in ctx.titles(rev)}}
+        known = {id_prefix(i) for i in used | {i for rev in revs for i in ctx.titles(rev)}}
         known = sorted(k for k in known if ctx.id.fullmatch(f"{k}1") or ctx.id.fullmatch(f"{k}-1"))
         seen = (f"the prefixes this plan accepts: {', '.join(known)}; for example: handoff.py next-id {known[0]}"
                 if known else "no id in the plan matches that pattern")
@@ -1040,6 +1135,12 @@ def rewrite_row(ctx, branch, text):
             lines[i] = new = f"| **{m.group('label')} · `{branch}`** | {text} |"
             hit += 1
     if hit == 1:
+        day = today()  # D154: the commit-msg rejects a stale "Updated" row
+        for i, line in enumerate(lines):
+            m = UPDATED_ROW.match(line)
+            if m:
+                lines[i] = f"{m.group(1)}{day}{line[m.end():]}"
+                break
         with open(path, "w", encoding="utf-8", newline="") as f:  # Path.write_text(newline=) is Python 3.10+
             f.write(eol.join(lines))
     return hit, new
@@ -1205,7 +1306,7 @@ def close_task(ctx, task_id, record):
     try:
         loaded = gwroadmap.load_files(Path(ctx.root), files, task_id)
         print(f"handoff: {task_id} closed; roadmap rows marked done:")
-        gwroadmap.cmd_done(loaded, task_id, datetime.date.today().isoformat(), [], False)
+        gwroadmap.cmd_done(loaded, task_id, today(), [], False)
     except gwroadmap.RoadmapError as exc:
         print(f"handoff: {exc}; nothing was written (see: python3 {HERE / 'roadmap.py'} show {task_id})")
         return 1
@@ -1226,7 +1327,7 @@ def cmd_close_row(ctx, args):
             except gwtask.GitStuck:
                 pass
         return rc
-    text = args.text or CLOSED_TEXT.get(ctx.config["language"], CLOSED_TEXT["en"])
+    text = args.text or CLOSED_TEXT.get(gwconfig.languages(ctx.config)["docs"]["primary"], CLOSED_TEXT["en"])
     branch = row_branch(ctx, args)
     hit = 0
     if ctx.config.get("logRows"):
@@ -1524,7 +1625,7 @@ def cmd_preflight(ctx, args):
         raise Usage(f"git cannot read the state of {ctx.log} ({(status.stderr or last.stderr).strip()}); "
                     f"check the repository (git status) or pass the day: {me} preflight --date YYYY-MM-DD")
     if not date:
-        date = datetime.date.today().isoformat() if dirty else last.stdout.strip()
+        date = today() if dirty else last.stdout.strip()
     # A clean log is already committed: the fix is a new commit (at="push"), not "run the commit again".
     code = cmd_check(ctx, argparse.Namespace(file=None, date=date, strict=args.strict, at="commit" if dirty else "push",
                                              pending=None))
@@ -1628,6 +1729,7 @@ def main(argv=None):
     c.add_argument("--strict", action="store_true")
     c.add_argument("--at", choices=("commit", "push"), default="commit",
                    help="where it runs: at commit time (the commit does not exist yet) or at push time (it does)")
+    c.add_argument("--roadmap", help="read the roadmap (roadmapFiles[0]) from this path for the closed-id check; a missing one = none")
     c.add_argument("--pending", help="read the pending file (pendingFile) from this path; a missing one = no file")
     d = sub.add_parser("done")
     d.add_argument("text")
@@ -1708,9 +1810,9 @@ def main(argv=None):
             print(f"handoff: WARNING: skipping the {what} check of this commit: {exc}", file=sys.stderr)
             return 0
         if args.cmd == "archive":
-            args.date = args.date or datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+            args.date = args.date or today()
         elif args.cmd in ("done", "add-decision"):
-            args.date = args.date or datetime.date.today().isoformat()
+            args.date = args.date or today()
         elif (not ctx.config.get("logRows") and args.cmd not in ("check", "archive", "next-id", "move-pending",
                                                                  "add-pending", "preflight")
               and not (args.cmd == "close-row" and task_record_path(ctx, args)[0])):  # a task id needs no branch rows

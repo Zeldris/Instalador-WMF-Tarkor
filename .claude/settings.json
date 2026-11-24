@@ -90,6 +90,15 @@
             "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/gw/scripts/whole-read.py"
           }
         ]
+      },
+      {
+        "matcher": "^(Read|Grep|Glob|Bash)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/gw/scripts/other-repo-read.py"
+          }
+        ]
       }
     ],
     "Stop": [

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.9.0
 """Check that a project has the workflow set up (used by /gw-doctor and CI). No AI, no network.
 
   python3 doctor.py            # one line per check: OK / WARN / FAIL, each problem with the command that fixes it
@@ -52,12 +52,13 @@ PR_TOOLS = ("create_pull_request", "merge_pull_request")
 PR_GUARD = "review-before-main.sh"
 INTERPRETERS = {"bash", "sh", "zsh", "python", "python3", "node", "env", "exec"}
 SOURCES = re.compile(r"galivelop|workflow|mattpocock", re.I)
+OWN_SOURCES = ("Galivelop workshop", "mattpocock/skills@")  # metadata.source of the shipped skills
 PROPOSAL = ".gw-new"  # apply.py's proposals for files with local edits
 OLD_PROPOSAL = ".gw-nuevo"  # A8 (0.x): the suffix before the rename; still recognized, with a warning
 FLOW_HOOK_SCRIPTS = ("session-start.sh", "recover.py", "review-before-main.sh", "before-stop.py",
                      "config-guard.py", "subagent-cap.py", "agent-signatures.py", "metrics.py",
                      "whole-read.py", "careful.py", "questions-guard.py",
-                     "scope-guard.py")  # the settings template's
+                     "scope-guard.py", "other-repo-read.py")  # the settings template's
 # Zero-width, bidi and BOM characters, written as escapes so the fix command can embed them. A zero width joiner (U+200D)
 # is fine only inside an emoji sequence (family, profession, flag, heart): after an emoji, a variation selector or a
 # skin tone, and before an emoji. Between letters, accents or punctuation (`и‍г`, `é‍ñ`), next to ASCII, a line edge
@@ -158,12 +159,41 @@ def check_config(rep, root):
     rep.ok("config", f".claude/gw.json valid (version {cfg['version']})")
     found = cfg.get("_schemaFrom", config.SCHEMA_VERSION)
     if found < config.SCHEMA_VERSION:  # a newer one already failed in config.load
+        old_keys = _old_language_keys(root)  # A12 (Q-14): the keys that the `languages` block replaced
+        extra = (f" (it still has {' and '.join('`' + k + '`' for k in old_keys)}, now `languages`)"
+                 if old_keys else "")
         rep.warn("config schema", f".claude/gw.json has schemaVersion {found} (absent = 0) and the workflow's format is "
-                 f"{config.SCHEMA_VERSION}; it is migrated in memory on every read until it is written",
+                 f"{config.SCHEMA_VERSION}{extra}; it is migrated in memory on every read until it is written",
                  "run /gw-update (apply.py writes the migrated config)")
     else:
         rep.ok("config schema", f".claude/gw.json schemaVersion {found} is the workflow's format")
+    check_template_language(rep, cfg)
     return cfg
+
+
+def _old_language_keys(root):
+    """The pre-A12 keys (`language`, `visibleLanguages`) present in the project's .claude/gw.json on disk."""
+    try:
+        raw = json.loads((Path(root) / config.CONFIG_REL).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    return [k for k in ("language", "visibleLanguages") if isinstance(raw, dict) and k in raw]
+
+
+def check_template_language(rep, cfg):
+    """A12 (Q-15): a docs.primary language with no templates/<lang>/ in the workflow gets the English templates. Only
+    judged where the workflow's templates/ folder sits next to the scripts (the workflow itself, not a project copy)."""
+    templates = HERE.parent / "templates"
+    if not templates.is_dir():
+        return
+    lang = config.languages(cfg)["docs"]["primary"]
+    if (templates / lang).is_dir():
+        rep.ok("template language", f"templates/{lang}/ exists for languages.docs.primary")
+    else:
+        rep.warn("template language", f"languages.docs.primary is '{lang}' but the workflow has no templates/{lang}/, "
+                 "so the English templates (en) are used",
+                 f"translate templates/en/ into templates/{lang}/ in the workflow, or set languages.docs.primary to "
+                 "a language it ships")
 
 # What a commit must carry for the workflow to work; a `.gitignore` with `.claude/*` would leave it out.
 MUST_BE_TRACKED = (".claude/gw.json", ".claude/gw/scripts/config.py", ".claude/settings.json",
@@ -185,16 +215,25 @@ def must_be_tracked(root):
     return paths
 
 
-def ignored_paths(root):
-    """[(path, the .gitignore rule that ignores it)] for must_be_tracked(root); a tracked file is never ignored."""
+def git_ignored(root, rels):
+    """[(path, the .gitignore rule that ignores it)] for the paths of `rels`; a tracked file or a `!` rule never counts.
+    No git (or a folder that is not a repo) gives [], the config and hooks checks say that."""
     out = []
-    for rel in must_be_tracked(root):
-        r = subprocess.run(["git", "-C", str(root), "check-ignore", "-v", "--", rel], capture_output=True, text=True)
+    for rel in rels:
+        try:
+            r = subprocess.run(["git", "-C", str(root), "check-ignore", "-v", "--", rel], capture_output=True, text=True)
+        except OSError:
+            return []
         # -v also prints (and exits 0 on) a matching `!` rule, which un-ignores the path: <source>:<line>:<pattern>
         rule = r.stdout.split("\t")[0].strip()
         if r.returncode == 0 and not rule.split(":", 2)[-1].startswith("!"):
             out.append((rel, rule))
     return out
+
+
+def ignored_paths(root):
+    """[(path, the .gitignore rule that ignores it)] for must_be_tracked(root)."""
+    return git_ignored(root, must_be_tracked(root))
 
 
 def check_ignored(rep, root):
@@ -458,6 +497,103 @@ def check_ci(rep, root, cfg=None):
                  "step that runs the base branch's .githooks/pre-commit --range (docs/en/apply.md, Existing CI)")
 
 
+
+def check_workflow_lint(rep, root, cfg):
+    """E71: WARN when the project has workflows and no `check` command (nor a script or Makefile it names) runs
+    `ci-local.py --validate` or `actionlint`: a broken workflow would only show when GitHub runs it. With `ciActionlint`
+    off, an OK that says so; nothing without workflows or `check` commands."""
+    wf = root / ".github" / "workflows"
+    if cfg is None or not cfg.get("check") or not (wf.is_dir() and any(wf.glob("*.y*ml"))):
+        return
+    if cfg.get("ciActionlint") == "off":
+        rep.ok("workflow lint", "actionlint is off (ciActionlint); only ci-local.py --validate's YAML check, if any")
+        return
+    text = check_run_text(root, cfg)
+    validate = re.search(r"ci-local\.py\s+--validate\b", text)
+    # actionlint run as a command (start of a line or after ; & | ( ), not actionlint-py or a pip install of it
+    direct = re.search(r"(?:^|[;&|(])[ \t]*(?:[\w.~$-]*/)*actionlint(?=\s|$)", text, re.MULTILINE)
+    if validate and cfg.get("ciYamlCheck", True) is False and not direct:
+        rep.warn("workflow lint", "the check runs ci-local.py --validate, but ciYamlCheck is false, so --validate "
+                 "stops before actionlint and validates nothing",
+                 "set ciYamlCheck to true in .claude/gw.json, or run actionlint in the check")
+    elif validate or direct:
+        rep.ok("workflow lint", "the check validates .github/workflows (ci-local.py --validate / actionlint)")
+    else:
+        rep.warn("workflow lint", "the project has .github/workflows but no `check` command validates them, so a "
+                 "broken workflow only shows when GitHub runs it",
+                 "add \"python3 .claude/gw/scripts/ci-local.py --validate\" to `check` in .claude/gw.json (it runs "
+                 "actionlint too; ciActionlint \"off\" silences this)")
+
+
+def check_generated(rep, root, cfg):
+    """E72: `generated` set but no `check` command runs generated-check.py, so stale generated files go unnoticed."""
+    entries = (cfg or {}).get("generated") or []
+    if not entries:
+        return
+    if re.search(r"generated-check\.py\b", check_run_text(root, cfg)):
+        rep.ok("generated files", f"the check regenerates {len(entries)} entry(ies) of `generated` (generated-check.py)")
+    else:
+        rep.warn("generated files", f"`generated` has {len(entries)} entry(ies) but no `check` command runs "
+                 "generated-check.py, so stale generated files are pushed unnoticed",
+                 "add \"python3 .claude/gw/scripts/generated-check.py\" to `check` in .claude/gw.json")
+
+
+UPDATE_SNAPSHOTS = "python3 .claude/gw/scripts/front.py run full --update-snapshots"
+
+
+def check_front_snapshots(rep, root, cfg):
+    """E5: screenshot baselines (front.snapshotGlob, tracked) taken on another platform (`-darwin`, `-win32`: they only
+    match on Linux, E-9) or with another Playwright than the one pinned in front.dir/package.json (front.snapshotStamp),
+    and baselines over front.lfsThresholdKb that .gitattributes does not put in Git LFS. Only with front.tokens."""
+    front = config.front(cfg or {})
+    if not front["tokens"]:
+        return
+    listed = git(root, "ls-files", "-z") or ""
+    snaps = sorted(f for f in listed.split("\0") if f and fnmatch.fnmatch(f, front["snapshotGlob"]))
+    if not snaps:
+        return
+    problems = 0
+    pinned = None
+    try:  # the same reading as front.py's pinned_playwright, X.Y.Z only (doctor.py must not need front.py)
+        package = json.loads((root / front["dir"] / "package.json").read_text(encoding="utf-8"))
+        for key in ("devDependencies", "dependencies"):
+            version = (package.get(key) or {}).get("@playwright/test")
+            if isinstance(version, str) and re.fullmatch(r"\d+\.\d+\.\d+", version):
+                pinned = version
+                break
+    except (OSError, ValueError, AttributeError):
+        pinned = None
+    foreign = [f for f in snaps if re.search(r"-(darwin|win32)\.[^/.]+$", f)]
+    if foreign:
+        problems += 1
+        # E78: `run full --update-snapshots` takes them on Linux or in Docker, copies them back and writes the stamp.
+        rep.warn("front snapshots", f"{len(foreign)} baseline(s) from another platform than Linux, which never match "
+                 f"the CI's render (E-9): {', '.join(foreign[:5])}",
+                 f"delete them and take them again: {UPDATE_SNAPSHOTS} (on Linux, or elsewhere with Docker running)")
+    stamp_path = root / front["snapshotStamp"]
+    stamp = stamp_path.read_text(encoding="utf-8").strip() if stamp_path.is_file() else None
+    if pinned and stamp != pinned:
+        problems += 1
+        seen = f"Playwright {stamp}" if stamp else f"an unknown Playwright (no {front['snapshotStamp']})"
+        rep.warn("front snapshots", f"the baselines were taken with {seen}, but {front['dir']}/package.json pins "
+                 f"{pinned}: renders differ between versions",
+                 f"take them again with Playwright {pinned}: {UPDATE_SNAPSHOTS} (it writes {front['snapshotStamp']})")
+    limit = front["lfsThresholdKb"] * 1024
+    big = [f for f in snaps if (root / f).is_file() and (root / f).stat().st_size > limit]
+    # -z: NUL-separated <path> <attribute> <value>, paths unquoted (core.quotePath would quote a non-ASCII one)
+    attrs = (git(root, "check-attr", "-z", "filter", "--", *big) or "").split("\0") if big else []
+    in_lfs = {attrs[i] for i in range(0, len(attrs) - 2, 3) if attrs[i + 2] == "lfs"}
+    outside = [f for f in big if f not in in_lfs]
+    if outside:
+        problems += 1
+        rep.warn("front snapshots", f"{len(outside)} baseline(s) over front.lfsThresholdKb ({front['lfsThresholdKb']} "
+                 f"KiB) outside Git LFS: {', '.join(outside[:5])}",
+                 f"track them with LFS: git lfs track '{front['snapshotGlob']}' (writes .gitattributes), then "
+                 "git add --renormalize .")
+    if not problems:
+        rep.ok("front snapshots", f"{len(snaps)} baseline(s): Linux, Playwright {pinned or '?'}, large ones in LFS")
+
+
 def hook_files(command, root):
     """Files a hook command runs: words that use $CLAUDE_PROJECT_DIR, or a path given as the program itself."""
     expanded = command.replace("${CLAUDE_PROJECT_DIR}", str(root)).replace("$CLAUDE_PROJECT_DIR", str(root))
@@ -688,6 +824,24 @@ def check_skills(rep, root, version, proposals=(), cfg=None):
                  "review the .claude/skills/ proposals first")
     else:
         rep.ok("skills", f"copied workflow skills at version {version}")
+
+
+def check_skill_prefix(rep, root, cfg):
+    """E73: the project's own skills (a SKILL.md whose metadata.source does not name the workflow) carry
+    projectSkillPrefix, so they are told apart from the workflow's gw- ones. Silent with no prefix set."""
+    prefix = (cfg or {}).get("projectSkillPrefix") or ""
+    base = root / ".claude" / "skills"
+    if not prefix or not base.is_dir():
+        return
+    own = [s.parent.name for s in sorted(base.glob("*/SKILL.md"))
+           if not str(skill_metadata(s).get("source", "")).startswith(OWN_SOURCES)]
+    bad = [name for name in own if not name.startswith(prefix)]
+    if bad:
+        rep.warn("skill prefix", f"project skill(s) without the projectSkillPrefix {prefix!r}: {', '.join(bad)}",
+                 "; ".join(f"rename .claude/skills/{n} to {prefix}{n[3:] if n.startswith('gw-') else n} "
+                           f"(and its `name:`)" for n in bad))
+    else:
+        rep.ok("skill prefix", f"{len(own)} project skill(s), all with the prefix {prefix!r}")
 
 
 def check_session(rep, root):
@@ -1202,7 +1356,157 @@ def check_ci_access(rep, root):
                  "run `gh auth login` (or export GITHUB_TOKEN)")
 
 
-def run(root):
+def _profile_dir(block, rep, tool):
+    """The `profiles.dir` to read: the block's when it is a string the schema accepts (relative, no `..`), else a
+    warning and the schema default, so doctor never reads outside the repo."""
+    prop = config._schema()["properties"]["profiles"]
+    default = prop["default"]["dir"]
+    given = block.get("dir")
+    if given is None or given == "":
+        return default
+    if isinstance(given, str) and re.match(prop["properties"]["dir"]["pattern"], given):
+        return given
+    rep.warn("profiles", f"profiles.dir {given!r} is not a relative folder without `..`, so {default} is checked instead",
+             f"edit profiles.dir in {config.CONFIG_REL.as_posix()} (e.g. \"{default}\")")
+    return default
+
+
+def check_profiles(rep, root):
+    """E4: warn about orphan profile files, roles or people whose profile is missing, profiles that config.load would
+    reject, and e-mails in clear in the `profiles` block or in a profile file. It reads the raw config (it must also
+    work when the layers fail to load) and never raises on a malformed block."""
+    try:
+        raw = json.loads((Path(root) / config.CONFIG_REL).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return  # check_config already reported it
+    block = raw.get("profiles") if isinstance(raw, dict) else None
+    if not isinstance(block, dict) or not block:
+        return
+    q = shlex.quote
+    tool = f"python3 {HERE / 'profile.py'} --root {q(str(root))}"
+    cfg_rel = config.CONFIG_REL.as_posix()
+    where = _profile_dir(block, rep, tool)
+    folder = Path(root) / where
+    roles = block.get("roles") if isinstance(block.get("roles"), dict) else {}
+    people = block.get("people") if isinstance(block.get("people"), dict) else {}
+    valid = lambda v: isinstance(v, str) and bool(config.PROFILE_NAME.match(v))  # noqa: E731
+    named = {}  # profile name -> who names it
+    for role, name in sorted(roles.items(), key=lambda kv: str(kv[0])):
+        if valid(name):
+            named.setdefault(name, f"role '{role}'")
+        else:
+            rep.warn("profiles", f"role '{role}' names the invalid profile {name!r}",
+                     f"{tool} role {q(str(role))} <profile>  (or edit profiles.roles in {cfg_rel})")
+    for digest, person in sorted(people.items(), key=lambda kv: str(kv[0])):
+        who = f"person {str(digest)[:8]}"
+        if not isinstance(person, dict):
+            rep.warn("profiles", f"{who} is not an object ({{role?, profile?}})", f"edit profiles.people in {cfg_rel}")
+            continue
+        if person.get("profile") is not None:
+            if valid(person["profile"]):
+                named.setdefault(person["profile"], who)
+            else:
+                rep.warn("profiles", f"{who} names the invalid profile {person['profile']!r}",
+                         f"{tool} assign <email> --profile <profile>  (or edit profiles.people in {cfg_rel})")
+        role = person.get("role")
+        if role is not None and not (isinstance(role, str) and role):
+            rep.warn("profiles", f"{who} has the invalid role {role!r}", f"{tool} assign <email> --role <role>")
+        elif role and role not in roles:
+            rep.warn("profiles", f"{who} has role '{role}', which is missing from profiles.roles",
+                     f"{tool} role {q(role)} <profile>")
+    texts = {f"{cfg_rel} (profiles block)": json.dumps(block, ensure_ascii=False)}
+    props = config._schema().get("properties", {})
+    present = {}  # stem -> path of the readable profile files
+    if folder.is_dir():
+        for path in sorted(folder.glob("*.json")):
+            if not path.is_file():
+                continue
+            if not config.PROFILE_NAME.match(path.stem):
+                rep.warn("profiles", f"{where}/{path.name} is not a valid profile name (letters, digits, `.`, `_`, `-`; "
+                         f"it starts with a letter or digit), so profile.py and config.load never use it",
+                         f"rename or delete {where}/{path.name}")
+                continue
+            present[path.stem] = path
+    for name, who in named.items():
+        path = folder / f"{name}.json"
+        if not path.is_file():
+            rep.warn("profiles", f"{who} names profile '{name}', but {where}/{name}.json does not exist",
+                     f"{tool} new {q(name)}")
+    def names_file(path):
+        for name in named:
+            try:
+                if (folder / f"{name}.json").exists() and os.path.samefile(folder / f"{name}.json", path):
+                    return True  # also on a case-insensitive file system (macOS): `Dev.json` is `dev`'s file
+            except OSError:
+                pass
+        return False
+    for name, path in present.items():
+        if name not in named and not names_file(path):
+            rep.warn("profiles", f"orphan profile {where}/{name}.json: no role and no person names it",
+                     f"{tool} role <role> {q(name)}  (or {tool} assign <email> --profile {q(name)}, or delete the file)")
+    for name, path in present.items():
+        label = f"{where}/{path.name}"
+        try:
+            text = path.read_text(encoding="utf-8")
+            data = json.loads(text)
+        except (OSError, ValueError) as exc:
+            rep.warn("profiles", f"profile {label} cannot be read as JSON: {exc}",
+                     f"edit {label} (valid JSON), or recreate it: {tool} new {q(name)}")
+            continue
+        texts[label] = text
+        problems = config.profile_shape_problems(data, props)
+        if problems:
+            rep.warn("profiles", f"profile {label} is rejected by config.load: {'; '.join(problems)}",
+                     f"edit {label} (only the keys it changes; see `python3 {HERE / 'config.py'} profile`)")
+    for label, text in texts.items():
+        if config.EMAIL_IN_TEXT.search(text):
+            rep.warn("profiles", f"{label} has an e-mail address in clear (only SHA-256 hashes may be stored)",
+                     f"remove it from the file; assign people with `{tool} assign <email>`, which stores the hash")
+
+
+WORKFLOW_NAME = config.WORKFLOW_NAME
+is_workflow = config.is_workflow
+
+
+def check_workflow_clone(rep, root, cfg, workflow=None):
+    """D158: WARN when review-scope.py would find no workflow copy (it needs one to tell what is `vendored`): the
+    `--workflow` folder or $GW_WORKFLOW when given (a wrong one is a WARN, as review-scope.py fails on it), else
+    the folder of `workflowClone`, which must be the workflow repo and not just exist. The workflow repo itself has
+    no clone to find (nor does a run from a workflow clone with `--root <project>`), so it says nothing."""
+    if not cfg or is_workflow(root) or is_workflow(HERE.parent):
+        return
+    for origin, cand in (("--workflow", workflow), ("GW_WORKFLOW", os.environ.get("GW_WORKFLOW"))):
+        if not cand:
+            continue
+        if not is_workflow(cand):
+            rep.warn("workflow clone", f"{origin} {cand} is not the workflow repo (scripts/apply.py, skills/ and "
+                     f".claude-plugin/plugin.json named {WORKFLOW_NAME}), so review-scope.py stops on it",
+                     f"point {origin} at a clone: git clone --depth 1 {config.workflow_repository(cfg)} <DIR>, or unset it")
+        return
+    rel = config.workflow_clone(cfg)
+    if is_workflow(root / rel):
+        return
+    why = "does not exist" if not (root / rel).is_dir() else "is not the workflow repo"
+    rep.warn("workflow clone", f"workflowClone points at {rel}, which {why}, so review-scope.py cannot tell "
+             "what is vendored and the review reads the whole diff",
+             f"git clone --depth 1 {config.workflow_repository(cfg)} {rel}, or set \"workflowClone\" in "
+             ".claude/gw.json to the folder of your clone")
+
+
+AGENT_FILES = (".claude/agents/gw-worker.md", ".claude/agents/gw-reviewer.md")
+
+
+def check_agent_files_ignored(rep, root):
+    """D159: WARN when .gitignore leaves out an agent file the workflow installs (a commit then drops it)."""
+    found = git_ignored(root, [rel for rel in AGENT_FILES if (root / rel).is_file()])
+    if found:
+        rep.warn("agents ignored", "git ignores subagent files, so a commit leaves them out and other clones lack "
+                 "them: " + "; ".join(f"{rel} by {rule}" for rel, rule in found),
+                 "add to .gitignore: " + " ".join(f"!{rel}" for rel, _ in found)
+                 + " (and git check-ignore -v <path> until none is ignored)")
+
+
+def run(root, workflow=None):
     rep = Report()
     cfg = check_config(rep, root)
     version = cfg["version"] if cfg else None
@@ -1215,6 +1519,9 @@ def run(root):
     check_log(rep, root, cfg)
     check_commands(rep, root, cfg)
     check_ci(rep, root, cfg)
+    check_workflow_lint(rep, root, cfg)
+    check_generated(rep, root, cfg)
+    check_front_snapshots(rep, root, cfg)
     check_ci_access(rep, root)
     check_settings(rep, root)
     check_subagents(rep, root)
@@ -1225,12 +1532,16 @@ def run(root):
     check_media_folder(rep, root)
     check_media_tools(rep, root)
     check_related_tests(rep, cfg)
+    check_workflow_clone(rep, root, cfg, workflow)
+    check_agent_files_ignored(rep, root)
     proposals = check_proposals(rep, root)
     check_skills(rep, root, version, proposals, cfg)
+    check_skill_prefix(rep, root, cfg)
     check_session(rep, root)
     check_compaction(rep, root)
     check_levers(rep, root, cfg)
     check_scout(rep, root, cfg)
+    check_profiles(rep, root)
     check_author(rep, root, cfg)
     return rep
 
@@ -1239,13 +1550,14 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--root", help="project path")
+    parser.add_argument("--workflow", help="the workflow repo review-scope.py will use (default $GW_WORKFLOW, else workflowClone)")
     args = parser.parse_args(argv)
     try:
         root = config.find_root(args.root)
     except config.ConfigError as exc:
         print(f"doctor: {exc}", file=sys.stderr)
         return 2
-    rep = run(root)
+    rep = run(root, args.workflow)
     if args.json:
         print(json.dumps(rep.items, indent=2, ensure_ascii=False))
     else:

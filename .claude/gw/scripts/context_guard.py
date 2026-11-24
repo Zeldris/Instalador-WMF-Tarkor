@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.9.0
 """Startup-context and compaction-loop guard (B21). Imported by recover.py --state; also a CLI for hand use.
 
 After a /clear or a compaction the session starts again with the log state, AGENTS.md/CLAUDE.md, hook output, skills
@@ -291,10 +291,18 @@ def report(root, cfg, path, source, hook_chars=0, measure=None):
         pct = startup_pct(last, cfg)
         lines = [f"- Startup context of the last stretch: {fmt(last['first_usage'])} tokens = {pct} % of the "
                  f"compaction cutoff {fmt(cutoff)} (model {last['model']})"]
-        if pct >= guard["warn"]:
+        eff = pct  # D156: what the user can reduce; the system (prompt, tools, MCP) is not theirs to trim
+        if system_weighs_most(root, cfg, last, hook_chars, parts=m.culprits):
+            sys_tokens = next(t for label, t, _ in m.culprits() if label == SYSTEM)
+            eff = startup_pct(dict(last, first_usage=max(0, last["first_usage"] - sys_tokens)), cfg)
+            if eff < guard["warn"]:
+                lines.append(f"- Note: startup context is {pct} % of the cutoff, but {fmt(sys_tokens)} tokens of it are "
+                             f"the system (prompt, tools, MCP) and the part you control is {eff} % (below warn "
+                             f"{guard['warn']} %): nothing to trim here; {SYSTEM_ADVICE}")
+        if eff >= guard["warn"]:
             lines.append(f"- Warning: startup context above {guard['warn']} %: the culprits, largest first:")
             lines += culprit_lines(root, cfg, last["first_usage"], hook_chars, parts=m.culprits())
-        if pct >= guard["alarm"]:
+        if eff >= guard["alarm"]:
             lines.append(f"- ALARM: startup context above {guard['alarm']} %")
 
         def over(seg):
@@ -493,6 +501,108 @@ def near_cutoff_once(root, cfg, branch, transcript, state):
     read_warned; before-stop.py: <git dir>/gw-context-warn), else None. Never raises."""
     found = near_cutoff(root, cfg, branch, transcript, state)
     return found[1] if found else None
+
+
+def closed_tasks(root, cfg, since):
+    """E66: ids of the roadmap rows (first `roadmapFiles` file) that a first-parent, non-merge commit of HEAD made
+    since `since` (an ISO timestamp, or "" for any) turned from an open status to its done word, oldest first. []
+    without roadmapFiles, git or the file. Never raises."""
+    try:
+        import subprocess
+        import roadmap
+        files = config.roadmap_files(cfg or {})
+        if not files or not files[0].get("done"):
+            return []
+        path, done = files[0]["path"], files[0]["done"].lower()
+        words = tuple(w.lower() for w in files[0].get("open") or [])
+
+        def git(*args):
+            r = subprocess.run(["git", "-C", str(root)] + list(args), capture_output=True, text=True, timeout=10)
+            return r.stdout if r.returncode == 0 else None
+
+        def statuses(text):
+            out = {}
+            for line in (text or "").splitlines():
+                spans = roadmap.cells(line)
+                if spans and len(spans) >= 3:
+                    out[line[spans[0][0]:spans[0][1]].strip()] = roadmap.status_of(line).lower()
+            return out
+
+        start = None
+        if since:
+            import datetime
+            start = datetime.datetime.fromisoformat(since.replace("Z", "+00:00")).timestamp()
+        listed = git("log", "--first-parent", "--no-merges", "--reverse", "--format=%H %ct", "HEAD", "--", path)
+        found = []
+        for line in (listed or "").splitlines():
+            sha, _, stamp = line.partition(" ")
+            if start is not None and int(stamp) < start:
+                continue
+            before, after = statuses(git("show", f"{sha}^:{path}")), statuses(git("show", f"{sha}:{path}"))
+            for task, status in after.items():
+                old = before.get(task, "")
+                if status.startswith(done) and words and old.startswith(words) and task not in found:
+                    found.append(task)
+        return found
+    except Exception:  # only a warning: never raises
+        return []
+
+
+def clear_after_task(root, cfg, transcript, tail_bytes=None):
+    """E66: (closed task ids, message, stretch start) when a task was closed in the current stretch (closed_tasks
+    since the stretch started) and the conversation the stretch added since its startup, which a /clear drops, reaches
+    contextGuard.clearAfterTask of the compaction cutoff; else None. The message asks to answer the next "next" with
+    a one-line request for /clear. Cheap checks first: the key (0 = off), the transcript's tail (`tail_bytes`), the
+    context against the threshold, a window that is not known (window_known); only then the whole transcript and
+    git. The stretch start (its ISO timestamp, "" for the first stretch) tells one stretch from the next. Never
+    raises."""
+    try:
+        cfg = cfg or {}
+        ratio = config.context_guard(cfg)["clearAfterTask"]
+        if not ratio or not transcript or not os.path.isfile(str(transcript)):
+            return None
+        transcript = str(transcript)
+        now = current_context(transcript, tail_bytes)
+        if now is None:
+            return None
+        tokens, model = now
+        cutoff = cutoff_for(model, cfg)
+        if not cutoff or tokens < ratio * cutoff or not window_known(root, model):
+            return None
+        seg = Measure(root, cfg, transcript).last
+        if not seg:
+            return None
+        grown = tokens - seg["first_usage"]
+        if grown < ratio * cutoff:
+            return None
+        tasks = closed_tasks(root, cfg, seg["start"])
+        if not tasks:
+            return None
+        message = (f"Task {', '.join(tasks)} closed in this stretch and the conversation since its start weighs "
+                   f"{fmt(grown)} tokens ({round(100 * grown / cutoff)} % of the compaction cutoff {fmt(cutoff)}; "
+                   f"contextGuard.clearAfterTask {ratio}): with the log up to date and everything pushed, do not chain "
+                   f"the next task; ask the user for /clear in one line (a long context is almost all the spend; "
+                   f"the log is enough to resume), and answer a \"next\" after a close the same way.")
+        return tasks, message, seg["start"]
+    except Exception:  # a warning must never cost the stop
+        return None
+
+
+def clear_after_task_once(root, cfg, transcript, state, tail_bytes=None):
+    """clear_after_task's message once per closed task of each stretch (the number of closed tasks warned last is
+    remembered in the file `state` under transcript|stretch start, so a compaction restarts the count, read_warned;
+    before-stop.py: <git dir>/gw-clear-warn), else None. Never raises."""
+    found = clear_after_task(root, cfg, transcript, tail_bytes)
+    if not found:
+        return None
+    try:
+        key = f"{os.path.abspath(str(transcript))}|{found[2]}"
+        if read_warned(state).get(key, 0) >= len(found[0]):
+            return None
+        write_warned(state, key, len(found[0]), config.context_guard(cfg or {})["warnedMax"])
+    except Exception:
+        return None
+    return found[1]
 
 
 def main(argv=None):

@@ -5,7 +5,7 @@ disable-model-invocation: true
 license: MIT
 compatibility: Claude Code or any Agent Skills agent; git and python3 3.8+; the Galivelop-workflow repo cloned or added to the session
 metadata:
-  version: "0.8.1"
+  version: "0.9.0"
   source: "Galivelop workshop"
 ---
 
@@ -15,7 +15,7 @@ If `.claude/gw/gw-update.md` exists in the project, read it first: it holds what
 
 Updates what the workflow owns (scripts, skills, git hooks, settings entries, CI) and reports changes in what the
 project fills in (log, `REVIEW.md`, `GLOSSARY.md`, notes). The mechanical part is `apply.py`; this skill adds the
-judgement: what changed, what the user wants, what to merge by hand. Reply in the project's `language`.
+judgement: what changed, what the user wants, what to merge by hand. Reply in the project's docs language (`languages.docs.primary`).
 
 The project's installed copy of this skill is the old version. Once `<workflow>` is at the target tag (step 1), follow
 `<workflow>/skills/gw-update/SKILL.md` instead of the installed copy.
@@ -54,6 +54,11 @@ an older `schemaVersion` (its reason lists each migration, `schemaVersion N → 
 and template updates, plus the
 user's personal notes (`~/.claude/gw/notas/`, see `docs/en/config.md`) it would create (`personal note`) or that differ
 from the project's copy. Summarise it for the user with the CHANGELOG entries between X and Y (`### ES` or `### EN` per the user's language).
+
+A `decide` line (both forms) is a key the project's `.claude/gw.json` does not write whose default creates files
+outside `.claude/` (e.g. `agentsSkillsDir` and its `.agents/skills/` copies). Before `--update`, put it to the user
+as a decision with the value the line gives to turn it off; whatever they choose, write the key into
+`.claude/gw.json` so later updates stop asking.
 
 ## 3. Show the template diff for filled files
 

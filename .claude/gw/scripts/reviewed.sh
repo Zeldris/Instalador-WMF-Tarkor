@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.9.0
 # After /code-review of the diff against the protected branch, with its fixes pushed: records HEAD's sha in the
-# config's `reviewMark` and commits it ("Revisado: <sha>" / "Reviewed: <sha>" by `language`). The mark travels with
+# config's `reviewMark` and commits it ("Revisado: <sha>" / "Reviewed: <sha>" by `languages.docs.primary`). The mark travels with
 # the repo, so other accounts and scheduled tasks see it; .githooks/pre-push and the PR hook accept code up to it.
 # With `requireRetro`, the branch must add a retro-*.md whose **Estado:**/**Status:** paragraph (from that line to the
 # next blank line) records a decision: a whole word among aplicad*, rechazad*, aplazad*, decidid*, aprobad* (applied,
@@ -40,7 +40,7 @@ cfg() {
 }
 protected="$(cfg protectedBranch)" || exit 1
 mark="$(cfg reviewMark)" || exit 1
-language="$(cfg language)" || exit 1
+language="$(cfg languages.docs.primary)" || exit 1
 retro="$(cfg requireRetro)" || exit 1
 commit_next="$(cfg commitNext)" || exit 1
 retro_file_re="$(cfg retro.filePattern)" || exit 1

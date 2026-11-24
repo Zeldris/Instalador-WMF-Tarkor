@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.9.0
 """Nothing private reaches the public repo (plan §10, E2): key formats, e-mail addresses and private names.
 
   python3 private-check.py --range A..B   # what the commits of A..B add, one commit at a time

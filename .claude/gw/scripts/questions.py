@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.9.0
 """The questions file (C1-C3, C10): the questions the agent has for the user, one entry each, kept in the file of
 `questions.path` in .claude/gw.json (default docs/questions.md) so they are not asked again in every iteration.
 
@@ -435,7 +435,14 @@ def build_parser():
 
 
 def main(argv=None):
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    # `add --rec r1 "q1" --rec r2 "q2"` (each --rec next to its question, as grilling writes it): argparse leaves the
+    # questions after the first --rec unparsed, so they are taken back in order; anything else unknown still fails.
+    args, extra = parser.parse_known_args(argv)
+    if extra:
+        if args.command != "add" or any(x.startswith("-") for x in extra):
+            parser.error(f"unrecognized arguments: {' '.join(extra)}")
+        args.questions += extra
     global ROOT
     try:
         path, root = questions_file(args.root)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.9.0
 """Get back what a compaction or a /clear dropped, without reading the whole session transcript.
 
   recover.py --state          what the SessionStart hook (clear|compact) puts back into the context: the log's
@@ -13,7 +13,9 @@
                                 this session and since the branch last took the protected branch (its merge base: the
                                 task's start; WMF P10) with a warning when they pass the task's compaction budget
                                 (gw-selector: "Compaction budget: N" in the log), the remote branches (local refs, no
-                                fetch, 10 at most) with commits the protected branch lacks, and how to search the
+                                fetch, 10 at most) with commits the protected branch lacks, a warning when a task
+                                closed in this stretch and its conversation passed contextGuard.clearAfterTask (E66:
+                                ask for /clear, do not chain the next task), and how to search the
                                 transcript for a detail. Over ~9,500 characters the log section gives way (its start
                                 stays, with a line saying it was cut); the lines after it always survive.
   recover.py --search TEXT      the transcript fragments (main conversation: user, Claude, tool calls and results)
@@ -34,6 +36,7 @@ first). Python 3.8+ standard library only.
 """
 import argparse
 import datetime
+import fnmatch
 import json
 import os
 import pathlib
@@ -54,6 +57,9 @@ import session_log  # noqa: E402
 # `recover` key, and the hook must still show the state.
 FALLBACK_LIMITS = {"logLines": 25, "statusLines": 15, "worktrees": 10, "otherBranches": 10, "branchRow": 120,
                    "worktreeRow": 200, "outputCap": 9500, "gitWait": 5, "searchMax": 10, "searchWidth": 300}
+
+
+FILLER_IDS = {"", "—", "–", "-"}  # an empty roadmap table has one filler row; its id is not a task
 
 
 def defaults():
@@ -569,11 +575,56 @@ def task_line(root):
             f"{script_command(root).replace('recover.py', 'task.py')} current --clear"]
 
 
+def open_rows_line(root, branch):
+    """D166: one line with the open roadmap rows of the version in progress (a branch matching `releaseCheckBranches`
+    whose last segment is `X.Y.Z` or `X.Y`, with an optional `v`; the section of X.Y.Z, else of X.Y, said in the line), so a version is not
+    closed with a row still open. [] when unknown. Only a config, roadmap or file problem is soft here; any other
+    error (an ImportError, a bug in roadmap.py) is not hidden: it reaches main(), which still exits 0 but prints
+    «recover.py --state could not finish (…)» with the command that shows why."""
+    try:
+        cfg = config.load(root)
+        files = config.roadmap_files(cfg)
+        m = re.fullmatch(r"(?:.*/)?v?(\d+\.\d+)(\.\d+)?", branch)
+        if not m or not files or not any(fnmatch.fnmatchcase(branch, pat)
+                                         for pat in cfg.get("releaseCheckBranches") or []):
+            return []
+    except (config.ConfigError, OSError, ValueError):
+        return []
+    import roadmap
+    shown = m.group(1) + (m.group(2) or "")
+    rows = section = None
+    for version in dict.fromkeys([shown, m.group(1)]):
+        try:
+            rows = roadmap.open_rows(pathlib.Path(root), files, version)
+            section = version
+            break
+        except roadmap.RoadmapError:
+            continue
+        except (OSError, ValueError):
+            return []
+    if rows is None:
+        return []
+    rows = [r for r in rows if r[0].strip() not in FILLER_IDS]  # the «—» filler row is not a task
+    label = shown if section == shown else f"{shown} (no section of its own; using {section})"
+    if not rows:
+        return [f"- Roadmap {label}: no open rows"]
+    return [f"- Roadmap {label}: {len(rows)} open row(s): " + ", ".join(r[0] for r in rows)
+            + f" ({script_command(root).replace('recover.py', 'roadmap.py')} list {section})"]
+
+
 def state(root, transcript, out, logs, source="startup"):
     """Append the --state lines to `out` (and the log's relative path to `logs`); the caller measures and prints."""
     use_config(root)
     branch = git(root, "rev-parse", "--abbrev-ref", "HEAD") or "?"
     head = [f"State after compaction or /clear (galivelop-workflow), branch {branch}:"]
+    if source == "compact":  # A12 (Q-18): the start hook prints it on startup|resume|clear, never on compact
+        try:
+            line, warning = config.agent_language_line(config.load(root))
+            head.append(line)
+            if warning:
+                head.append(f"- Warning: {warning}")
+        except Exception:  # an unreadable config only drops this line: --state never fails
+            pass
     log_lines = log_state(root, branch, logs, source)
     tail = []
     say = tail.append
@@ -591,6 +642,7 @@ def state(root, transcript, out, logs, source="startup"):
     for line in commits:
         say(f"  {line}")
     tail.extend(task_line(root))
+    tail.extend(open_rows_line(root, branch))
     try:
         if config.load(root).get("agentSignatures", True) is False:
             say("- Commits carry no agent signatures even if the environment asks for them; trailers go together in the last paragraph")
@@ -671,6 +723,13 @@ def state(root, transcript, out, logs, source="startup"):
         tail.extend(context_guard.report(None, None, None, source, measure=measure()))
     except Exception as exc:  # only a warning: --state never fails
         tail.append(f"- Startup context: could not be measured ({exc})")
+    try:
+        import context_guard
+        done = context_guard.clear_after_task(root, config.load(root), path) if path else None
+        if done:  # E66: a task closed in this stretch with a long conversation: /clear before the next one
+            say(f"- Warning: {done[1]}")
+    except Exception:  # only a warning: --state never fails
+        pass
     session = f" --session {path}" if path else ""
     say(f"- A detail from before (an error, a piece of code, what the user said): "
         f"{script_command(root)}{session} --search '<text>'; never read the transcript whole.")
@@ -714,6 +773,27 @@ def hook_transcript(wait=3.0):
     return data if isinstance(data, dict) else None
 
 
+def compact_model_check(root, data):
+    """Q-7 (D178): after a compaction the session-start hook does not run, so the model warning of D142 (models.py
+    session-check) is printed here, as `- Warning:` lines; any failure only drops it (--state never fails)."""
+    try:
+        import contextlib
+        import io
+        import models
+        model = data.get("model")
+        model = model.get("id") if isinstance(model, dict) else model
+        transcript = data.get("transcript_path")
+        if not isinstance(transcript, str) or not transcript:
+            return []
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            models.main(["--root", str(root), "session-check", "--transcript", transcript,
+                         "--model", model if isinstance(model, str) else ""])
+        return [f"- Warning: {l}" for l in buf.getvalue().splitlines() if l.strip()]
+    except Exception:
+        return []
+
+
 LEGACY_FLAGS = {"--estado": "--state", "--buscar": "--search", "--sesion": "--session", "--ancho": "--width"}
 
 
@@ -748,6 +828,8 @@ def main(argv=None):
             state(root, args.session or data.get("transcript_path"), lines, logs, source)
             if source in ("clear", "compact") and data.get("session_id"):
                 forget_reads(data["session_id"])
+            if source == "compact":
+                lines.extend(compact_model_check(root, data))
         except BrokenPipeError:
             raise
         except Exception as exc:  # fail open: the hook must never break the session

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.9.0
 """Runs the project's GitHub Actions CI on this machine, for when GitHub does not start it (no Actions quota, no
 runners), and with --record records the result in the config's `ciLocalLog` (default docs/records/ci-local.md).
 The PR hook (review-before-main.sh) takes a committed green record as the CI of a PR whose CI never started; a CI
@@ -12,7 +12,10 @@ that started and failed is never replaced this way. Recording one is the person'
 `<file>: line N: <reason>` for each one that fails (GitHub never runs a workflow with invalid YAML, so no CI goes
 red; e.g. an unquoted `name: a: b`). Exit 0 all valid (or none), 1 some invalid, 2 bad config. With `ciYamlCheck`
 false in .claude/gw.json it says it is off and exits 0. The reader is a subset: a valid file it rejects is a reader
-gap to report, not a reason to skip the file.
+gap to report, not a reason to skip the file. Then (E71), when every file parsed, `actionlint -shellcheck=` runs over
+them (keys, expressions, `needs`, actions; `-shellcheck=` so local and CI agree): its findings exit 1. `ciActionlint`
+`auto` (default) only warns when actionlint is missing, `require` fails, `off` skips it; another version than
+`actionlintVersion` is a warning with the command that installs the pinned one.
 
 What runs: the workflows of `ciLocalWorkflows`, or else every .github/workflows/*.yml|yaml triggered by the event
 (default pull_request, the one a PR merge waits for; branch and path filters honoured), on the working tree as it is.
@@ -890,7 +893,60 @@ def validate(root, cfg):
             print(f"ci-local: {rel}: {exc}; GitHub would not run it. Fix it (quote values holding ': ', use spaces "
                   f"not tabs) and recheck: python3 {os.path.join(HERE, 'ci-local.py')} --validate", file=sys.stderr)
     print(f"ci-local: {len(files)} workflow file(s) checked, {bad} invalid")
-    return 1 if bad else 0
+    if bad or not files:
+        return 1 if bad else 0
+    return actionlint(root, cfg, [os.path.join(".github", "workflows", f) for f in files])
+
+
+def actionlint(root, cfg, files):
+    """E71: `actionlint -shellcheck= -pyflakes=` over the workflow files (the CI's shellcheck and pyflakes are the
+    check's own job); 0 clean, skipped or missing in `auto`, 1 otherwise. Each call is limited to ciStepTimeout
+    minutes (0 = no limit): a timeout is 1 under `require`, a warning under `auto`."""
+    mode, want = cfg["ciActionlint"], cfg["actionlintVersion"]
+    if mode == "off":
+        print("ci-local: actionlint is off (ciActionlint is off in .claude/gw.json)")
+        return 0
+    install = f'pip install "actionlint-py=={want}.*"' if want else "pip install actionlint-py"
+    exe = shutil.which("actionlint")
+    if not exe:
+        if mode == "require":
+            print(f"ci-local: actionlint is not installed and ciActionlint is require; install it: {install}",
+                  file=sys.stderr)
+            return 1
+        print(f"ci-local: warning: actionlint is not installed, so the workflows' keys and expressions are not "
+              f"checked: {install}")
+        return 0
+    limit = config.ci_step_timeout(cfg) * 60 or None
+    timed_out = (f"ci-local: actionlint timed out after {config.ci_step_timeout(cfg)} min (ciStepTimeout in "
+                 f".claude/gw.json); raise it or check the workflows by hand: actionlint -shellcheck= -pyflakes=")
+    if want:
+        try:
+            have = subprocess.run([exe, "-version"], capture_output=True, text=True,
+                                  timeout=limit).stdout.split("\n", 1)[0].strip()
+        except OSError:
+            have = ""
+        except subprocess.TimeoutExpired:
+            print(timed_out, file=sys.stderr if mode == "require" else sys.stdout)
+            return 1 if mode == "require" else 0
+        if have.startswith("v"):
+            have = have[1:]
+        if have != want:
+            print(f"ci-local: warning: actionlint {have or '?'} here, but actionlintVersion is {want}; its findings "
+                  f"may differ from the CI's: {install}")
+    try:
+        r = subprocess.run([exe, "-shellcheck=", "-pyflakes=", *files], cwd=root, capture_output=True, text=True,
+                           timeout=limit)
+    except subprocess.TimeoutExpired:
+        print(timed_out, file=sys.stderr if mode == "require" else sys.stdout)
+        return 1 if mode == "require" else 0
+    if r.returncode != 0:
+        sys.stdout.write(r.stdout)
+        sys.stderr.write(r.stderr)
+        print(f"ci-local: actionlint found errors in the workflows above; fix them and recheck: "
+              f"python3 {os.path.join(HERE, 'ci-local.py')} --validate", file=sys.stderr)
+        return 1
+    print(f"ci-local: actionlint: {len(files)} workflow file(s) clean")
+    return 0
 
 
 def dirty(root, log):
@@ -948,6 +1004,8 @@ def main(argv=None):
     log = cfg["ciLocalLog"]
     was_dirty = dirty(root, log)
     run = Run(root, cfg, args.event, args.plan)
+    leftover = os.path.join(root, ".gw-ci")  # D160: the workflow's base-hook step writes it into the tree
+    had_leftover = os.path.lexists(leftover)
     try:
         found = workflows(root, cfg, args.event, run.branch)
         changed = changed_files(root, cfg["protectedBranch"])
@@ -984,6 +1042,8 @@ def main(argv=None):
             return 2
     finally:
         shutil.rmtree(run.tmp, ignore_errors=True)
+        if not had_leftover and os.path.isdir(leftover) and not os.path.islink(leftover):
+            shutil.rmtree(leftover, ignore_errors=True)  # D160: also when the run fails or stops early
     result = summary(run)
     for item in run.not_covered:
         run.say(f"not covered: {item}")

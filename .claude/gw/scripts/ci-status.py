@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.8.1
+# galivelop-workflow v0.9.0
 """Reads the GitHub Actions status of a branch or a commit through the API: "look at the CI of the last push" without
 opening the web. The same reader review-before-main.sh uses to gate a merge (one place for the token / `gh` logic).
 

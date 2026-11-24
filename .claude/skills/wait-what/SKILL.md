@@ -4,7 +4,7 @@ description: "Stop. That last message did not land: re-pitch it. Use when the us
 disable-model-invocation: true
 license: MIT (see LICENSE-mattpocock-skills)
 metadata:
-  version: "0.8.1"
+  version: "0.9.0"
   source: "mattpocock/skills@5beb35b"
 ---
 
@@ -18,5 +18,5 @@ Wait, I don't understand where you've got to here. Re-pitch that: give me a litt
 
 This section is the only change to the upstream skill.
 
-- If the project's `language` in `.claude/gw.json` is not English, re-pitch in that language, in short plain
+- If the project's docs language (`languages.docs.primary`) in `.claude/gw.json` is not English, re-pitch in that language, in short plain
   sentences with one idea each, instead of ASD-STE100.
