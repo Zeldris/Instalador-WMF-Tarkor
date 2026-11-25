@@ -28,17 +28,33 @@ const conRelojFalso = async (prueba: () => Promise<void>) => {
 const espera = (s: RegExp) => screen.findByText(new RegExp(`Reintentando en (${s.source}) s`), {}, { timeout: 2000 })
 
 describe('progreso de la escalera (INS-68)', () => {
-  it('un reinicio desde 0 (un 200 sin Range) o un modelo vuelto a bajar cuenta como progreso real', () => {
+  it('un `hecho` menor que el máximo no cuenta como progreso ni vacía el máximo', () => {
     const { result } = renderHook(() => useEsperaRed())
     expect(result.current.progreso('m', 500)).toBe(true)
     expect(result.current.progreso('m', 500)).toBe(false)
     // El manifiesto del reintento no trae bytes: ni progreso ni reinicio.
     expect(result.current.progreso('m', 0)).toBe(false)
-    expect(result.current.progreso('m', 500)).toBe(false)
-    // Vuelve a bajar desde el principio: lo que baja otra vez es progreso, aunque no pase aún del máximo anterior.
-    expect(result.current.progreso('m', 200)).toBe(true)
-    expect(result.current.progreso('m', 300)).toBe(true)
+    expect(result.current.progreso('m', 200)).toBe(false)
+    expect(result.current.progreso('m', 300)).toBe(false)
+    expect(result.current.progreso('m', 501)).toBe(true)
     expect(result.current.progreso('otro', 100)).toBe(true)
+  })
+
+  it('tras un corte, el progreso reinicia por debajo del máximo y sube sin pasarlo: la espera sigue creciendo', () => {
+    vi.useFakeTimers()
+    try {
+      const { result } = renderHook(() => useEsperaRed())
+      const esperas: number[] = []
+      const corte = () => { act(() => result.current.programar(() => {})); esperas.push(result.current.segundos ?? -1) }
+      result.current.progreso('m', 1000)
+      corte()
+      for (const hecho of [100, 400, 900]) {
+        act(() => { result.current.progreso('m', hecho) })
+        act(() => { vi.advanceTimersByTime(60000) })
+        corte()
+      }
+      expect(esperas).toEqual([5, 10, 20, 40])
+    } finally { vi.useRealTimers() }
   })
 })
 
