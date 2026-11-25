@@ -157,7 +157,7 @@ impl Proceso {
         let mut cmd = Command::new(&e.programa);
         cmd.args(&e.argumentos).envs(&e.entorno).stdin(Stdio::null()).stdout(log.try_clone()?).stderr(log);
         morir_con_la_app(&mut cmd);
-        let hijo = cmd.spawn()?;
+        let hijo = lanzar_hijo(cmd)?;
         #[cfg(windows)]
         if let Some(t) = &self._trabajo {
             t.asignar(&hijo);
@@ -220,14 +220,51 @@ impl Drop for Proceso {
     }
 }
 
+/// Lanza `cmd`. En Linux, desde un hilo que vive lo que la app: `PR_SET_PDEATHSIG` avisa al hijo cuando muere el
+/// **hilo** que lo lanzó, no el proceso, y quien llama suele ir en un hilo de `spawn_blocking`, que Tokio retira a
+/// los ~10 s sin trabajo (`INS-68`): el motor moría con él.
+#[cfg(target_os = "linux")]
+fn lanzar_hijo(cmd: Command) -> io::Result<Child> {
+    use std::sync::mpsc::{channel, Sender};
+    use std::sync::{Mutex, OnceLock};
+    type Encargo = (Command, Sender<io::Result<Child>>);
+    static LANZADOR: OnceLock<Mutex<Sender<Encargo>>> = OnceLock::new();
+    let lanzador = LANZADOR.get_or_init(|| {
+        let (tx, rx) = channel::<Encargo>();
+        std::thread::Builder::new()
+            .name("tarkor-lanzador".into())
+            .spawn(move || {
+                for (mut cmd, respuesta) in rx {
+                    let _ = respuesta.send(cmd.spawn());
+                }
+            })
+            .expect("hilo lanzador de procesos");
+        Mutex::new(tx)
+    });
+    let (tx, rx) = channel();
+    let enviado = lanzador.lock().unwrap_or_else(|e| e.into_inner()).send((cmd, tx));
+    enviado.map_err(|_| io::Error::other("el hilo lanzador de procesos no está"))?;
+    rx.recv().map_err(|_| io::Error::other("el hilo lanzador de procesos no respondió"))?
+}
+
+#[cfg(not(target_os = "linux"))]
+fn lanzar_hijo(mut cmd: Command) -> io::Result<Child> {
+    cmd.spawn()
+}
+
 #[cfg(target_os = "linux")]
 fn morir_con_la_app(cmd: &mut Command) {
     use std::os::unix::process::CommandExt;
-    // SAFETY: prctl es async-signal-safe y no toca memoria del proceso padre.
+    let padre = std::process::id() as libc::pid_t;
+    // SAFETY: prctl y getppid son async-signal-safe y no tocan memoria del proceso padre.
     unsafe {
-        cmd.pre_exec(|| {
+        cmd.pre_exec(move || {
             if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM) == -1 {
                 return Err(io::Error::last_os_error());
+            }
+            // Si la app murió antes del prctl, la señal ya no llegará: no seguir huérfano.
+            if libc::getppid() != padre {
+                return Err(io::Error::other("la app se cerró mientras arrancaba el proceso"));
             }
             Ok(())
         });
@@ -431,5 +468,25 @@ mod tests {
         let mut proc = Proceso::arrancar(espec(dir.path(), "sleep 30", servidor_ok())).unwrap();
         proc.parar();
         assert!(matches!(proc.vigilar(), Estado::Detenido { .. }));
+    }
+
+    /// `INS-68`: el hijo no muere cuando termina el hilo que pidió lanzarlo (con `PR_SET_PDEATHSIG` atado a ese hilo,
+    /// el motor caía a los ~10 s, al retirarse el hilo de `spawn_blocking`).
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn el_hijo_sobrevive_al_hilo_que_lo_lanzo() {
+        let mut hijo = std::thread::spawn(|| {
+            let mut cmd = Command::new("sleep");
+            cmd.arg("30");
+            morir_con_la_app(&mut cmd);
+            lanzar_hijo(cmd).unwrap()
+        })
+        .join()
+        .unwrap();
+        std::thread::sleep(Duration::from_millis(500));
+        let estado = hijo.try_wait().unwrap();
+        let _ = hijo.kill();
+        let _ = hijo.wait();
+        assert!(estado.is_none(), "el hijo murió con el hilo que lo lanzó: {estado:?}");
     }
 }

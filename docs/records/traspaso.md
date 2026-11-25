@@ -10,11 +10,11 @@ cada commit.**
 
 | | |
 |---|---|
-| **Actualizado** | 2026-11-24 |
+| **Actualizado** | 2026-11-25 |
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #16 (2026-11-12, `5d3fcf3`): `INS-44`, `INS-45` e `INS-57` (borrar datos al desinstalar en Windows y Linux, hoja de estilos), con la confirmación de la usuaria y el CI de GitHub en verde. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 (SQLite) no está en el juego: su PR #1 se cerró sin fusionar y se rehace en `INS-60`. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | INS-68 en curso: hechos A (c9d7a15), B (5d086d9), C1 (concurrencia del motor Rust; a1930c9, 16fc6e1; sin revisar) y C2 (frontal: esperas, avisos, Reparar; 84612a6). Falta: arreglar PDEATHSIG (el motor muere al retirarse el hilo de spawn_blocking, ~10 s; procesos.rs morir_con_la_app y motor_ciclo.rs:24; opus, con test), revisar C1, la línea de uso en GiB (está en Rust, no en el frontal) y tachar los puntos 4–9, 18, 19 y 22. Presupuesto de compactaciones: 2. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | INS-68 en curso: hechos A (c9d7a15), B (5d086d9), C1 (concurrencia del motor Rust; a1930c9, 16fc6e1; sin revisar), C2 (frontal; 84612a6) y el arreglo de PDEATHSIG (hilo lanzador en procesos.rs, con test). Falta: revisar C1 y el arreglo de PDEATHSIG (bloque de más de 1000 líneas: /code-review), la línea de uso en GiB (está en Rust, no en el frontal) y tachar los puntos 4–9, 18, 19 y 22. Presupuesto de compactaciones: 2. |
 | **Tarea en curso · `claude/gw-update-0.8.0`** | Al fusionarse, rama terminada: no queda nada pendiente en ella. |
 | **Tarea en curso · `claude/flu-13-ledger-ci`** | Rama abandonada sin fusionar: `FLU-13` la cerró `FLU-15` (v0.8.2 del flujo). |
 | **Tarea en curso · `claude/gw-update-0.8.1`** | Al fusionarse, rama terminada: no queda nada pendiente en ella. |
