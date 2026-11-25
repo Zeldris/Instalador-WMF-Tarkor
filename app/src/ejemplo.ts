@@ -87,7 +87,7 @@ export const reiniciarBorrado = () => { plataformaSimulada = 'linux'; errorBorra
 
 let guardada = configInicial()
 let sobrantes: Sobrante[] = []
-let usoSimulado: UsoIa | Error = { porcentajeGpu: 100, memoriaMb: 5400 }
+let usoSimulado: UsoIa | Error = { porcentajeGpu: 100, memoriaMb: 5400, memoriaGb: 5.27 }
 /** Para los tests: lo que dirá `usoIa` (un `Error` hace que falle, como con el motor parado). */
 export const fijarUsoIa = (uso: UsoIa | Error) => { usoSimulado = uso }
 /** Para los tests: vuelve al estado de ejemplo de los modelos sobrantes y del uso. */
@@ -107,7 +107,7 @@ let motorInstalado = false
  * `reparar`) fallan por falta de red (un `ErrorIa` con `red`), como el núcleo.
  */
 export const fijarSinRed = (n: number, antes: typeof sinRedAntes = null) => { sinRedRestantes = n; sinRedCortes = 0; sinRedAntes = antes }
-export const reiniciarModelos = () => { motorEnMarcha = false; arranquesMotor = 0; calentarResultado = 'ok'; tokensPorSegundoPrueba = 12; sinRedRestantes = 0; sinRedCortes = 0; sinRedAntes = null; motorInstalado = false; errorCambioPerfil = null; retardoCambioPerfil = 0; sobrantes = []; usoSimulado = { porcentajeGpu: 100, memoriaMb: 5400 } }
+export const reiniciarModelos = () => { motorEnMarcha = false; arranquesMotor = 0; calentarResultado = 'ok'; tokensPorSegundoPrueba = 12; sinRedRestantes = 0; sinRedCortes = 0; sinRedAntes = null; motorInstalado = false; errorCambioPerfil = null; retardoCambioPerfil = 0; sobrantes = []; usoSimulado = { porcentajeGpu: 100, memoriaMb: 5400, memoriaGb: 5.27 } }
 /** Los modelos del perfil `id` (o del primero del catálogo); ninguno si el catálogo no trae perfiles. */
 const modelosDe = (id: string | null) => {
   const perfil = catalogo.perfiles.find((p) => p.id === id) ?? catalogo.perfiles[0]

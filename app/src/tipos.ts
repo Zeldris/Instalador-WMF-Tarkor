@@ -120,6 +120,8 @@ export interface Reparacion {
 export interface UsoIa {
   porcentajeGpu: number | null
   memoriaMb: number
+  /** GB de [`gb`](nucleo/src/ollama.rs), ya redondeados en el núcleo. */
+  memoriaGb: number
 }
 
 /** Lo que enseña el diálogo «Borrar datos del juego» (`info_borrado`): `tamano` ya viene formateado ("9,6 GB"; vacío si no hay IA). */

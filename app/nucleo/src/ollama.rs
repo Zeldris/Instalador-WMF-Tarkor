@@ -171,6 +171,8 @@ pub struct Uso {
     /// no hay nada cargado.
     pub porcentaje_gpu: Option<u8>,
     pub memoria_mb: u64,
+    /// La misma memoria en GB con [`gb`] y dos decimales: la línea de uso no divide por su cuenta.
+    pub memoria_gb: f64,
 }
 
 /// Resume `/api/ps`: porcentaje en la gráfica = suma de `size_vram` / suma de `size`.
@@ -180,6 +182,7 @@ pub fn resumen_uso(cargados: &[Cargado]) -> Uso {
     Uso {
         porcentaje_gpu: (total > 0).then(|| (vram as f64 / total as f64 * 100.0).round().clamp(0.0, 100.0) as u8),
         memoria_mb: total / MB,
+        memoria_gb: (gb(total) * 100.0).round() / 100.0,
     }
 }
 
@@ -623,7 +626,7 @@ mod tests {
                 vram_bytes: 3_145_728_000
             }]
         );
-        assert_eq!(resumen_uso(&ps), Uso { porcentaje_gpu: Some(75), memoria_mb: 4000 });
+        assert_eq!(resumen_uso(&ps), Uso { porcentaje_gpu: Some(75), memoria_mb: 4000, memoria_gb: 3.91 });
     }
 
     fn cargado(tamano_bytes: u64, vram_bytes: u64) -> Cargado {
@@ -632,7 +635,7 @@ mod tests {
 
     #[test]
     fn resumen_sin_nada_cargado_no_da_porcentaje() {
-        assert_eq!(resumen_uso(&[]), Uso { porcentaje_gpu: None, memoria_mb: 0 });
+        assert_eq!(resumen_uso(&[]), Uso { porcentaje_gpu: None, memoria_mb: 0, memoria_gb: 0.0 });
         // Un modelo de tamaño 0 (respuesta rara) tampoco: no se divide entre cero.
         assert_eq!(resumen_uso(&[cargado(0, 0)]).porcentaje_gpu, None);
     }
@@ -641,7 +644,7 @@ mod tests {
     fn resumen_pesa_por_tamano_y_no_por_porcentaje() {
         // 100 % de un modelo de 1 MB y 0 % de uno de 3 MB: 25 % en total, no la media (50 %).
         let u = resumen_uso(&[cargado(MB, MB), cargado(3 * MB, 0)]);
-        assert_eq!(u, Uso { porcentaje_gpu: Some(25), memoria_mb: 4 });
+        assert_eq!(u, Uso { porcentaje_gpu: Some(25), memoria_mb: 4, memoria_gb: 0.0 });
         // Redondeo: 2/3 = 66,7 -> 67; y la VRAM nunca cuenta más que el tamaño.
         assert_eq!(resumen_uso(&[cargado(3 * MB, 2 * MB)]).porcentaje_gpu, Some(67));
         assert_eq!(resumen_uso(&[cargado(MB, 5 * MB)]).porcentaje_gpu, Some(100));

@@ -8,40 +8,33 @@ Lo que queda abierto; la bitácora solo apunta aquí. Se añade y se quita en es
   ya descargado en Ajustes; no se impide mover la carpeta con una descarga en marcha (el asistente hoy no lo
   permite); `Estado::ia()` lee `config.json` en cada llamada; el aviso de restos del origen solo va a stderr;
   con poco disco el paso 3 dice «equipo insuficiente».
-- Pendientes leves de la revisión de `INS-43`: `cambiar_perfil` pone `cancelar` a false y puede deshacer una pausa de otra descarga; `cambiar_perfil` con el motor caído lo arranca primero con el perfil viejo, y si eso falla no prueba el nuevo; no hay test de la pausa de `cambiar_perfil`; los arreglos de `cambiar_perfil`, `reintentar_motor` y `estado_motor` no tienen test (los cubre el E2E del trozo 3); sin test: desmontar antes de que `listen` resuelva, Borrar desactivado mientras borra, Volver desactivado durante el cambio; la lectura de `motor_detenido()` al montar o al acabar un cambio puede borrar un aviso que llegue mientras tanto (conviene un contador de avisos); sin test de que `CopiarInforme` pida el informe cada vez; «Copiar» oculta el texto desplegado mientras carga. Leves de la revisión de la rama contra `origin/main`: `anonimizar` no mira el límite izquierdo del nombre ni los nombres cortos 8.3 de Windows; `leer_final` pierde una línea cuando el corte cae al principio de una, y 200 líneas pueden dejar fuera el «out of memory»; los sobrantes van en GB decimales y la línea de uso en GiB; `modelos_sobrantes` no mira `ocupado`; «Pausar» sale también en fases que no se pueden cancelar; el cierre de la app (`RunEvent::Exit`) espera al Mutex del motor hasta 30 s. De la revisión de sus arreglos: `borrar_modelo` va por la espera de lectura de 10 s (un borrado lento en Windows saldría como error); el cambio de `masLigero` a `evaluacion.perfiles` en `App.tsx` no tiene un test que falle sin él. De la revisión de la fase 2: `task_start` de `recuperar.py` usa la hora del commit de la base y no la de la fusión (con un `main` quieto cuenta compactaciones de antes de la tarea); `sin-find-forzado.py` no ve un `.find(` partido en varias líneas ni `.findLast(...)!`, da falsos positivos con `.find(x)!==y`, excluye cualquier archivo de `app/src` que empiece por «test» y usa `list[str]` (Python 3.9+); `ejemplo.ts` sigue cayéndose con `perfiles` vacío; `tools/qa/e2e.sh` no corre la variante `E2E_ESPERA_ERROR_RED=1` y compila en cada ejecución. `esperar_http` de `procesos.rs` ya solo lo usan sus tests.
+- Pendientes leves de la revisión de `INS-43` (lo demás lo cerró `INS-68`): los arreglos de `reintentar_motor` y
+  `estado_motor` no tienen test (los cubre el E2E del trozo 3); sin test: desmontar antes de que `listen` resuelva,
+  Borrar desactivado mientras borra, Volver desactivado durante el cambio. Leves de la revisión de la rama contra
+  `origin/main`: `anonimizar` no mira los nombres cortos 8.3 de Windows; 200 líneas de `leer_final` pueden dejar
+  fuera el «out of memory»; «Pausar» sale también en fases que no se pueden cancelar. De la revisión de sus
+  arreglos: `borrar_modelo` va por la espera de lectura de 10 s (un borrado lento en Windows saldría como error); el
+  cambio de `masLigero` a `evaluacion.perfiles` en `App.tsx` no tiene un test que falle sin él. De la revisión de la
+  fase 2: `task_start` de `recuperar.py` usa la hora del commit de la base y no la de la fusión (con un `main` quieto
+  cuenta compactaciones de antes de la tarea); `sin-find-forzado.py` no ve un `.find(` partido en varias líneas ni
+  `.findLast(...)!`, da falsos positivos con `.find(x)!==y`, excluye cualquier archivo de `app/src` que empiece por
+  «test» y usa `list[str]` (Python 3.9+); `tools/qa/e2e.sh` no corre la variante `E2E_ESPERA_ERROR_RED=1` y compila
+  en cada ejecución.
 - Pendientes leves de la revisión de `INS-49` (no vuelven a revisarse en su PR): con un `.completo` vacío (lo
-  instalado antes de `INS-49`) el primer Reparar vuelve a bajar el motor aunque esté sano; `alTerminar` de
-  Ajustes guarda los modelos del perfil leído al empezar aunque se cambie durante la reparación; el porcentaje
-  al reponer un modelo es el de cada capa y vuelve a 0 %; `escribir_sumas` relee todo el motor tras extraerlo
-  en vez de sumar al extraer; la lista única de modelos de un perfil está copiada en cuatro sitios (conviene un
-  `modelosDe(perfil)` en `catalogo.ts`).
-- Pendientes leves de la revisión del trozo A de `INS-42`: `clasificar` (`ollama.rs`) no reconoce `EOF` ni
-  `unexpected EOF` como corte de red; sin test de Atrás o desmontar durante la espera, ni de `aErrorIa` con el objeto de Tauri;
-  el máximo de progreso va por modelo, no por capa (una capa nueva más pequeña no cuenta como progreso).
-- Pendientes leves de la revisión del trozo B de `INS-42`: `calentar` no manda las `options` del juego (`num_thread`), que podrían
-  recargar el modelo en el primer turno; al abrir con el motor ya caído, `Juego` puede arrancarlo a la vez que
-  «Reintentar» de la pantalla del motor detenido; el test «calienta una sola vez» usa `rerender` y no prueba el
-  `[]` del efecto; la fila de fallo de la Comprobación ofrece «Probar un perfil más ligero» aunque no haya uno.
-  El candado compartido ya no pide test: arrancar
-  sin él no compila (`Turno`, retro de `INS-42`).
-- Pendientes leves de la revisión del trozo C de `INS-42`: `cambiar` y `empezar` no reinician la escalera tras
-  Pausar y volver a pulsar (queda en 40/60 s); si un reintento de `reparar` falla por red tras reinstalar el motor o
-  reponer capas, lo hecho se pierde y dice «Todo estaba en orden»; `maxHecho` nunca se vacía (un modelo borrado y
-  vuelto a bajar no cuenta como progreso); la comprobación del E2E de `rendimiento` con «Esperando conexión» es
-  tautológica.
-- Pendientes leves de la fase 1 antes de `main` (`INS-42`; no vuelven a revisarse en su PR):
-  - cada reintento de `reparar` tras un corte vuelve a parar el motor y a recalcular todos los hashes;
-  - que el runner local cierre la conexión («forcibly closed») cuenta como corte de red;
-  - mientras el cambio de perfil espera la red, `cambiando` oculta la pantalla del motor detenido;
-  - el reintento de Reparar usa un `alTerminar` de un render anterior;
-  - sin Range (un 200 desde 0) el progreso no reinicia la escalera de esperas;
-  - «Probar un perfil más ligero» de la Comprobación no preselecciona el más ligero;
-  - el `map_err(|e| ErrorIa::from(e.to_string()))` se repite en cinco comandos.
-  - de la fase 3 (el `Turno`): la vigilancia relanza el motor dentro de `Estado::motor` sin turno, y un
-  `asegurar` a la vez lo ve parado y lo reinicia otra vez; la salida (`RunEvent::Exit`) para el motor sin turno, y
-  uno que esté arrancando al cerrar queda vivo; un fallo pasajero de `version()` hace que `asegurar` reinicie un
-  motor sano (las tres, ya en `main`); el test de dos arranques copia la forma de `asegurar` en vez de llamarlo (el
-  tipo lo cubre: sin turno no se llama a `arrancar_con_turno`); `coger` reserva memoria para la guarda.
+  instalado antes de `INS-49`) el primer Reparar vuelve a bajar el motor aunque esté sano; el porcentaje al reponer
+  un modelo es el de cada capa y vuelve a 0 %; `escribir_sumas` relee todo el motor tras extraerlo en vez de sumar
+  al extraer.
+- Pendientes leves de la revisión del trozo A de `INS-42`: sin test de Atrás o desmontar durante la espera, ni de
+  `aErrorIa` con el objeto de Tauri.
+- Pendientes leves de la revisión del trozo B de `INS-42`: `calentar` no manda las `options` del juego
+  (`num_thread`), que podrían recargar el modelo en el primer turno; al abrir con el motor ya caído, `Juego` puede
+  arrancarlo a la vez que «Reintentar» de la pantalla del motor detenido; el test «calienta una sola vez» usa
+  `rerender` y no prueba el `[]` del efecto.
+- Pendientes leves de la revisión del trozo C de `INS-42`: la comprobación del E2E de `rendimiento` con «Esperando
+  conexión» es tautológica.
+- Pendientes leves de la fase 1 antes de `main` (`INS-42`; no vuelven a revisarse en su PR): el test de dos
+  arranques copia la forma de `asegurar` en vez de llamarlo (el tipo lo cubre: sin turno no se llama a
+  `arrancar_con_turno`); `coger` reserva memoria para la guarda.
 - Pendientes leves de la revisión de `FLU-5` (no vuelven a revisarse en su PR): el commit de formato `a27489f` no
   actualizó la bitácora (se hizo en los siguientes). La versión de Rust la fija `FLU-6` (2026-10-26); el CI de
   GitHub con ella está sin probar hasta que vuelva la cuota.
@@ -83,16 +76,14 @@ Lo que queda abierto; la bitácora solo apunta aquí. Se añade y se quita en es
   deja pasar un secreto de una palabra en mayúscula entre comillas en un `.md`.
 - Leves de la fase 1 antes de `main` (`INS-15`, `INS-7`, 2026-11-11; no vuelven a revisarse en su PR): no hay
   migración de `qwen2.5:7b` a `llama3.1:8b` para quien ya completó el asistente (hoy no hay versión publicada;
-  hará falta antes de cambiar un modelo tras `INS-46`); «Copiado» de la pantalla de licencias no se borra nunca;
-  el motor sale solo como «Ollama · MIT», sin los avisos de llama.cpp/ggml ni de los runtimes de GPU.
+  hará falta antes de cambiar un modelo tras `INS-46`); el motor sale solo como «Ollama · MIT», sin los avisos de
+  llama.cpp/ggml ni de los runtimes de GPU.
 - Leves de la fase 1 antes de `main` (`INS-44`, `INS-45`, 2026-11-11; no vuelven a revisarse en su PR): si la
   carpeta de la IA es un enlace simbólico o una junction solo se quita el enlace y el tamaño sale 0;
   `--info-desinstalar` usa `Config::cargar`, que aparta un `config.json` corrupto; el «desinstalar antes de
   instalar» de una reinstalación corre el desinstalador sin `/UPDATE` (enseña las casillas y borra los registros);
   en Linux no se borran las carpetas de WebKit de `io.github.zeldris.tarkor`; una instalación previa en
-  `%LOCALAPPDATA%\Tarkor` se queda ahí al actualizar; `ia_borrable` se fía del nombre `Tarkor IA`; `texto_gb` usa 1024³ y
-  `modelos_sobrantes` 1e9; brazo `Orden::Normal` inalcanzable y `use` interno repetido en `lib.rs`. `desinstalar::mensaje_error`
-  toma cualquier `InvalidInput` por «IA no borrable» y, en el resto, la causa real no llega a los registros. Pendiente de
+  `%LOCALAPPDATA%\Tarkor` se queda ahí al actualizar; `ia_borrable` se fía del nombre `Tarkor IA`. Pendiente de
   `INS-8` (Windows real): el aviso del desinstalador cuando el borrado falla (nuevo, solo compilado en el CI), el
   borrado con archivos bloqueados (no hay reintento) y el caso de la junction.
 - Pendientes leves de la revisión de `INS-59` (no vuelven a revisarse en su PR): `PASO_ELEGIR_PERFIL` (4) de
@@ -105,9 +96,8 @@ Lo que queda abierto; la bitácora solo apunta aquí. Se añade y se quita en es
   hace `measure.py`). El aviso de `apply.py` sobre `docs/propuestas` en `docs/13:14` es un falso positivo: es una
   ruta del repo GVIG, no de este. La mayoría de los hallazgos de la revisión de `FLU-8` llegaron arreglados en la 0.5.2. En la 0.8.0 el fallo sigue y el parche se rehízo; leve de la revisión de `FLU-12` (no vuelve a revisarse en su PR): repite en tres sitios (líneas 389, 459 y 483) el respaldo raíz/`gw` en lugar de un solo helper.
 - Pendientes leves de la revisión de bloque `INS-63`…`INS-67` (2026-11-15; no vuelven a revisarse en su PR): el
-  porcentaje de la barra de descarga (`pantallasIa.tsx`, ~160 y ~169) se calcula dos veces (`aria-valuenow` y
-  ancho); el job e2e de `app.yml` llama dos veces a `tools/qa/e2e.sh` y repite vite y cargo-about para la variante
-  del error de red (convendría reutilizar el binario).
+  job e2e de `app.yml` llama dos veces a `tools/qa/e2e.sh` y repite vite y cargo-about para la variante del error
+  de red (convendría reutilizar el binario).
 - Pendientes leves de la revisión de bloque de `INS-68` (2026-11-25; no vuelven a revisarse en su PR):
   `ReparacionHecha` se queda en `Estado::reparacion` hasta el siguiente `reparar` y un Reparar manual posterior
   con la misma carpeta y modelos se salta parar, reinstalar y volver a sumar (`comandos_ia.rs` ~299; conviene un

@@ -245,7 +245,7 @@ function DondeCorre() {
   const d = tx.ajustes.dondeCorre
   return (
     <p className="peq" aria-live="polite">
-      {tx.fraseUso(uso.porcentajeGpu)}{uso.porcentajeGpu !== null && uso.memoriaMb > 0 && <span className="tenue"> · {d.memoria(fmt(uso.memoriaMb / 1024))}</span>}
+      {tx.fraseUso(uso.porcentajeGpu)}{uso.porcentajeGpu !== null && uso.memoriaGb > 0 && <span className="tenue"> · {d.memoria(fmt(uso.memoriaGb))}</span>}
     </p>
   )
 }
