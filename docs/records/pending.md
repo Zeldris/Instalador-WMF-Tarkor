@@ -108,3 +108,12 @@ Lo que queda abierto; la bitácora solo apunta aquí. Se añade y se quita en es
   porcentaje de la barra de descarga (`pantallasIa.tsx`, ~160 y ~169) se calcula dos veces (`aria-valuenow` y
   ancho); el job e2e de `app.yml` llama dos veces a `tools/qa/e2e.sh` y repite vite y cargo-about para la variante
   del error de red (convendría reutilizar el binario).
+- Pendientes leves de la revisión de bloque de `INS-68` (2026-11-25; no vuelven a revisarse en su PR):
+  `ReparacionHecha` se queda en `Estado::reparacion` hasta el siguiente `reparar` y un Reparar manual posterior
+  con la misma carpeta y modelos se salta parar, reinstalar y volver a sumar (`comandos_ia.rs` ~299; conviene un
+  `reintento` desde el frontal o borrarlo al cancelar); `bytes.remove(0)` de `informe.rs` ~65 entra en pánico si
+  el registro encoge entre `metadata()` y la lectura (`if desde > 0 && !bytes.is_empty()`); `sigue_en_marcha`
+  (`estado.rs` ~227) hace 3 `version()` con el turno de arranque cogido y contra un motor colgado espera el
+  tiempo de recepción entero en cada uno (cliente de espera corta, o reintentar solo errores de conexión); sin
+  verificar: con Ajustes oculto y montado (esperando red), «Ir a Ajustes» del aviso no cambia el perfil porque
+  `perfilInicial` solo se lee al montar (`App.tsx` ~69; una `key` o un efecto).
