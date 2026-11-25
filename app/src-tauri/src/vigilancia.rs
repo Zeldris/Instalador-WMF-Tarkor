@@ -32,10 +32,24 @@ pub(crate) fn avisar_parada(app: &tauri::AppHandle, motivo: String) {
 /// `Mutex` cogido; `cliente()` no lo usa (lee `url_motor`) y el relanzado conserva el puerto.
 pub(crate) fn vigilar_una_vez(app: &tauri::AppHandle) {
     let estado = app.state::<Estado>();
+    let cerrando = || estado.cerrando.load(std::sync::atomic::Ordering::SeqCst);
+    if cerrando() {
+        return;
+    }
     let Some(_turno) = estado.arranque.intentar() else { return };
     let mut motor = estado.motor.bloquear();
+    if cerrando() {
+        return;
+    }
     let Some(proceso) = motor.as_mut() else { return };
     let visto = proceso.vigilar();
+    if cerrando() {
+        // La app se cerró mientras se relanzaba: el motor recién puesto no se queda huérfano.
+        if let Some(mut p) = motor.take() {
+            p.parar();
+        }
+        return;
+    }
     let ya_avisado = estado.detenido.bloquear().is_some();
     if let Some(motivo) = procesos::aviso_nuevo(&visto, ya_avisado) {
         avisar_parada(app, motivo.to_string());

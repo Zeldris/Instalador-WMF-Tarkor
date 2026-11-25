@@ -50,21 +50,22 @@ pub(crate) async fn asegurar_motor(app: tauri::AppHandle) -> Res<()> {
 
 /// Lo que hace `asegurar_motor`. Un fallo suelto de `version()` no reinicia un motor sano (`sigue_en_marcha`).
 pub(crate) async fn asegurar(app: &tauri::AppHandle) -> Res<()> {
-    asegurar_con(app, None).await
+    asegurar_con(app, None).await.map(|_| ())
 }
 
 /// `asegurar`, arrancando (si hace falta) con `perfil` en vez del guardado: `cambiar_perfil` con el motor caído lo
 /// arranca ya con el perfil nuevo, que es el que va a descargar (el viejo puede ser justo el que no cabía en memoria).
-pub(crate) async fn asegurar_con(app: &tauri::AppHandle, perfil: Option<&Perfil>) -> Res<()> {
+/// Da `true` si ha arrancado el motor (estaba parado) y `false` si ya corría.
+pub(crate) async fn asegurar_con(app: &tauri::AppHandle, perfil: Option<&Perfil>) -> Res<bool> {
     let estado = app.state::<Estado>();
     let en_marcha = || async {
         let a = app.clone();
         tauri::async_runtime::spawn_blocking(move || a.state::<Estado>().sigue_en_marcha()).await.unwrap_or(false)
     };
     let Some(turno) = estado.arranque.turno_si_parado(en_marcha).await else {
-        return Ok(());
+        return Ok(false);
     };
-    arrancar_con_perfil(app, &turno, perfil).await
+    arrancar_con_perfil(app, &turno, perfil).await.map(|()| true)
 }
 
 /// Lo que hace `iniciar_motor`. En fila con cualquier otro arranque: quien ya tenga `Estado::arranque` cogido usa
@@ -151,9 +152,23 @@ pub(crate) fn parar_al_salir(estado: &Estado) {
         if let Some(mut p) = estado.sacar_motor(&turno) {
             p.parar();
         }
-    } else if let Ok(mut motor) = estado.motor.try_lock() {
+    } else if let Some(mut motor) = bloquear_antes_de(&estado.motor, PLAZO_SALIDA) {
+        // Sin turno (p. ej. la vigilancia relanzando el motor): se espera al `Mutex`, acotado, para pararlo igualmente.
         if let Some(mut p) = motor.take() {
             p.parar();
+        }
+    }
+}
+
+/// El `Mutex`, esperando como mucho `plazo` (reintentos cortos de `try_lock`). Uno envenenado se da igual.
+pub(crate) fn bloquear_antes_de<T>(m: &std::sync::Mutex<T>, plazo: Duration) -> Option<std::sync::MutexGuard<'_, T>> {
+    let limite = std::time::Instant::now() + plazo;
+    loop {
+        match m.try_lock() {
+            Ok(g) => return Some(g),
+            Err(std::sync::TryLockError::Poisoned(e)) => return Some(e.into_inner()),
+            Err(std::sync::TryLockError::WouldBlock) if std::time::Instant::now() >= limite => return None,
+            Err(std::sync::TryLockError::WouldBlock) => std::thread::sleep(Duration::from_millis(20)),
         }
     }
 }
@@ -193,6 +208,26 @@ mod tests {
             ultimo_motivo_parada: std::sync::Mutex::new(None),
             arranque: Candado::default(),
         }
+    }
+
+    #[test]
+    fn la_salida_espera_al_motor_cogido_por_la_vigilancia() {
+        // La vigilancia relanza el motor con el `Mutex` cogido: la salida espera a soltarlo en vez de rendirse.
+        let m = std::sync::Arc::new(std::sync::Mutex::new(1));
+        let cogido = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let (m2, c2) = (m.clone(), cogido.clone());
+        let hilo = std::thread::spawn(move || {
+            let _g = m2.lock().unwrap();
+            c2.wait();
+            std::thread::sleep(Duration::from_millis(300));
+        });
+        cogido.wait();
+        assert!(bloquear_antes_de(&m, Duration::from_secs(3)).is_some(), "espera a que se suelte");
+        hilo.join().unwrap();
+        let _g = m.lock().unwrap();
+        let inicio = std::time::Instant::now();
+        assert!(bloquear_antes_de(&m, Duration::from_millis(100)).is_none(), "con plazo, no se queda colgada");
+        assert!(inicio.elapsed() < Duration::from_secs(2));
     }
 
     #[test]

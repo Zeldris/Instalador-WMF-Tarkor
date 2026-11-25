@@ -158,20 +158,33 @@ pub(crate) async fn cambiar_perfil(
     // Su propia bandera: no deshace la pausa de otra descarga (`Cancelar::nueva`).
     let cancelar = estado.cancelar.nueva();
     let modelos: Vec<String> = nuevo.modelos().into_iter().map(String::from).collect();
+    let mut arrancado_con_nuevo = false;
     if estado.ollama_externo.is_none() {
         // Tras una doble caída el `Proceso` sigue en el `Mutex` con el hijo muerto (o no hay
         // motor): sin motor vivo la descarga fallaría con un error de conexión, y «Cambiar a un
         // perfil más ligero» no serviría justo cuando se ofrece. Arranca con el perfil nuevo: el viejo puede ser el que
         // no cabía. Arrancar borra el aviso. Comprobar y arrancar van bajo el candado de arranque, que se suelta antes
         // de descargar (puede tardar horas).
-        asegurar_con(&app, Some(&nuevo)).await?;
+        arrancado_con_nuevo = asegurar_con(&app, Some(&nuevo)).await?;
     }
-    let cliente = estado.cliente()?;
-    let lista = modelos.clone();
-    // Sin pasar por `to_string`: así el frontal sabe si el corte fue de red y espera para reintentar (`INS-42`).
-    tauri::async_runtime::spawn_blocking(move || descargar_faltantes(&cliente, &lista, &cancelar, &canal))
-        .await
-        .map_err(|e| e.to_string())??;
+    let descarga: Result<(), ErrorIa> = async {
+        let cliente = estado.cliente()?;
+        let lista = modelos.clone();
+        // Sin pasar por `to_string`: así el frontal sabe si el corte fue de red y espera para reintentar (`INS-42`).
+        tauri::async_runtime::spawn_blocking(move || descargar_faltantes(&cliente, &lista, &cancelar, &canal))
+            .await
+            .map_err(|e| e.to_string())??;
+        Ok(())
+    }
+    .await;
+    if let Err(e) = descarga {
+        if arrancado_con_nuevo {
+            // El motor arrancó con los ajustes del perfil nuevo, que no se guarda: vuelve al de antes.
+            let turno = estado.arranque.coger().await;
+            rearrancar_o_avisar(&app, &turno).await;
+        }
+        return Err(e);
+    }
     // Se vuelve a leer: lo que el asistente guardara durante la descarga no se pisa.
     let mut config = estado.config();
     config.perfil = Some(perfil);
