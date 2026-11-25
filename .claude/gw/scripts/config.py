@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.6.0
+# galivelop-workflow v0.9.0
 """The only reader of a project's .claude/gw.json (one fact, one place).
 
 Validates the config against schema/gw.schema.json (a stdlib validator for the subset the schema uses) and fills the
@@ -19,6 +19,18 @@ defaults the schema declares. Shell scripts call the CLI; Python scripts import 
                                         # malformed -> exit 2. Never committed: it holds what must not be public
                                         # (privateNames, plus allowEmails for private-check.py and anonymize, the
                                         # aliases harvest.py prints instead of the names)
+  python3 config.py author-check        # E41: exit 1 when the commit's author or committer (git var GIT_AUTHOR_IDENT /
+                                        # GIT_COMMITTER_IDENT, so GIT_AUTHOR_*/GIT_COMMITTER_* count as in git) matches
+                                        # authorDeny; an empty list checks nothing (called by the pre-commit hook)
+  python3 config.py --rev REV author-check --commits -   # the same over the commits on stdin, one sha per line
+                                        # (%an/%ae/%cn/%ce; the pre-push on what it pushes, pre-commit --range in CI)
+  python3 config.py spike-branch NAME   # C12: exit 0 when branch NAME is an exploration branch (spikeBranch prefix),
+                                        # 1 when it is not or the feature is off (""); --prefix prints the prefix as
+                                        # applied (`spike` -> `spike/`; empty when off)
+  python3 config.py --rev REV spike-check --commits -    # C12: exit 1 (and the reason, with what to do instead)
+                                        # when a commit on stdin comes from an exploration branch: a `Spike:` trailer
+                                        # naming one (also indented, as a squash message keeps it) or a merge whose
+                                        # subject names one ("Merge branch 'spike/x'", remote-tracking too)
 
 Project root: --root, else the git top level of this script's folder when that repo has .claude/gw.json (the copy
 in a project lives in .claude/gw/scripts/), else the git top level of the current directory when it is
@@ -32,6 +44,7 @@ Python 3.8+ (macOS ships 3.9).
 import argparse
 import fnmatch
 import functools
+import hashlib
 import json
 import os
 import posixpath
@@ -54,7 +67,7 @@ ALIAS = re.compile(r"^private-project-\d+$")
 # The format of gw.json (its `schemaVersion`; absent = 0, written before 0.5). load() migrates an older config in
 # memory, so every reader sees the current shape; apply.py (/gw-update) writes the migration to disk. A newer one
 # fails closed: this copy of the workflow cannot know what changed.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class ConfigError(Exception):
@@ -74,9 +87,58 @@ def _migrate_to_1(raw):
     return out
 
 
+def _migrate_to_2(raw):
+    """1 -> 2 (A12, Q-14): `language` -> `languages.docs.primary` and `languages.public.primary`, `visibleLanguages` ->
+    `languages.ui`, `languages.code` = "en", the `others` lists []; both old keys are removed. A `languages` block
+    already there wins: the old keys only fill what it lacks. The block takes the place of `language`; a config with
+    neither old key gets none (the schema then says `languages` is missing). `schemaVersion` becomes 2 in place."""
+    old_language = raw.get("language")
+    old_visible = raw.get("visibleLanguages")
+    has_old = "language" in raw or "visibleLanguages" in raw
+    block = raw.get("languages")
+    if has_old and not isinstance(block, dict):
+        if "languages" in raw:  # not an object: the old keys stay, and the schema rejects `languages` with its reason
+            out = dict(raw)
+            out["schemaVersion"] = 2
+            return out
+        block = {}
+    out = {}
+    placed = False
+    for key, value in raw.items():
+        if key in ("language", "visibleLanguages"):
+            if not placed and has_old:
+                out["languages"] = block
+                placed = True
+            continue
+        if key == "languages" and placed:
+            continue
+        out[key] = value
+        if key == "languages":
+            placed = True
+    if has_old and not placed:
+        out["languages"] = block
+    if has_old:
+        block = out["languages"]
+        block.setdefault("code", "en")
+        for part in ("docs", "public"):
+            sub = block.setdefault(part, {})
+            if isinstance(sub, dict):
+                if "language" in raw:
+                    sub.setdefault("primary", old_language)
+                sub.setdefault("others", [])
+        if "visibleLanguages" in raw:
+            block.setdefault("ui", old_visible)
+        else:
+            block.setdefault("ui", [])
+    out["schemaVersion"] = 2
+    return out
+
+
 # (target schemaVersion, what it changes in one line, function(raw dict) -> raw dict), in order.
 MIGRATIONS = [
     (1, "schemaVersion written (the format is versioned from now on)", _migrate_to_1),
+    (2, "language and visibleLanguages become the languages block (docs.primary, public.primary, ui; code en)",
+     _migrate_to_2),
 ]
 
 
@@ -115,6 +177,31 @@ def git_toplevel(path):
         return Path(out) if out else None
     except (OSError, subprocess.CalledProcessError):
         return None
+
+
+# Where a project keeps its copy of push.sh (D94), relative to its root: the installed copy first, then this repo's
+# source. A hook may run from the plugin cache, whose push.sh would take the cache as its root; so a suggested push
+# command always names the project's own copy.
+PUSH_SCRIPTS = (".claude/gw/scripts/push.sh", "scripts/push.sh")
+
+
+def push_command(root, branch, wip=False):
+    """The shell command that pushes `branch` of the project at `root` (D94): `bash <root>/<copy>/push.sh <branch>`
+    with the project's own push.sh (PUSH_SCRIPTS), shell-quoted; without one, `git push -u origin <branch>`.
+    `wip` (E84) adds `--wip` (a WIP: head pushed without the check); it is None when the project has no push.sh or its
+    copy does not know `--wip` (an older one)."""
+    for rel in PUSH_SCRIPTS:
+        path = os.path.join(str(root), rel)
+        if os.path.isfile(path):
+            if wip:
+                try:
+                    with open(path, encoding="utf-8", errors="replace") as f:
+                        if "--wip" not in f.read():
+                            return None
+                except OSError:
+                    return None
+            return f"bash {shlex.quote(path)} {'--wip ' if wip else ''}{shlex.quote(branch)}"
+    return None if wip else f"git push -u origin {shlex.quote(branch)}"
 
 
 def git_common_dir(root):
@@ -276,6 +363,68 @@ def _section(config, key):
     return {k: given.get(k, prop["default"]) for k, prop in props.items()}
 
 
+def languages(config):
+    """A12: the `languages` block of the config, normalized: {"code": "en", "docs": {"primary", "others"}, "public":
+    {"primary", "others"}, "ui": [...]}, each missing key filled from the schema default (the readers' one accessor;
+    a partial or absent block, or a caller that fell back to `{}`, still gets every key)."""
+    props = _schema()["properties"]["languages"]["properties"]
+    given = config.get("languages") if isinstance(config, dict) else None
+    given = given if isinstance(given, dict) else {}
+    out = {"code": given.get("code", props["code"]["default"])}
+    for part in ("docs", "public"):
+        inner = given.get(part) if isinstance(given.get(part), dict) else {}
+        out[part] = {"primary": inner.get("primary", props[part]["properties"]["primary"]["default"]),
+                     "others": list(inner.get("others", props[part]["properties"]["others"]["default"]))}
+    out["ui"] = list(given.get("ui", props["ui"]["default"]))
+    return out
+
+
+def user_config_path():
+    """A12 (Q-18): the per-user file (not the project config): $GW_USER_CONFIG, else ~/.claude/gw.json."""
+    given = os.environ.get("GW_USER_CONFIG")
+    return Path(given) if given else Path.home() / ".claude" / "gw.json"
+
+
+def agent_language(config):
+    """A12 (Q-18): (code, warning) of the language the agent talks in: the user file's `agentLanguage[<git config
+    user.email of the repo>]` (emails compared trimmed and lowercase), else `languages.docs.primary`. A missing file,
+    entry or email falls back silently; an unreadable file, a bad `agentLanguage` or a code that does not match the
+    schema's language pattern falls back with a one-line warning (never an exception)."""
+    fallback = languages(config)["docs"]["primary"]
+    path = user_config_path()
+    if not path.is_file():
+        return fallback, None
+    fix = '{"agentLanguage": {"<git config user.email>": "<code>"}}'
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("it must be a JSON object")
+        table = data.get("agentLanguage")
+        if "agentLanguage" in data and not isinstance(table, dict):
+            raise ValueError("`agentLanguage` must be an object of {email: language code}")
+    except (OSError, ValueError) as exc:  # JSONDecodeError is a ValueError
+        return fallback, f"{path} is not usable ({exc}); using '{fallback}' (languages.docs.primary); fix it: {fix}"
+    r = subprocess.run(["git", "-C", str(config.get("_root", ".")), "config", "--get", "user.email"],
+                       capture_output=True, text=True)
+    email = r.stdout.strip().lower()
+    if not email:
+        return fallback, None
+    value = {str(k).strip().lower(): v for k, v in (table or {}).items()}.get(email)
+    if value is None:
+        return fallback, None
+    pattern = _schema()["properties"]["languages"]["properties"]["docs"]["properties"]["primary"]["pattern"]
+    if not isinstance(value, str) or not re.fullmatch(pattern, value):
+        return fallback, (f"{path}: agentLanguage for {email} is {value!r}, not a language code matching {pattern}; "
+                          f"using '{fallback}' (languages.docs.primary); fix it: {fix}")
+    return value, None
+
+
+def agent_language_line(config):
+    """A12 (Q-18): (the `Agent language: <code>` line, warning or None) printed at session start and after a compaction."""
+    code, warning = agent_language(config)
+    return f"Agent language: {code}", warning
+
+
 def _bounded_section(config, key):
     """Like `_section`, but a value that is not an integer within the schema's minimum and maximum gives that key's
     default: for the keys a hook reads, a bad value must never hide what the hook shows (the loader rejects it, a caller
@@ -300,9 +449,15 @@ def recover(config):
 
 
 def handoff(config):
-    """The `handoff` key (A13) as a dict (rowLimit, cellLimit, doneItems): the log size rules of handoff.py; an invalid
-    value gives the schema default."""
-    return _bounded_section(config, "handoff")
+    """The `handoff` key (A13) as a dict (rowLimit, cellLimit, cellHardLimit, doneItems, lockWait): the log size rules and the lock wait of
+    handoff.py (cellHardLimit 0 = off, D96); an invalid value gives the schema default. A cellHardLimit the project
+    did not set never sits below its cellLimit: the default hard cap rises to cellLimit, so a project that only raised
+    cellLimit keeps a valid config and a hard cap at or above its warning."""
+    sizes = _bounded_section(config, "handoff")
+    given = config.get("handoff")
+    if not (isinstance(given, dict) and "cellHardLimit" in given) and 0 < sizes["cellHardLimit"] < sizes["cellLimit"]:
+        sizes["cellHardLimit"] = sizes["cellLimit"]
+    return sizes
 
 
 def _int_key(config, key):
@@ -327,10 +482,171 @@ def _string_list_key(config, key):
     return list(prop["default"])
 
 
+def author_deny(config):
+    """E41: the `authorDeny` patterns (an invalid value gives the schema default, the empty list)."""
+    return _string_list_key(config, "authorDeny")
+
+
+def author_denied(patterns, name, email):
+    """E41: the first pattern of `authorDeny` that the identity (name, email) matches, else None. Case-insensitive; a
+    pattern with `@` is a whole email and matches only an equal email; any other pattern is a word or phrase of the
+    name, matched whole (`Claude` hits `Claude`, `claude[bot]` and `Claude Code`, not `Claudette`)."""
+    name, email = (name or "").strip(), (email or "").strip().casefold()
+    for pattern in patterns:
+        wanted = pattern.strip()
+        if not wanted:
+            continue
+        if "@" in wanted:
+            if email == wanted.casefold():
+                return pattern
+        elif re.search(r"(?<!\w)" + re.escape(wanted) + r"(?!\w)", name, re.IGNORECASE):
+            return pattern
+    return None
+
+
+def parse_ident(ident):
+    """`Name <email> 1700000000 +0100` (git var GIT_AUTHOR_IDENT) as (name, email); None when it is not one."""
+    m = re.match(r"^(.*?)\s*<([^>]*)>", ident or "")
+    return (m.group(1), m.group(2)) if m else None
+
+
+def commits_author_check(root, patterns, shas):
+    """E41: (0, "") when no commit of `shas` has an author or committer matching `patterns` (git commit runs the
+    pre-commit; a clean merge, cherry-pick, revert or rebase does not, so the pre-push and CI check what they carry),
+    else (1, the offending commits and the command that rewrites them). Fails closed when git cannot read them."""
+    shas = [s for s in shas if s]
+    if not patterns or not shas:
+        return 0, ""
+    r = subprocess.run(["git", "log", "--no-walk=unsorted", "--format=%H%x00%an%x00%ae%x00%cn%x00%ce", *shas],
+                       cwd=str(root), capture_output=True, text=True)
+    if r.returncode != 0:
+        return 1, f"cannot read the authors of the commits to check authorDeny; fetch and retry: git log {shas[0][:12]}"
+    bad, oldest = [], None
+    for line in r.stdout.splitlines():
+        parts = line.split("\0")
+        if len(parts) != 5:
+            continue
+        sha, an, ae, cn, ce = parts
+        for role, name, email in (("author", an, ae), ("committer", cn, ce)):
+            hit = author_denied(patterns, name, email)
+            if hit:
+                bad.append(f"  {sha[:7]}: {role} {name} <{email}> matches '{hit}'")
+                oldest = sha
+    if not bad:
+        return 0, ""
+    fix = (f"git config user.name '<your name>' && git config user.email '<your email>' && git rebase -r --exec "
+           f"'git commit --amend --no-edit --reset-author' {oldest[:7]}^")
+    return 1, "these commits have an author or committer in authorDeny (.claude/gw.json):\n" + "\n".join(bad) + \
+        f"\nrewrite them as yourself: {fix}"
+
+
+def spike_prefix(config):
+    """C12: the exploration branch prefix of `spikeBranch` ("" = off). One that ends in a letter or digit gets a "/",
+    so `spike` means `spike/` and a branch called `spiked` never counts; `spike-` stays as written."""
+    prefix = str(config.get("spikeBranch", "spike/") or "").strip()
+    if prefix and prefix[-1].isalnum():
+        prefix += "/"
+    return prefix
+
+
+def is_spike_branch(name, prefix):
+    """C12: whether branch `name` (refs/heads/ or a remote's name/ removed by the caller) is an exploration branch: it
+    starts with `prefix` and has a topic after it."""
+    name = (name or "").strip()
+    if name.startswith("refs/heads/"):
+        name = name[len("refs/heads/"):]
+    return bool(prefix) and name.startswith(prefix) and len(name) > len(prefix)
+
+
+SPIKE_TODO = ("turn what it taught into a task record (python3 task.py new <id>) and redo it with tests on a working "
+              "branch, or throw it away (git branch -D <spike branch>)")
+
+
+def spike_marked(body, prefix):
+    """C12: whether a commit message carries the spike mark: a `Spike: <prefix>...` line in its last paragraph (the
+    trailer block, where commit-message.py adds it) or indented by four spaces anywhere (how `git merge --squash`
+    quotes the squashed commits' messages). A body line elsewhere that merely starts with `Spike:` does not count."""
+    p = re.escape(prefix)
+    paragraphs = [part for part in re.split(r"\n[ \t]*\n", body.strip("\n")) if part.strip()]
+    if paragraphs and re.search(rf"^Spike:[ \t]*{p}\S", paragraphs[-1], re.M):
+        return True
+    return bool(re.search(rf"^ {{4}}Spike:[ \t]*{p}\S", body, re.M))
+
+
+def spike_commits(root, prefix, shas):
+    """C12: (0, "") when no commit of `shas` comes from an exploration branch, else (1, the commits and what to do
+    instead). A commit comes from one when its message carries the spike mark (spike_marked) or it is a merge whose
+    subject is git's own for a branch named with the prefix. The shas go on git's stdin (a first push may hold the
+    whole history). Fails closed (1, with the reason) when git cannot read them; off (0) with an empty prefix."""
+    shas = [s for s in shas if s]
+    if not prefix or not shas:
+        return 0, ""
+    retry = f"fetch and retry: git log --no-walk {shas[0][:12]}"
+    try:
+        r = subprocess.run(["git", "log", "--no-walk=unsorted", "--stdin", "--format=%H%x00%P%x00%B%x1e"],
+                           cwd=str(root), input="\n".join(shas) + "\n", capture_output=True, text=True,
+                           encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return 1, f"cannot run git to look for exploration-branch work ({exc}); {retry}"
+    if r.returncode != 0:
+        return 1, f"cannot read the commits to look for exploration-branch work ({r.stderr.strip()[:200]}); {retry}"
+    merge = re.compile(rf"^Merge (?:remote-tracking )?branch(?:es)? '(?:[^'/]+/)?{re.escape(prefix)}[^']+'")
+    bad = []
+    for record in r.stdout.split("\x1e"):
+        parts = record.lstrip("\n").split("\0", 2)
+        if len(parts) != 3:
+            continue
+        sha, parents, body = parts
+        subject = body.strip().splitlines()[0] if body.strip() else ""
+        if spike_marked(body, prefix):
+            bad.append(f"  {sha[:7]} {subject[:72]} (Spike: trailer)")
+        elif len(parents.split()) > 1 and merge.match(subject):
+            bad.append(f"  {sha[:7]} {subject[:72]} (merge of an exploration branch)")
+    if not bad:
+        return 0, ""
+    return 1, (f"these commits come from an exploration branch ({prefix}<topic>, spikeBranch in .claude/gw.json), "
+               f"which never goes into a working branch:\n" + "\n".join(bad) + f"\ninstead: {SPIKE_TODO}")
+
+
+def author_check(root, patterns):
+    """E41: (0, "") when neither the author nor the committer of the commit being made matches `patterns`, else
+    (1, message with the command that fixes it). Fails closed when git cannot tell the identity."""
+    if not patterns:
+        return 0, ""
+    for role in ("AUTHOR", "COMMITTER"):
+        r = subprocess.run(["git", "var", f"GIT_{role}_IDENT"], cwd=str(root), capture_output=True, text=True)
+        ident = parse_ident(r.stdout.strip()) if r.returncode == 0 else None
+        if ident is None:
+            return 1, (f"cannot read the commit's {role.lower()} (git var GIT_{role}_IDENT failed), so authorDeny cannot "
+                       f"be checked; set your identity: git config user.name '<name>' && git config user.email '<email>'")
+        hit = author_denied(patterns, *ident)
+        if hit:
+            who = f"{ident[0]} <{ident[1]}>"
+            fix = ("git config user.name '<your name>' && git config user.email '<your email>'"
+                   + (" (and unset GIT_{0}_NAME/GIT_{0}_EMAIL if set)".format(role)))
+            amend = " For --amend, also: git commit --amend --reset-author." if role == "AUTHOR" else ""
+            return 1, (f"the commit's {role.lower()} {who} matches '{hit}' in authorDeny (.claude/gw.json); commit as "
+                       f"yourself: {fix}.{amend}")
+    return 0, ""
+
+
 def harvest(config):
     """The `harvest` key (A13) as a dict (ideaChars, commitsShown): the sizes harvest.py prints; an invalid value gives
     the schema default."""
     return _bounded_section(config, "harvest")
+
+
+def front(config):
+    """E5: the `front` block normalized ({"tokens", "out", "breakpointGroup", "mainBreakpoints", "browsers":
+    {"all", "main"}}), every missing inner key filled from the schema default (front.py's one accessor)."""
+    out = _section(config, "front")
+    for key in ("browsers", "stylelint"):
+        props = _schema()["properties"]["front"]["properties"][key]["properties"]
+        given = out[key] if isinstance(out[key], dict) else {}
+        out[key] = {k: (list(given.get(k, prop["default"])) if isinstance(prop["default"], list)
+                        else given.get(k, prop["default"])) for k, prop in props.items()}
+    out["mainBreakpoints"] = list(out["mainBreakpoints"])
+    return out
 
 
 def commit_types(config):
@@ -369,6 +685,16 @@ def ci_step_timeout(config):
     return _schema()["properties"]["ciStepTimeout"]["default"]
 
 
+def test_unit_timeout(config):
+    """The `testUnitTimeout` key (B42): seconds a test unit of tests-for.py --run may take (0 = no limit). A bad value
+    raises ConfigError (fails closed, as testJobs does), never a silent default."""
+    given = config.get("testUnitTimeout", schema_default("testUnitTimeout"))
+    if not isinstance(given, int) or isinstance(given, bool) or given < 0:
+        raise ConfigError(f"testUnitTimeout must be an integer >= 0 (seconds; 0 = no limit), got {given!r}; "
+                          "fix .claude/gw.json")
+    return given
+
+
 def ci_system_commands(config):
     """The `ciSystemCommands` key (A13): the commands whose steps ci-local.py leaves out as system-package installs
     (an empty list leaves none out)."""
@@ -394,6 +720,20 @@ def stale_refs_paths(config):
     return _string_list_key(config, "staleRefsPaths")
 
 
+def gitignore_stacks(config):
+    """The `gitignoreStacks` key (D127): the stacks apply.py --init writes a .gitignore block for, [] = detect them.
+    Fails closed on anything but a list of known stack names, with the command that fixes it."""
+    prop = _schema()["properties"]["gitignoreStacks"]
+    known = prop["items"]["enum"]
+    given = config.get("gitignoreStacks", prop["default"])
+    if (not isinstance(given, list) or not all(isinstance(x, str) and x in known for x in given)
+            or len(set(given)) != len(given)):
+        raise ConfigError(f"gitignoreStacks must be a list of different stacks among {', '.join(known)}, got "
+                          f"{given!r}; fix it in {CONFIG_REL} (e.g. [\"python\"]) and validate: "
+                          f"python3 scripts/config.py validate")
+    return list(given)
+
+
 def instruction_lines(config):
     """The `instructionLines` key as (warn, fail): the line limits of AGENTS.md/CLAUDE.md."""
     limits = _section(config, "instructionLines")
@@ -407,8 +747,45 @@ def doctor_test_dirs_ignore(config):
 
 def context_guard(config):
     """The `contextGuard` key as a dict (cutoff, window, autocompactShare, warn, alarm,
-    charsPerToken, bigWindow)."""
+    charsPerToken, bigWindow, systemAdvice, nearRatio, warnedMax, clearAfterTask)."""
     return _section(config, "contextGuard")
+
+
+def questions_path(config):
+    """The `questions.path` key (C1): repo-relative path of the questions file, `docs/questions.md` by default."""
+    return _section(config, "questions")["path"]
+
+
+def modes(config):
+    """The `modes` key as a dict (careful, questions, carefulExempt, carefulWorktrees) (C8, C6): on/off switches of the workflow's opt-out hooks."""
+    return _section(config, "modes")
+
+
+def task_record(config):
+    """The `taskRecord` key as a dict (enabled, path, requiredFor, sections, logSections, pendingMarker) (C11)."""
+    out = _section(config, "taskRecord")
+    out["path"] = posixpath.normpath(out["path"].strip()).strip("/") or "."  # ./docs/tasks, docs//tasks/ -> docs/tasks
+    return out
+
+
+def scope_guard(config):
+    """The `scopeGuard` key (C13) as a dict: `mode` as written (off, warn, block or auto), `skipStamps` and `skipVendored`
+    (B44) and `effective`, the mode the guard applies (auto = block when modes.questions is restrictive, else warn)."""
+    out = _section(config, "scopeGuard")
+    mode = out["mode"]
+    out["effective"] = ("block" if modes(config)["questions"] else "warn") if mode == "auto" else mode
+    return out
+
+
+def given_keys(root, key):
+    """The inner keys the project's .claude/gw.json itself writes under the object key `key` (not the defaults the
+    loader fills), as a set; empty when the file, the key or the JSON is missing (B31: is the window known?)."""
+    try:
+        data = json.loads((Path(root) / CONFIG_REL).read_text(encoding="utf-8"))
+        section = data.get(key) if isinstance(data, dict) else None
+        return set(section) if isinstance(section, dict) else set()
+    except (OSError, ValueError, TypeError):
+        return set()
 
 
 def metrics(config):
@@ -446,6 +823,41 @@ def test_scan_skip_dirs(config):
     return list(_schema()["properties"]["testScanSkipDirs"]["default"])
 
 
+WORKFLOW_NAME = "galivelop-workflow"  # the `name` of the workflow's own .claude-plugin/plugin.json
+
+
+def plugin_field(cand, field):
+    """A field of `<cand>/.claude-plugin/plugin.json`, or None when it is unreadable or not an object."""
+    try:
+        data = json.loads((Path(cand) / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data.get(field) if isinstance(data, dict) else None
+
+
+def is_workflow(cand):
+    """A folder is the workflow repo only when it has the workflow layout and its plugin.json names the workflow (a
+    project that vendors the scripts has scripts/apply.py and skills/ too, and must not be taken for the workflow)."""
+    return (bool(cand) and (Path(cand) / "scripts" / "apply.py").is_file() and (Path(cand) / "skills").is_dir()
+            and plugin_field(cand, "name") == WORKFLOW_NAME)
+
+
+def workflow_clone(config):
+    """The `workflowClone` key (D132): where a project looks for its workflow clone (relative to the repo root)."""
+    given = config.get("workflowClone")
+    if isinstance(given, str) and given:
+        return given
+    return _schema()["properties"]["workflowClone"]["default"]
+
+
+def workflow_repository(config):
+    """The `workflowRepository` key (D132): the URL review-scope.py tells to clone when it finds no workflow copy."""
+    given = config.get("workflowRepository")
+    if isinstance(given, str) and given:
+        return given
+    return _schema()["properties"]["workflowRepository"]["default"]
+
+
 def review_trivial_lines(config):
     """The `reviewTrivialLines` key (B27): the changed lines at or under which a phase 1 diff is trivial; the schema
     default when absent or not a non-negative integer."""
@@ -453,6 +865,26 @@ def review_trivial_lines(config):
     if isinstance(given, int) and not isinstance(given, bool) and given >= 0:
         return given
     return _schema()["properties"]["reviewTrivialLines"]["default"]
+
+
+def review_split_lines(config):
+    """The `review.splitLines` key (E86): the changed lines above which the phase 1 review is dealt to several
+    reviewers (0 = never split); the schema default when the block or the value is absent or invalid."""
+    default = _schema()["properties"]["review"]["properties"]["splitLines"]["default"]
+    block = config.get("review")
+    given = block.get("splitLines") if isinstance(block, dict) else None
+    if isinstance(given, int) and not isinstance(given, bool) and given >= 0:
+        return given
+    return default
+
+
+def scout_settings(config):
+    """(`scoutDir`, `scoutMaxAgeDays`) of the config (D80): each the schema default when absent or invalid."""
+    prop = _schema()["properties"]["scoutDir"]
+    folder = config.get("scoutDir")
+    if not (isinstance(folder, str) and re.fullmatch(prop["pattern"], folder)):
+        folder = prop["default"]
+    return folder, _int_key(config, "scoutMaxAgeDays")
 
 
 def test_map(config):
@@ -505,6 +937,15 @@ def whole_read_warn_bytes(config):
     if isinstance(given, int) and not isinstance(given, bool) and given >= 0:
         return given
     return _schema()["properties"]["wholeReadWarnBytes"]["default"]
+
+
+def whole_read_short_lines(config):
+    """The `wholeReadShortLines` key (E85): lines above which a Bash range read of the log or a roadmap file warns
+    (0 = every range), the schema default when absent or invalid."""
+    given = config.get("wholeReadShortLines")
+    if isinstance(given, int) and not isinstance(given, bool) and given >= 0:
+        return given
+    return _schema()["properties"]["wholeReadShortLines"]["default"]
 
 
 def hook_stdin_wait(root=None):
@@ -587,6 +1028,29 @@ def log_archive(config):
     return given if isinstance(given, str) and given else schema["properties"]["logArchive"]["default"]
 
 
+def pending_file(config):
+    """The `pendingFile` key (D104): repo-relative path of the file that holds the log's Pending items, or "" when the
+    key is absent or empty (the items stay in the log, as before)."""
+    given = config.get("pendingFile")
+    return given if isinstance(given, str) else ""
+
+
+def agents_skills_dir(config):
+    """The `agentsSkillsDir` key (D7): repo-relative folder where apply.py also copies the skills (opencode, Codex),
+    the schema default when absent, "" when empty (off)."""
+    given = config.get("agentsSkillsDir")
+    if isinstance(given, str):
+        return given
+    schema = json.loads(schema_path().read_text(encoding="utf-8"))
+    return schema["properties"]["agentsSkillsDir"]["default"]
+
+
+def decisions_file(config):
+    """The `decisionsFile` key (D95): repo-relative path of the file with the Decisions section, or "" (the log)."""
+    given = config.get("decisionsFile")
+    return given if isinstance(given, str) else ""
+
+
 # What Python re and grep -E do not share (A13): shorthand classes and word boundaries, extension groups, POSIX classes,
 # backreferences. agentSignaturePatterns reach both engines, so they are limited to the common subset.
 SHARED_REGEX_UNSAFE = re.compile(r"\\[dDsSwWbBAZz<>`'1-9]|\(\?|\[\[:|\[\^?\[:")
@@ -595,13 +1059,49 @@ SHARED_REGEX_UNSAFE = re.compile(r"\\[dDsSwWbBAZz<>`'1-9]|\(\?|\[\[:|\[\^?\[:")
 def semantic_errors(config):
     """Problems the schema subset cannot express: a relatedTests `paths`, testMap `paths`/`contains` or changeSize
     `exclude`/`pairs`, fullCheckPaths, agentModelShapes or agentSignaturePatterns entry that is not a valid regex (or a pair replacement that does not fit its
-    regex), an agentMap prefix that is not one folder name, an instructionLines `warn` above its `fail`, an
+    regex), an agentMap prefix that is not one folder name, an instructionLines `warn` above its `fail`, a handoff `cellHardLimit` set by the project (not 0) below its `cellLimit`, an
     ownedFiles pattern that is absolute or has a `..`."""
     errors = []
+    people = (config.get("profiles") or {}).get("people") if isinstance(config.get("profiles"), dict) else None
+    for key, person in (people or {}).items() if isinstance(people, dict) else ():
+        if not EMAIL_HASH.match(key):
+            errors.append(f"$.profiles.people: key {key[:3]}... is not the SHA-256 of an e-mail (64 hex digits); never "
+                          f"write the address: python3 {HERE / 'profile.py'} assign <email> --role <role> writes the hash")
+        elif isinstance(person, dict) and not (person.get("role") or person.get("profile")):
+            errors.append(f"$.profiles.people.{key[:12]}...: needs a role or a profile; assign one: "
+                          f"python3 {HERE / 'profile.py'} assign <email> (--role <role> | --profile <name>)")
     warn, fail = instruction_lines(config)
     if warn > fail:
         errors.append(f"$.instructionLines: warn ({warn}) must not be above fail ({fail}); lower warn or raise fail "
                       "in .claude/gw.json")
+    record_path = task_record(config)["path"] if isinstance(config.get("taskRecord"), dict) else ""
+    raw_path = (config.get("taskRecord") or {}).get("path") if isinstance(config.get("taskRecord"), dict) else None
+    if isinstance(raw_path, str) and (raw_path.startswith("/") or ".." in posixpath.normpath(raw_path).split("/") or record_path == "."):
+        errors.append(f"$.taskRecord.path: {raw_path!r} must be a folder inside the repo, relative to its root; "
+                      "write it like \"docs/tasks\" in .claude/gw.json")
+    sizes = handoff(config)  # only a cellHardLimit set by the project can be below cellLimit (handoff() raises the default)
+    if 0 < sizes["cellHardLimit"] < sizes["cellLimit"]:
+        errors.append(f"$.handoff: cellHardLimit ({sizes['cellHardLimit']}) must not be below cellLimit "
+                      f"({sizes['cellLimit']}): the hard cap would fail cells the soft limit still accepts; raise "
+                      "cellHardLimit, lower cellLimit, or set cellHardLimit to 0 (off) in .claude/gw.json")
+    block = config.get("languages") if isinstance(config.get("languages"), dict) else {}
+    for part in ("docs", "public"):
+        inner = block.get(part) if isinstance(block.get(part), dict) else {}
+        primary = inner.get("primary", "en")
+        if isinstance(primary, str) and isinstance(inner.get("others"), list) and primary in inner["others"]:
+            errors.append(f"$.languages.{part}.others: {primary!r} is already languages.{part}.primary; remove it from "
+                          f"`others` in .claude/gw.json")
+    agents_dir = config.get("agentsSkillsDir")
+    if isinstance(agents_dir, str) and agents_dir:
+        norm = posixpath.normpath(agents_dir.replace("\\", "/")).strip("/")
+        reason = None
+        if "\\" in agents_dir or re.match(r"^[A-Za-z]:", agents_dir):
+            reason = "must be a repo-relative path with '/' separators, no backslash or drive letter"
+        elif any(norm == d or norm.startswith(d + "/") for d in (".claude/skills", ".git", ".claude/gw")):
+            reason = "must not be .claude/skills (the first copy), nor inside .git or .claude/gw"
+        if reason:
+            errors.append(f"$.agentsSkillsDir: {agents_dir!r} {reason}; use \".agents/skills\" or another folder, or "
+                          "\"\" to turn it off, in .claude/gw.json")
     agent_map = config.get("agentMap")
     if isinstance(agent_map, dict) and isinstance(agent_map.get("prefixes"), dict):
         for short in agent_map["prefixes"]:
@@ -835,13 +1335,135 @@ def _commit(root, rev):
     return r.stdout.strip() if r.returncode == 0 else ""
 
 
-def load(root=None, rev=None, paths_at=None):
+PROFILE_DENIED = ("$schema", "version", "schemaVersion", "profiles", "languages", "agentsSkillsDir", "projectSkillPrefix",
+                  "gitignoreStacks", "ciInstall", "ciPython", "ciNodeDirs", "ciRustDirs", "ciKeepSteps", "ciOnPush",
+                  "actionlintVersion", "front")
+PROFILE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+EMAIL_HASH = re.compile(r"^[0-9a-f]{64}$")
+EMAIL_ADDRESS = re.compile(r"^[^@\s]+@[^@\s]+$")  # E4: what profile.py accepts as an address to hash
+# E4 (Q-27): an address inside free text (doctor.py): a TLD of letters that ends the word, so `prettier@3.0.0` and
+# `git@github.com:org/repo` (npm specs, scp-style remotes) are not taken for addresses.
+EMAIL_IN_TEXT = re.compile(r'[^@\s"]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}(?![A-Za-z0-9:/@-])')
+PROFILE_OBJECT_MSG = "must be a JSON object with the keys it changes, e.g. {\"logSize\": 5000}"
+
+
+def profile_shape_problems(data, props):
+    """The problems of a profile's content before it is merged (one list for apply_profiles and doctor.py): not an
+    object, a key the schema (`props`) does not know, or a denied one (PROFILE_DENIED)."""
+    if not isinstance(data, dict):
+        return [PROFILE_OBJECT_MSG]
+    problems = [f"$: unknown key '{k}' (check spelling against schema/gw.schema.json)" for k in data if k not in props]
+    problems += [f"$.{k}: a profile cannot change what is installed or the config's shape (it is committed for "
+                 f"everyone); change it in {CONFIG_REL} instead" for k in data if k in PROFILE_DENIED]
+    return problems
+
+
+def email_hash(email):
+    """E4 (Q-27): the SHA-256 (hex) of an e-mail address, trimmed and in lower case: what `profiles.people` keys."""
+    return hashlib.sha256(email.strip().lower().encode("utf-8")).hexdigest()
+
+
+def in_ci():
+    """Whether this runs in CI (the CI environment variable set and not false/0): CI always uses the default (Q-28)."""
+    return os.environ.get("CI", "").strip().lower() not in ("", "0", "false")
+
+
+def git_email(root):
+    """The `git config user.email` of `root` ("" when unset or git fails)."""
+    env = {k: v for k, v in os.environ.items() if k not in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")}
+    try:
+        r = subprocess.run(["git", "-C", str(root), "config", "user.email"], capture_output=True, text=True, env=env)
+    except OSError:
+        return ""
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def deep_merge(base, over):
+    """`base` with `over` on top: objects merge key by key (deep), anything else (lists too) is replaced."""
+    out = dict(base)
+    for key, value in over.items():
+        out[key] = deep_merge(out[key], value) if isinstance(out.get(key), dict) and isinstance(value, dict) else value
+    return out
+
+
+def _read_profile(root, rev, rel):
+    """The text of the profile file `rel` in the working tree, or in commit `rev`; None when it is not there."""
+    if not rev:
+        path = Path(root) / rel
+        return path.read_text(encoding="utf-8") if path.is_file() else None
+    env = {k: v for k, v in os.environ.items() if k not in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")}
+    try:
+        r = subprocess.run(["git", "-C", str(root), "show", f"{rev}:{rel}"], capture_output=True, text=True, env=env)
+    except OSError as exc:
+        raise ConfigError(f"cannot run git to read {rel} at {rev}: {exc}")
+    return r.stdout if r.returncode == 0 else None
+
+
+def choose_profile(config, email):
+    """The profiles that apply to `email` under the config's `profiles` block, as {"layer": "default" | "role" |
+    "person", "profile": name or None, "role"?: role, "roleProfile"?: name}, plus "_chain": [names] (role first)."""
+    block = config.get("profiles") if isinstance(config.get("profiles"), dict) else {}
+    person = (block.get("people") or {}).get(email_hash(email)) if email else None
+    if not person:
+        return {"layer": "default", "profile": None, "_chain": []}
+    role = person.get("role")
+    chain, out = [], {}
+    if role:
+        roles = block.get("roles") or {}
+        if role not in roles:
+            raise ConfigError(f"profiles: role '{role}' is assigned but has no profile in profiles.roles; give it one: "
+                              f"python3 {HERE / 'profile.py'} role {role} <profile>")
+        chain.append(roles[role])
+        out.update(role=role, roleProfile=roles[role], layer="role", profile=roles[role])
+    if person.get("profile"):
+        chain.append(person["profile"])
+        out.update(layer="person", profile=person["profile"])
+    if out.get("layer") == "role":
+        del out["roleProfile"]
+    out["_chain"] = chain
+    return out
+
+
+def apply_profiles(config, root, rev, schema, email=None, force=False):
+    """E4: `config` (raw, already valid) with the profiles of the person (git user.email, or `email`) layered on top,
+    each validated; and the choice (choose_profile, for `config.py profile`). CI and no assignment: the config as it
+    is. `force` skips the CI and no-assignment shortcuts (profile.py checks a profile chain with it). Raises ConfigError
+    (fail closed) for a missing, broken or invalid profile or one naming a denied key."""
+    if not force and (in_ci() or not (config.get("profiles") or {}).get("people")):
+        return config, {"layer": "default", "profile": None}
+    choice = choose_profile(config, git_email(root) if email is None else email)
+    folder = (config.get("profiles") or {}).get("dir") or schema["properties"]["profiles"]["default"]["dir"]
+    props = schema.get("properties", {})
+    for name in choice.pop("_chain"):
+        rel = posixpath.join(folder.rstrip("/"), f"{name}.json")
+        where = f"{rev}:{rel}" if rev else rel
+        text = _read_profile(root, rev, rel)
+        if text is None:
+            raise ConfigError(f"profile '{name}' ({where}) not found; create it: python3 {HERE / 'profile.py'} new {name}")
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ConfigError(f"{where}: invalid JSON at line {exc.lineno}: {exc.msg}")
+        if not isinstance(data, dict):
+            raise ConfigError(f"{where}: {PROFILE_OBJECT_MSG}")
+        problems = profile_shape_problems(data, props)
+        merged = deep_merge(config, data) if not problems else config
+        problems = problems or validate(merged, schema) or semantic_errors(merged)
+        if problems:
+            raise ConfigError(f"{where} is invalid:\n  " + "\n  ".join(problems) +
+                              f"\n  fix the profile, then check: python3 {HERE / 'config.py'} profile")
+        config = merged
+    return config, choice
+
+
+def load(root=None, rev=None, paths_at=None, profiles=True):
     """Return the validated config with defaults, plus '_root' (Path) and '_schemaFrom' (the schemaVersion it had
     before load() migrated it in memory to SCHEMA_VERSION; an absent one is 0, a newer one fails closed). With `rev`,
     the config as that commit has it instead of the working tree's. `paths_at` (a commit) is where the old-Spanish-path fallback looks for files: a
     policy config read from the protected branch's tip still resolves the paths of the commit being pushed or
     merged, so every reader gets the same path for the same commit; an old path the tip names explicitly follows
-    that commit's move to the English default (with_defaults, follow_moves). Raises ConfigError."""
+    that commit's move to the English default (with_defaults, follow_moves). `profiles=False` skips the profile layers
+    (E4: profile.py loads the project's config alone, so its commands can fix a broken profile). Raises ConfigError."""
     root = find_root(root)
     path = root / CONFIG_REL
     if rev:
@@ -863,7 +1485,14 @@ def load(root=None, rev=None, paths_at=None):
     schema = json.loads(schema_path().read_text(encoding="utf-8"))
     errors = validate(config, schema) or semantic_errors(config)
     if errors:
-        raise ConfigError(f"{path} is invalid:\n  " + "\n  ".join(errors))
+        hint = ""
+        if any(e.startswith("$.languages") and "does not match" in e for e in errors):
+            hint = ("\n  languages: write two-letter lowercase ISO 639-1 codes (\"es\", \"en\"; `ui` also takes tags like "
+                    "\"pt-BR\") in .claude/gw.json, e.g. "
+                    "{\"code\": \"en\", \"docs\": {\"primary\": \"es\", \"others\": [\"en\"]}, \"public\": {\"primary\": "
+                    "\"en\", \"others\": []}, \"ui\": []}, then validate: python3 " + str(HERE / "config.py") + f" --root {root} validate")
+        raise ConfigError(f"{path} is invalid:\n  " + "\n  ".join(errors) + hint)
+    config, choice = apply_profiles(config, root, rev, schema) if profiles else (config, {"layer": "default", "profile": None})
     if paths_at:
         env = {k: v for k, v in os.environ.items() if k not in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")}
         try:
@@ -879,6 +1508,7 @@ def load(root=None, rev=None, paths_at=None):
     config = with_defaults(config, schema, path_exists_fn(root, paths_at or rev), follow_moves=follow)
     config["_root"] = root
     config["_schemaFrom"] = schema_from  # the schemaVersion on disk (or at `rev`) before the in-memory migration
+    config["_profile"] = choice  # E4: the layer and profile applied (config.py profile)
     return config
 
 
@@ -1065,6 +1695,8 @@ def main(argv=None):
                                                "fallback when the config cannot be read")
     default_p.add_argument("key")
     sub.add_parser("root")
+    sub.add_parser("agent-language", help="the agent's language for this user (~/.claude/gw.json, A12); a warning goes to stderr")
+    sub.add_parser("profile", help="E4: the layer (default, role or person) and profile the config was loaded with, as JSON")
     sub.add_parser("local", help="the validated local file .claude/gw.local.json as JSON (null when absent)")
     related = sub.add_parser("related", help="relatedTests commands that apply to the files on stdin")
     related.add_argument("--kind", choices=("fast", "slow"), required=True)
@@ -1072,6 +1704,13 @@ def main(argv=None):
     scope_p = sub.add_parser("push-scope", help="'full <reason>' or 'related' for a branch push changing the files on stdin")
     scope_p.add_argument("--commits", help="file listing the push's new commits, one sha per line: a .claude/gw.json "
                                            "change then counts only by its keys (fullCheckSkipKeys, E47)")
+    ac = sub.add_parser("author-check", help="exit 1 when the commit's author or committer matches authorDeny (E41)")
+    ac.add_argument("--commits", help="'-': check the commits on stdin (one sha per line) instead of the next commit")
+    sb = sub.add_parser("spike-branch", help="exit 0 when the branch is an exploration branch (spikeBranch, C12)")
+    sb.add_argument("name", nargs="?", default="")
+    sb.add_argument("--prefix", action="store_true", help="print the prefix as it is applied ('' = off) and exit 0")
+    sc = sub.add_parser("spike-check", help="exit 1 when a commit on stdin comes from an exploration branch (C12)")
+    sc.add_argument("--commits", required=True, help="'-': the commits on stdin, one sha per line")
     get = sub.add_parser("get")
     get.add_argument("key", help="top-level key, or dotted (relatedTests.fast)")
     get.add_argument("--json", action="store_true")
@@ -1087,6 +1726,11 @@ def main(argv=None):
     try:
         config = load(args.root, args.rev, args.paths_at)
     except ConfigError as exc:
+        if args.command == "agent-language":  # an unusable project config still gets the user file's language, else en
+            code, warning = agent_language({"_root": args.root or "."})
+            print(f"gw config: {exc}", file=sys.stderr)
+            print(code)
+            return 0
         print(f"gw config: {exc}", file=sys.stderr)
         return 2
     if args.command == "validate":
@@ -1095,6 +1739,15 @@ def main(argv=None):
     if args.command == "root":
         print(config["_root"])
         return 0
+    if args.command == "agent-language":
+        code, warning = agent_language(config)
+        if warning:
+            print(f"gw config: {warning}", file=sys.stderr)
+        print(code)
+        return 0
+    if args.command == "profile":
+        print(json.dumps(config["_profile"], ensure_ascii=False))
+        return 0
     if args.command == "local":
         try:
             print(json.dumps(load_local(config["_root"]), ensure_ascii=False))
@@ -1102,6 +1755,28 @@ def main(argv=None):
             print(f"gw config: {exc}", file=sys.stderr)
             return 2
         return 0
+    if args.command == "author-check":
+        if args.commits:
+            shas = [line.strip() for line in sys.stdin.read().splitlines() if line.strip()]
+            code, message = commits_author_check(config["_root"], author_deny(config), shas)
+            if message:
+                print(f"author-check: {message}", file=sys.stderr)
+            return code
+        code, message = author_check(config["_root"], author_deny(config))
+        if message:
+            print(f"pre-commit: {message}", file=sys.stderr)
+        return code
+    if args.command == "spike-branch" and args.prefix:
+        print(spike_prefix(config))
+        return 0
+    if args.command == "spike-branch":
+        return 0 if is_spike_branch(args.name, spike_prefix(config)) else 1
+    if args.command == "spike-check":
+        shas = [line.strip() for line in sys.stdin.read().splitlines() if line.strip()]
+        code, message = spike_commits(config["_root"], spike_prefix(config), shas)
+        if message:
+            print(f"spike-check: {message}", file=sys.stderr)
+        return code
     if args.command == "related":
         files = [line for line in sys.stdin.read().splitlines() if line]
         deleted = []
@@ -1123,10 +1798,12 @@ def main(argv=None):
         print(f"{scope} {reason}" if reason else scope)
         return 0
     value = dict(config, metrics=metrics(config), models=models(config), measure=measure(config), mediaContent=media_content(config),
+                 selector=_section(config, "selector"),
                  recover=recover(config), handoff=handoff(config), harvest=harvest(config),
-                 contextGuard=context_guard(config),
+                 contextGuard=context_guard(config), modes=modes(config),
                  stopSeverity=stop_severity(config), changeSize=change_size(config),
-                 retro=retro(config), redWithoutFix=red_without_fix(config), branchPrefixes=branch_prefixes(config))  # inner keys fill from the schema too
+                 retro=retro(config), redWithoutFix=red_without_fix(config), branchPrefixes=branch_prefixes(config),
+                 taskRecord=task_record(config), languages=languages(config))  # inner keys fill from the schema too
     for part in args.key.split("."):
         if not isinstance(value, dict) or part not in value or part.startswith("_"):
             print(f"gw config: key '{args.key}' is not set and has no default", file=sys.stderr)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.6.0
+# galivelop-workflow v0.9.0
 """Size of a commit and of a review block, in changed lines, with a warning above `changeSize` (D43).
 
   python3 change-size.py              # warnings for the staged change and for the open block (staged included)
@@ -13,8 +13,8 @@ generated (`linguist-generated` in .gitattributes) and, of a paired document who
 
 The commit is what is staged. The block is the review unit of a long branch (B18): the commits of the branch (not
 merges, not in `origin/<protectedBranch>`, or the local branch without a remote) after the newest one carrying the
-`metrics.quality.findingsTrailer` trailer (`Findings:`, which the fix commit of a block review carries; `Findings: 0`
-when the review found nothing), plus the staged change. It is the sum of each commit's count, so a line changed twice counts
+`metrics.quality.findingsTrailer` trailer (`Findings:`, which the fix commit of a block review carries, a merge
+included (D141); `Findings: 0` when the review found nothing), plus the staged change. It is the sum of each commit's count, so a line changed twice counts
 twice: an upper bound of the review's diff. On the protected branch, or without it, there is no block (a note says so
 for the latter).
 
@@ -131,17 +131,23 @@ def block(root, cfg, settings, base):
         stop = ["^" + ref]
         where = f"since the branch left {ref.split('/', 2)[-1]}"
     key = config.metrics(cfg)["quality"]["findingsTrailer"]
-    out = git(root, "log", "-z", "--no-merges", "--numstat", "--no-renames",
-              f"--format=%x01%H %(trailers:key={key},valueonly,separator=%x2C)", "HEAD", *stop)
+    # Merges are read too (D141): the fix branch of a review is often merged with the trailer on the merge commit.
+    # A merge only ends the block; git log shows no numstat for it, and it is not counted as a commit of the block.
+    out = git(root, "log", "-z", "--numstat", "--no-renames",
+              f"--format=%x01%H %P%x02%(trailers:key={key},valueonly,separator=%x2C)", "HEAD", *stop)
     commits = []  # newest first: [sha, {path: lines}]
+    merge = False
     for token in out.split("\0"):
         if token.startswith("\x01"):
-            sha, _, trailer = token[1:].partition(" ")
+            head, _, trailer = token[1:].partition("\x02")
+            sha, _, parents = head.partition(" ")
             if trailer.strip() and base is None:
                 where = f"after {sha[:12]} (last commit with a {key}: trailer)"
                 break
-            commits.append((sha, {}))
-        elif commits:
+            merge = len(parents.split()) > 1
+            if not merge:
+                commits.append((sha, {}))
+        elif commits and not merge:
             commits[-1][1].update(numstat_entries([token]))
     paths = sorted({p for _, files in commits for p in files})
     skip = generated(root, paths, cached=False)

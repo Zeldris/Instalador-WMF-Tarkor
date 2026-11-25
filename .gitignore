@@ -1,9 +1,13 @@
-# De `.claude/` solo se versionan las skills, los ganchos, `settings.json` y el flujo (`gw.json`, `gw/`) (QA-112 de Tarkor).
+# De `.claude/` solo se versionan las skills, los ganchos, `settings.json`, los agentes del flujo y el flujo (`gw.json`, `gw/`) (QA-112 de Tarkor).
 .claude/*
 !.claude/settings.json
 !.claude/skills/
 !.claude/gw.json
 !.claude/gw/
+!.claude/agents/
+.claude/agents/*
+!.claude/agents/gw-worker.md
+!.claude/agents/gw-reviewer.md
 __pycache__/
 # galivelop-workflow: private, never committed
 .claude/gw.local.json

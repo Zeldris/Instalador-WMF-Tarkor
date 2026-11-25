@@ -6,6 +6,7 @@ import datetime as dt
 import itertools
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -22,6 +23,19 @@ def folder() -> str:
     path = tempfile.mkdtemp(prefix='opt-tokens-test-')
     atexit.register(shutil.rmtree, path, True)
     return path
+
+
+def copy_config_file(rel: str, repo: str) -> None:
+    """D145: copy `scripts/config.py` or `schema/gw.schema.json` into a test repo, from the workflow repo root or, with
+    the workflow installed in a project, from `.claude/gw/`."""
+    top = os.path.join(HERE, '..', '..', '..')  # the workflow repo root, or .claude/ or .agents/ in an installed project
+    project = os.path.join(top, '..')  # the project root, for the copy in .agents/skills/ (agentsSkillsDir)
+    for src in (os.path.join(top, rel), os.path.join(top, 'gw', rel), os.path.join(project, '.claude', 'gw', rel)):
+        if os.path.isfile(src):
+            os.makedirs(os.path.dirname(os.path.join(repo, rel)), exist_ok=True)
+            shutil.copy(src, os.path.join(repo, rel))
+            return
+    raise FileNotFoundError(f'{rel} not found at the workflow root nor in .claude/gw/')
 
 
 def write(path: str, text: str) -> None:
@@ -86,14 +100,6 @@ def ago(hours: float) -> str:
     return (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=hours)).isoformat().replace('+00:00', 'Z')
 
 
-def workflow_file(rel):
-    """`rel` of the workflow: in its own repo (`scripts/`, `schema/`) or copied into a project (`.claude/gw/`)."""
-    for root in (os.path.join(HERE, '..', '..', '..'), os.path.join(HERE, '..', '..', '..', 'gw')):
-        if os.path.isfile(os.path.join(root, rel)):
-            return os.path.join(root, rel)
-    return os.path.join(HERE, '..', '..', '..', rel)
-
-
 class Measure(unittest.TestCase):
     def measure(self, parts: list, subagents: dict | None = None, hours: str = '0', extra: tuple = ()) -> str:
         d = folder()
@@ -144,7 +150,15 @@ class Measure(unittest.TestCase):
             # The scripts that run are not read; what the command they launch reads, is.
             response('m5', 100, call('t5', 'bash tools/host.sh grep -n x docs/y.md && ./tools/z.sh && python3 -I a/b.py')),
             result('t5', 'x' * 350),
-            response('m6', 100))
+            # `git config` keys and an e-mail domain are not files; what the command reads after them is.
+            response('m6', 100, call('t6', 'git config user.email me@example.com && cat docs/z.md')),
+            result('t6', 'x' * 350),
+            # It stops at a new line or a quote, and a path after `@` is still read (review of the 0.7.0).
+            response('m7', 100, call('t7', 'git config user.name Z\ncat docs/w.md')),
+            result('t7', 'x' * 350),
+            response('m8', 100, call('t8', 'grep -rn "git config user" docs/v.md && curl -d @docs/u.json')),
+            result('t8', 'x' * 350),
+            response('m9', 100))
         r = subprocess.run(['python3', MEASURE, '--session', path, '--hours', '0'], capture_output=True, text=True, cwd=root)
         self.assertEqual(r.returncode, 0, r.stderr)
         out = r.stdout
@@ -154,6 +168,11 @@ class Measure(unittest.TestCase):
         by_file = out.split('BY FILE')[1]
         self.assertNotIn('docs/x.md', by_file)
         self.assertRegex(by_file, r'docs/y.md\s+1x')
+        self.assertRegex(by_file, r'docs/z.md\s+1x')
+        for name in ('docs/w.md', 'docs/v.md', 'docs/u.json'):
+            self.assertRegex(by_file, name + r'\s+1x')
+        for name in ('user.email', 'example.com'):
+            self.assertNotIn(name, by_file)
         for script in ('host.sh', 'z.sh', 'b.py'):
             self.assertNotIn(script, by_file)
 
@@ -312,6 +331,159 @@ class Measure(unittest.TestCase):
         self.assertIn('No calls in that period', none.stderr)
         self.assertTrue(os.path.exists(new))
 
+    def clear_line(self, hours_ago: float) -> dict:
+        return _line('user', '<command-name>/clear</command-name>\n<command-message>clear</command-message>\n'
+                             '<command-args></command-args>', timestamp=ago(hours_ago))
+
+    def run_session(self, parts: list, *args: str) -> subprocess.CompletedProcess:
+        d = folder()
+        path = log(os.path.join(d, 's.jsonl'), *parts)
+        return subprocess.run(['python3', MEASURE, '--session', path, *args], capture_output=True, text=True, cwd=d)
+
+    def test_d138_default_starts_after_the_last_clear(self):
+        parts = [response('a', 10, timestamp=ago(5)), response('b', 20, timestamp=ago(4)), self.clear_line(3),
+                 response('c', 30, timestamp=ago(2))]
+        r = self.run_session(parts)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('API calls: 1  |', r.stdout)
+        self.assertIn('period: since the last /clear (', r.stdout)
+
+    def test_d138_without_a_clear_keeps_the_24_hours(self):
+        parts = [response('a', 10, timestamp=ago(30)), response('b', 20, timestamp=ago(5)), response('c', 30, timestamp=ago(2))]
+        r = self.run_session(parts)
+        self.assertIn('API calls: 2  |', r.stdout)
+        self.assertIn('period: last 24 h', r.stdout)
+
+    def test_d138_the_later_of_clear_and_compaction_wins(self):
+        def boundary(hours_ago):
+            return _line('system', subtype='compact_boundary', content='Conversation compacted', timestamp=ago(hours_ago))
+        later_compaction = [response('a', 10, timestamp=ago(6)), self.clear_line(5), response('b', 20, timestamp=ago(4)),
+                            boundary(3), response('c', 30, timestamp=ago(2)), response('d', 40, timestamp=ago(1))]
+        r = self.run_session(later_compaction)
+        self.assertIn('API calls: 2  |  compactions: 0', r.stdout)
+        self.assertIn('since the last compaction (', r.stdout)
+        later_clear = [response('a', 10, timestamp=ago(6)), boundary(5), response('b', 20, timestamp=ago(4)),
+                       self.clear_line(3), response('c', 30, timestamp=ago(2))]
+        r = self.run_session(later_clear)
+        self.assertIn('API calls: 1  |', r.stdout)
+        self.assertIn('since the last /clear (', r.stdout)
+
+    def test_d138_explicit_since_or_hours_do_not_apply_it(self):
+        parts = [response('a', 10, timestamp=ago(5)), self.clear_line(3), response('c', 30, timestamp=ago(2))]
+        for args in (('--since', ago(10)), ('--hours', '10'), ('--hours', '0')):
+            r = self.run_session(parts, *args)
+            self.assertIn('API calls: 2  |', r.stdout, args)
+            self.assertNotIn('/clear (', r.stdout, args)
+
+    def test_d138_a_clear_mentioned_in_text_is_not_a_clear(self):
+        parts = [response('a', 10, timestamp=ago(5)),
+                 _line('user', 'I ran <command-name>/clear</command-name> before', timestamp=ago(4)),
+                 response('b', 20, timestamp=ago(3))]
+        self.assertIn('API calls: 2  |', self.run_session(parts).stdout)
+
+    def test_d138_clear_is_found_with_the_message_tag_first_or_list_content(self):
+        for content in ('<command-message>clear</command-message>\n<command-name>/clear</command-name>\n<command-args></command-args>',
+                        [{'type': 'text', 'text': '<command-message>clear</command-message>\n'
+                                                  '<command-name>/clear</command-name>'}]):
+            parts = [response('a', 10, timestamp=ago(5)), _line('user', content, timestamp=ago(3)),
+                     response('b', 30, timestamp=ago(2))]
+            r = self.run_session(parts)
+            self.assertIn('API calls: 1  |', r.stdout, content)
+            self.assertIn('since the last /clear (', r.stdout, content)
+
+    def break_session(self, calls_before: int, break_line, calls_after: int, prev_calls: int = 3) -> subprocess.CompletedProcess:
+        """D138: no --session; `cur.jsonl` (newest) has `calls_before` calls, a break 1 h ago, `calls_after` after it."""
+        home, repo = folder(), folder()
+        subprocess.run(['git', 'init', '-q', repo], check=True)
+        proj = os.path.join(home, '.claude', 'projects', '-home-user')
+        prev = log(os.path.join(proj, 'prev.jsonl'),
+                   *[response(f'p{n}', 50, timestamp=ago(4), gitBranch='feat') for n in range(prev_calls)])
+        os.utime(prev, (100, 100))
+        parts = [response(f'b{n}', 10, timestamp=ago(3), gitBranch='feat') for n in range(calls_before)]
+        parts.append(break_line)
+        parts += [response(f'a{n}', 10, timestamp=ago(0.5), gitBranch='feat') for n in range(calls_after)]
+        log(os.path.join(proj, 'cur.jsonl'), *parts)
+        env = {**os.environ, 'HOME': home, 'CLAUDE_CODE_REMOTE': 'true'}
+        return subprocess.run(['python3', MEASURE], capture_output=True, text=True, cwd=repo, env=env)
+
+    def test_d138_min_calls_looks_at_the_stretch_after_the_break(self):
+        compaction_line = _line('system', subtype='compact_boundary', content='Conversation compacted', timestamp=ago(1))
+        # 300 calls in 24 h but 1 after the compaction: the fallback triggers on the reported stretch
+        r = self.break_session(300, compaction_line, 1)
+        self.assertIn('Note: the current session has 1 calls (under measure.minCalls = 5)', r.stdout)
+        self.assertIn('Session: prev.jsonl', r.stdout)
+        # the previous session is measured whole, not cut to its own tail by its own break
+        r = self.break_session(2, self.clear_line(1), 6)
+        self.assertIn('Session: cur.jsonl', r.stdout)
+        self.assertNotIn('Note:', r.stdout)
+        self.assertIn('API calls: 6  |', r.stdout)
+
+    def d139_logs(self, own_mtime, parent_mtime):
+        home, repo = folder(), folder()
+        subprocess.run(['git', 'init', '-q', repo], check=True)
+        root = os.path.realpath(repo)
+        parent = os.path.join(home, '.claude', 'projects', re.sub(r'[^A-Za-z0-9]', '-', os.path.dirname(root)))
+        own = os.path.join(home, '.claude', 'projects', re.sub(r'[^A-Za-z0-9]', '-', root))
+        up = log(os.path.join(parent, 'up.jsonl'), *[response(f'p{n}', 5, timestamp=ago(2)) for n in range(4)])
+        mine = log(os.path.join(own, 'own.jsonl'), response('o', 5, timestamp=ago(2)))
+        os.utime(mine, (own_mtime, own_mtime))
+        os.utime(up, (parent_mtime, parent_mtime))
+        env = {**os.environ, 'HOME': home}
+        return lambda *a: subprocess.run(['python3', MEASURE, *a], capture_output=True, text=True, cwd=root, env=env), mine
+
+    def test_d139_the_repo_folder_wins_over_a_parent_folder_with_more_calls(self):
+        run, mine = self.d139_logs(500, 500)  # D144: only on a tie; the explicit period keeps the covering rule
+        r = run('--since', ago(3))
+        self.assertIn('Session: own.jsonl', r.stdout)
+        self.assertIn('API calls: 1  |', r.stdout)
+        os.remove(mine)  # the repo's folder has none: the parent's is the fallback
+        self.assertIn('Session: up.jsonl', run('--since', ago(3)).stdout)
+
+    def test_d144_without_a_period_the_newest_session_of_all_folders_is_measured(self):
+        run, _ = self.d139_logs(100, 500)  # the parent folder's log is newer (the session in progress)
+        r = run()
+        self.assertIn('Session: up.jsonl', r.stdout)
+        self.assertIn('API calls: 4  |', r.stdout)
+        run, _ = self.d139_logs(500, 100)  # the repo folder's log is newer
+        self.assertIn('Session: own.jsonl', run().stdout)
+        run, _ = self.d139_logs(500, 500)  # a tie in mtime: D139 prefers the repo folder
+        self.assertIn('Session: own.jsonl', run().stdout)
+
+    def test_d151_a_new_session_without_branch_never_measures_one_of_another_branch(self):
+        r = self.short_session(2, previous=(('other', 'main'),), branch=None, args=())  # the default period: 24 h
+        self.assertIn('Session: cur.jsonl', r.stdout)
+        self.assertNotIn('other.jsonl', r.stdout)
+        self.assertIn('API calls: 2', r.stdout)
+
+    def test_d151_explicit_period_never_picks_a_log_of_another_branch(self):
+        for args in (('--hours', '24'), ('--since', ago(5))):
+            r = self.short_session(5, previous=(('other', 'main'),), args=args, previous_calls=7)  # other has more calls
+            self.assertIn('Session: cur.jsonl', r.stdout, args)
+            self.assertNotIn('other.jsonl', r.stdout)
+
+    def test_d151_explicit_period_current_log_without_branch_uses_the_repo_branch(self):
+        for args in (('--hours', '24'), ('--since', ago(5))):
+            r = self.short_session(5, previous=(('other', 'main'),), args=args, previous_calls=7, branch=None,
+                                   repo_branch='feat')  # other has more calls and is of another branch
+            self.assertIn('Session: cur.jsonl', r.stdout, args)
+            self.assertNotIn('other.jsonl', r.stdout)
+        r = self.short_session(5, previous=(('same', 'feat'),), args=('--hours', '24'), previous_calls=7, branch=None,
+                               repo_branch='feat')  # a log of the repo's branch still competes
+        self.assertIn('Session: same.jsonl', r.stdout)
+
+    def test_d144_newest_session_without_calls_in_the_default_period_is_still_the_one(self):
+        home, repo = folder(), folder()
+        subprocess.run(['git', 'init', '-q', repo], check=True)
+        proj = os.path.join(home, '.claude', 'projects', '-home-user')
+        old = log(os.path.join(proj, 'older.jsonl'), *[response(f'o{n}', 5, timestamp=ago(2)) for n in range(3)])
+        log(os.path.join(proj, 'cur.jsonl'), response('c', 5, timestamp=ago(30)))  # the newest file, calls out of the 24 h
+        os.utime(old, (100, 100))
+        env = {**os.environ, 'HOME': home, 'CLAUDE_CODE_REMOTE': 'true'}
+        r = subprocess.run(['python3', MEASURE], capture_output=True, text=True, cwd=repo, env=env)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('No calls in that period', r.stderr)
+        self.assertNotIn('older.jsonl', r.stdout)
+
     def test_artifact_rows_show_the_action(self):
         """B22: HEAVIEST RESULTS tells `quickstart` from `publish` for Artifact calls."""
         parts = [response('a', 100, call('t1', '', name='Artifact', action='quickstart', intent='other')),
@@ -361,11 +533,14 @@ class Measure(unittest.TestCase):
             self.assertIn('warning: log from a session opened outside the repo, in folder -home-user', local.stderr)
 
     def short_session(self, current: int, config=None, previous: tuple = (('prev', 'feat'),), branch: str | None = 'feat',
-                      args: tuple = ('--hours', '0'), previous_calls: int = 3, branches: tuple = ()) -> subprocess.CompletedProcess:
+                      args: tuple = ('--hours', '0'), previous_calls: int = 3, branches: tuple = (),
+                      repo_branch: str | None = None) -> subprocess.CompletedProcess:
         """B29: no --session; the current log (`cur.jsonl`, newest, `current` calls on `branch`) and older logs given
         as (name, branch) with 3 calls each; `config` is the text of the repo's .claude/gw.json (None = no file)."""
         home, repo = folder(), folder()
         subprocess.run(['git', 'init', '-q', repo], check=True)
+        if repo_branch:
+            subprocess.run(['git', '-C', repo, 'symbolic-ref', 'HEAD', f'refs/heads/{repo_branch}'], check=True)
         proj = os.path.join(home, '.claude', 'projects', '-home-user')
         for i, (name, b) in enumerate(previous):
             extra = {'gitBranch': b} if b else {}
@@ -380,8 +555,7 @@ class Measure(unittest.TestCase):
         if config is not None:
             write(os.path.join(repo, '.claude', 'gw.json'), config)
             for rel in ('scripts/config.py', 'schema/gw.schema.json'):
-                os.makedirs(os.path.dirname(os.path.join(repo, rel)), exist_ok=True)
-                shutil.copy(workflow_file(rel), os.path.join(repo, rel))
+                copy_config_file(rel, repo)
         env = {**os.environ, 'HOME': home, 'CLAUDE_CODE_REMOTE': 'true'}
         return subprocess.run(['python3', MEASURE, *args], capture_output=True, text=True, cwd=repo, env=env)
 
@@ -448,8 +622,7 @@ class Measure(unittest.TestCase):
         if config is not None:
             write(os.path.join(repo, '.claude', 'gw.json'), config)
             for rel in ('scripts/config.py', 'schema/gw.schema.json'):
-                os.makedirs(os.path.dirname(os.path.join(repo, rel)), exist_ok=True)
-                shutil.copy(workflow_file(rel), os.path.join(repo, rel))
+                copy_config_file(rel, repo)
         return mod.chars_per_token(repo)
 
     def test_chars_per_token_comes_from_the_context_guard_config(self):
@@ -470,8 +643,7 @@ class Measure(unittest.TestCase):
         if config is not None:
             write(os.path.join(repo, '.claude', 'gw.json'), config)
             for rel in ('scripts/config.py', 'schema/gw.schema.json'):
-                os.makedirs(os.path.dirname(os.path.join(repo, rel)), exist_ok=True)
-                shutil.copy(workflow_file(rel), os.path.join(repo, rel))
+                copy_config_file(rel, repo)
         return mod.measure_value(repo, name, default, integer)
 
     def test_a13_measure_constants_default_set_and_bad_values(self):
@@ -486,6 +658,60 @@ class Measure(unittest.TestCase):
             for bad in ('0', '-3', '"x"'):  # the config fails closed (its reason: the schema minimum or type): default
                 self.assertEqual(in_(self.CONFIG % ', "measure": {"%s": %s}' % (name, bad)), default, name + bad)
             self.assertEqual(in_('{not json'), default)
+
+    def fixed_startup_run(self, with_workflow: bool, *extra, installed_guard: str = '', sidechain: bool = False) -> str:
+        """E76: a repo with AGENTS.md of 3,500 characters (1,000 tokens), no log and no skills, and a session of three
+        calls of 10,000 tokens each: the fixed startup is the first call minus the project's part."""
+        repo = folder()
+        subprocess.run(['git', 'init', '-q', repo], check=True)
+        write(os.path.join(repo, 'AGENTS.md'), 'x' * 3500)
+        if with_workflow:
+            for rel in ('scripts', 'schema'):
+                top = os.path.join(HERE, '..', '..', '..')
+                for base in (top, os.path.join(top, 'gw'), os.path.join(top, '..', '.claude', 'gw')):
+                    if os.path.isdir(os.path.join(base, rel)):
+                        break
+                shutil.copytree(os.path.join(base, rel), os.path.join(repo, rel),
+                                ignore=shutil.ignore_patterns('__pycache__'))
+        if installed_guard:  # an installed copy that fails on import
+            write(os.path.join(repo, '.claude', 'gw', 'scripts', 'context_guard.py'), installed_guard)
+        calls = [response(f'm{i}', 10000, isSidechain=sidechain) for i in (1, 2, 3)]
+        path = log(os.path.join(repo, 's.jsonl'), *calls, *extra)
+        r = subprocess.run(['python3', MEASURE, '--session', path, '--hours', '0'], capture_output=True, text=True,
+                           cwd=repo, env={**os.environ, 'HOME': folder()})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r.stdout
+
+    def test_e76_the_fixed_startup_is_shown_apart_from_the_project_cost(self):
+        out = self.fixed_startup_run(True)
+        self.assertIn('Fixed startup (system prompt, tools, MCP; per call, neither /clear nor the project shrinks it, so '
+                      'the total falls only with fewer calls or fewer MCP servers and connectors; it also holds the '
+                      'SessionStart hook output, which the log does not keep): ~9,000 tokens per call x 3 calls = '
+                      '27,000 input (90 %)', out)
+        self.assertIn('Project cost (the rest: instructions, log, skills, conversation, results): '
+                      '3,000 input (10 %)', out)
+
+    def test_e76_synthetic_messages_do_not_count_as_calls_carrying_the_fixed_startup(self):
+        out = self.fixed_startup_run(True, response('x1', 0, model='<synthetic>'), response('x2', 0, model='<synthetic>'))
+        self.assertIn('~9,000 tokens per call x 3 calls = 27,000 input (90 %)', out)
+
+    def test_e76_a_failing_installed_copy_gives_way_to_the_repo_one(self):
+        out = self.fixed_startup_run(True, installed_guard='raise SystemExit(3)\n')
+        self.assertIn('~9,000 tokens per call x 3 calls', out)
+
+    def test_e76_a_failing_copy_alone_says_why(self):
+        out = self.fixed_startup_run(False, installed_guard='raise SystemExit(3)\n')
+        self.assertIn('Fixed startup: unknown (.claude/gw/scripts/context_guard.py failed: SystemExit(3))', out)
+
+    def test_e76_a_subagent_log_says_the_split_does_not_apply(self):
+        out = self.fixed_startup_run(True, sidechain=True)
+        self.assertIn('Fixed startup: unknown (the split does not apply to a subagent log)', out)
+
+    def test_e76_without_the_workflow_scripts_the_fixed_startup_is_unknown(self):
+        out = self.fixed_startup_run(False)
+        self.assertIn('Fixed startup: unknown (no context_guard.py of the workflow in .claude/gw/scripts/ or scripts/)',
+                      out)
+        self.assertNotIn('Project cost', out)
 
     def test_malformed_or_invalid_config_falls_back_to_the_default(self):
         for config in ('{not json', self.CONFIG % ', "measure": {"minCalls": -1}',

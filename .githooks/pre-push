@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.6.0
+# galivelop-workflow v0.9.0
 # Git pre-push hook (copied into projects as .githooks/pre-push; enable with: git config core.hooksPath .githooks).
 #   - While it runs, keeps a marker `gw-push-in-progress.<pid>` in this worktree's own git dir (one per linked worktree, one per push) with its pid
 #     and, per pushed ref, the LOCAL sha and local branch, so the Stop hook (before-stop.py) does not tell an agent to
@@ -13,6 +13,14 @@
 #     paths and messages; privateCheck: false in the pushed commit's config turns it off. Fails closed. A refusal says
 #     those commits are not pushed yet and gives the command that fixes only them (git commit --amend, or
 #     git rebase -i <base>).
+#   - C12: to a branch that is not an exploration one (spikeBranch, "" = off), refuses a commit that comes from a spike
+#     (config.py spike-check: a `Spike:` trailer or git's merge subject naming a spike branch), with what to do instead.
+#     The prefix comes from the branch's remote tip, else the remote protected branch's (only a first push reads the
+#     pushed commit, where "" cannot turn it off). To the protected branch it judges all it gains; to another, what no
+#     non-spike remote branch has yet. Pushing the spike branch itself is allowed.
+#   - E41: no commit it pushes (only those not on the remote yet) has an author or committer in authorDeny, read from
+#     the pushed commit's config (config.py author-check --commits -): a clean merge, cherry-pick, revert or rebase
+#     skips the pre-commit, which only covers git commit. An empty list checks nothing.
 #   - Reads .claude/gw.json as each pushed commit has it (never the working tree's); a pushed commit without a valid
 #     one is refused.
 #   - Runs every `check` command of that config on the commit being pushed (a temporary worktree when it is not
@@ -40,16 +48,35 @@
 #     from the remote tip's config, so a commit cannot relax the rule that judges it (only a protected branch without
 #     a config yet takes the pushed commit's, with a warning). Fails closed when a commit is missing (shallow clones
 #     included).
+#   - E5: when the pushed commit's config sets front.tokens, runs `front.py --root <its checkout> run fast` (Stylelint,
+#     layout and axe on the main breakpoints; front.py installs its packages outside the tree) on that commit, after
+#     its check; a red or a front.py that cannot run (no node, no browser) refuses the push, with the command. A
+#     project without front.py but with front.tokens fails closed. Without front.tokens nothing runs.
 #   - Calls related-tests.sh <changed-file> <checkout-dir> for each ref that takes the related scope (that ref's own
 #     files, the folder where its commit is checked out); a ref that takes the full scope is covered by the call after
 #     the loop, with those refs' files and the last checkout (with the check cached green on every such ref, only the slow ones). prepush-branches.sh <changed-file> <pushed-file> gets every
 #     ref's files. Both come from the workflow's scripts folder whenever they exist (run with bash, executable or not),
 #     with git's ref lines on stdin.
+#   - D62: once the push passed, warns (never blocks) when the last CI of a pushed branch is red: for each branch ref
+#     the remote already has (not a deletion, not a tag), ci-status.py --json on the remote's current tip, all of them
+#     within prepushCiWarnTimeout seconds, on the GitHub repo of the remote pushed to (another host: silent); a force
+#     push is not checked (its CI is about the dropped commit). A CI GitHub never started counts as red, and so does no
+#     CI at all when the project has .github/workflows and ciOnPush is not false. Green, running, no `gh` or token, no
+#     network or any error: silent (a timeout: one line). Branches at the same remote commit are read once and named
+#     together; the commands it suggests use ci-status.py's absolute path (they work from any folder). An unreadable
+#     prepushCiWarn or prepushCiWarnTimeout says so in one line, naming the key (config.py validate), and skips it. Ctrl-C,
+#     SIGTERM or SIGHUP to the hook (or to its group) kill ci-status.py's whole process group (gh or curl too, even
+#     after ci-status.py ended) as the hook ends. Off with prepushCiWarn false.
+#   - E84: with GW_PUSH_WIP=1 (set by `push.sh --wip`) it runs no check: every ref pushed must be a branch (not a tag, not
+#     a deletion), not the protected branch (the pushed commit's config, the remote tip's and the working tree's) and
+#     its commit subject must start with `WIP:`; otherwise it refuses with the reason. A WIP push is recorded as
+#     "<epoch> <sha> <branch>" in <git dir>/gw-wip-pushes (best effort) and the hook ends there.
 # Skipping it (git push --no-verify) is only for a WIP: commit with red tests.
 # Bash 3.2 compatible. Root from this hook's path, never from $CLAUDE_PROJECT_DIR or the current directory.
 set -uo pipefail
 zero=0000000000000000000000000000000000000000
 remote="${1:-origin}"
+pushurl="${2:-}"  # the location git pushes to (after any insteadOf)
 
 # Git's ref lines come on stdin: save them before anything else can read it.
 work="$(mktemp -d "${TMPDIR:-/tmp}/gw-pre-push.XXXXXX")" || { echo "pre-push: cannot create a temp dir; free space in ${TMPDIR:-/tmp} and retry: git push" >&2; exit 1; }
@@ -57,7 +84,9 @@ worktree=""
 log=""  # the temp log of the check commands (the lock names it); removed on any exit
 checklock=""  # 1 while this hook holds the check lock (<git common dir>/gw/check.lock, shared with scripts/check.sh)
 pushmark=""  # <this worktree's git dir>/gw-push-in-progress.<pid of this hook>: line 1 the pid of this hook, then one "<local sha> <branch>" line per ref pushed
+cipid=""  # the pid of the CI warning's python while it runs (D62): any exit sends it SIGTERM so it kills its group
 cleanup() {
+  if [ -n "$cipid" ]; then kill -TERM "$cipid" 2>/dev/null; fi
   # The marker name holds this hook's pid, so no other push ever rewrites it.
   if [ -n "$pushmark" ]; then rm -f "$pushmark" 2>/dev/null; fi
   if [ -n "$checklock" ]; then bash "$scripts/check-green.sh" lock-release "$$" < /dev/null 2>/dev/null; fi
@@ -111,6 +140,7 @@ cfg_at() {  # cfg_at <sha> <key> [<paths-sha>]: the key as commit <sha>'s .claud
 }
 [ -f "$config" ] || fail "the workflow scripts are missing ($config); reinstall them: /gw-update"
 protected=""
+checkdir_sha=""  # the commit $checkdir holds (checkout_at)
 shallow="$(git rev-parse --is-shallow-repository 2>/dev/null || echo false)"
 fetch_hint() {
   if [ "$shallow" = "true" ]; then echo "git fetch --deepen=200 $remote $protected"; else echo "git fetch $remote $protected"; fi
@@ -226,6 +256,7 @@ checkout_at() {  # checkout_at <sha>: $checkdir = the project (HEAD clean) or a 
     dir="$worktree"
   fi
   checkdir="$dir"
+  checkdir_sha="$sha"
 }
 cache_hit() {  # cache_hit <sha>: 0 (and says why) when $key, or the mark-only parent's key, is recorded green; uses run_checks' variables
   local sha="$1"
@@ -309,6 +340,17 @@ run_checks() {  # run_checks <sha>: every check command on that commit, in $chec
   [ -z "$key" ] || bash "$scripts/check-green.sh" add "$key" < /dev/null
 }
 
+run_front() {  # run_front <sha>: E5, `front.py run fast` on that commit when its config sets front.tokens
+  local sha="$1" tokens
+  tokens="$(cfg_at "$sha" front.tokens)" || exit 1
+  [ -n "$tokens" ] && [ "$tokens" != "null" ] && [ "$tokens" != "None" ] || return 0
+  [ -f "$scripts/front.py" ] || fail "${sha:0:7} sets front.tokens but the workflow has no front.py ($scripts/front.py); update the workflow: /gw-update"
+  [ "$checkdir_sha" = "$sha" ] && [ -n "$checkdir" ] || checkout_at "$sha"
+  echo "pre-push: front checks (front.py run fast) on ${sha:0:7}…"
+  python3 "$scripts/front.py" --root "$checkdir" run fast < /dev/null >&2 \
+    || fail "the front checks failed on ${sha:0:7} (above); fix them, commit and push again; reproduce with: python3 $scripts/front.py --root $root run fast"
+}
+
 scan_leftovers() {  # scan_leftovers <sha> <files> <what>: conflict markers and *.rej / *.orig files among <files> in <sha>
   local sha="$1" files="$2" what="$3" leftovers first markers
   leftovers="$(printf '%s\n' "$files" | grep -E '\.(rej|orig)$' | while IFS= read -r f; do
@@ -326,6 +368,49 @@ scan_leftovers() {  # scan_leftovers <sha> <files> <what>: conflict markers and 
   fi
 }
 
+# E84: `push.sh --wip` (GW_PUSH_WIP=1): a WIP: head goes to a working branch without running the `check`, the related tests
+# or front.py; every other guard (conflict markers, private-check, authorDeny, spike) still runs on what is pushed.
+# Never to the protected branch; every ref must be a branch (tags are refused) with a `WIP:` head, no deletions.
+wip=false
+wip_ancestor() {  # wip_ancestor <sha>: the nearest of its 20 latest ancestors whose .claude/gw.json is valid (a red commit may break it)
+  local c
+  for c in $(git rev-list --max-count=20 --skip=1 "$1" 2>/dev/null); do
+    if python3 "$config" --root "$root" --rev "$c" validate >/dev/null 2>&1; then echo "$c"; return 0; fi
+  done
+  return 1
+}
+if [ "${GW_PUSH_WIP:-}" = "1" ]; then
+  wip=true
+  wip_n=0
+  while read -r _wl wip_sha wip_ref wip_rsha; do
+    [ -n "${wip_sha:-}" ] || continue
+    [ "$wip_sha" != "$zero" ] || fail "GW_PUSH_WIP covers pushing a WIP: commit, not deleting $wip_ref; delete it without it: git push origin --delete ${wip_ref#refs/heads/}"
+    case "$wip_ref" in refs/heads/*) ;; *) fail "GW_PUSH_WIP covers branches only, not $wip_ref; push it without it: git push" ;; esac
+    wip_sha="$(git rev-parse -q --verify "$wip_sha^{commit}" 2>/dev/null)" || fail "commit ${wip_sha:0:7} is not in this clone; fetch it and retry: git fetch $remote"
+    # The pushed commit's config first, then the remote tip's and the working tree's: a red WIP commit may carry an
+    # invalid gw.json, which must not make the push unreadable (it is refused only when no config can be read at all).
+    wip_read=false
+    wip_prots=""
+    wip_wtprot="$(python3 "$config" --root "$root" get protectedBranch 2>/dev/null)" && { wip_read=true; wip_prots="$wip_prots $wip_wtprot"; }
+    if wip_p="$(python3 "$config" --root "$root" --rev "$wip_sha" get protectedBranch 2>/dev/null)"; then wip_read=true; wip_prots="$wip_prots $wip_p"; fi
+    if [ "$wip_rsha" != "$zero" ] && git cat-file -e "$wip_rsha^{commit}" 2>/dev/null &&
+       wip_p="$(python3 "$config" --root "$root" --rev "$wip_rsha" get protectedBranch 2>/dev/null)"; then wip_read=true; wip_prots="$wip_prots $wip_p"; fi
+    if wip_c="$(wip_ancestor "$wip_sha")" && wip_p="$(python3 "$config" --root "$root" --rev "$wip_c" get protectedBranch 2>/dev/null)"; then wip_read=true; wip_prots="$wip_prots $wip_p"; fi
+    [ "$wip_read" = true ] || fail "cannot read 'protectedBranch' from .claude/gw.json (the pushed commit's, the remote tip's, a recent ancestor's or the working tree's), so a WIP push cannot tell it is not the protected branch; fix it and push again: python3 $config --root $root validate"
+    for wip_p in $wip_prots; do
+      [ "$wip_ref" != "refs/heads/$wip_p" ] || fail "a WIP push never goes to the protected branch ($wip_p); push a working branch, or follow the main-branch rules of AGENTS.md"
+    done
+    wip_subject="$(git log -1 --format=%s "$wip_sha")"
+    case "$wip_subject" in
+      "WIP:"*) ;;
+      *) fail "the head commit ${wip_sha:0:7} of ${wip_ref#refs/heads/} does not start with 'WIP:' (it is '$wip_subject'); amend its message or push it with its check: git push" ;;
+    esac
+    { [ -z "$pushgit" ] || echo "$(date +%s) $wip_sha ${wip_ref#refs/heads/}" >> "$pushgit/gw-wip-pushes"; } 2>/dev/null
+    wip_n=$((wip_n + 1))
+    echo "pre-push: WIP push of ${wip_sha:0:7} to ${wip_ref#refs/heads/}: no check or related tests run (E84); the other guards still do; run the check before the work is closed"
+  done < "$work/input"
+  [ "$wip_n" -gt 0 ] || fail "GW_PUSH_WIP is set but this push has no branch to check; push without it: git push"
+fi
 checked=""
 # Trees this push sends to the protected branch (by the pushed commit's own config): a branch pushed with the same tree
 # is still checked with its own scope (related tests run), but repeats no full check: the protected one is stricter
@@ -348,8 +433,23 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   [ "$local_sha" = "$zero" ] && continue                  # deleting a ref
   case "$remote_ref" in refs/tags/*) continue ;; esac  # a tag sent to a branch is checked like any commit
   local_sha="$(git rev-parse -q --verify "$local_sha^{commit}" 2>/dev/null)" || fail "commit ${local_sha:0:7} is not in this clone; fetch it and retry: git fetch $remote"
-  checks="$(cfg_at "$local_sha" check)" || exit 1
-  protected="$(cfg_at "$local_sha" protectedBranch)" || exit 1
+  rev_args=(--rev "$local_sha")  # the config the guards below read: the pushed commit's
+  if [ "$wip" = true ] && ! python3 "$config" --root "$root" --rev "$local_sha" validate >/dev/null 2>&1; then
+    # E84: a red WIP commit may carry an invalid gw.json: judge it by the remote tip's config, else the working tree's
+    rev_args=()
+    for wip_c in "$remote_sha" "$(git rev-parse -q --verify "refs/remotes/$remote/${remote_ref#refs/heads/}^{commit}" 2>/dev/null)" "$(wip_ancestor "$local_sha")"; do
+      if [ -n "$wip_c" ] && [ "$wip_c" != "$zero" ] && python3 "$config" --root "$root" --rev "$wip_c" validate >/dev/null 2>&1; then rev_args=(--rev "$wip_c"); break; fi
+    done
+    wip_cfg="the working tree"
+    [ "${#rev_args[@]}" -eq 0 ] || wip_cfg="commit ${rev_args[1]:0:7}"
+    echo "pre-push: WARNING: the .claude/gw.json of ${local_sha:0:7} is invalid; this WIP push is judged by the config of $wip_cfg"
+  fi
+  if [ "$wip" = true ]; then
+    protected="$(python3 "$config" --root "$root" ${rev_args[@]+"${rev_args[@]}"} get protectedBranch)" || fail "cannot read 'protectedBranch' from .claude/gw.json; fix it and push again: python3 $config --root $root validate"
+  else
+    checks="$(cfg_at "$local_sha" check)" || exit 1
+    protected="$(cfg_at "$local_sha" protectedBranch)" || exit 1
+  fi
   files=""  # what this ref's new commits change (set below when it brings any)
 
   # What this push adds: commits no remote-tracking ref (nor the remote's current tip) already has.
@@ -392,13 +492,15 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     scan_leftovers "$local_sha" "$files" "the push"
     if [ -f "$scripts/private-check.py" ]; then  # an older project without it: skipped, like the optional scripts
       pc_rc=0
-      printf '%s\n' "$new" | python3 "$scripts/private-check.py" --root "$root" --rev "$local_sha" --base "$known" --remote "$remote" --ref "${local_ref#refs/heads/}" --commits - || pc_rc=$?
+      printf '%s\n' "$new" | python3 "$scripts/private-check.py" --root "$root" ${rev_args[@]+"${rev_args[@]}"} --base "$known" --remote "$remote" --ref "${local_ref#refs/heads/}" --commits - || pc_rc=$?
       if [ "$pc_rc" = 1 ]; then
         fail "the push carries private data or a key (above); those commits are not pushed yet: fix only them with the command above, then push again"
       elif [ "$pc_rc" != 0 ]; then
         fail "private-check could not run, exit $pc_rc (above); fix that and push again, reproduce with: python3 $scripts/private-check.py --root $root --commits - --rev ${local_sha:0:7}"
       fi
     fi
+    printf '%s\n' "$new" | python3 "$config" --root "$root" ${rev_args[@]+"${rev_args[@]}"} author-check --commits - \
+      || fail "the push carries commits by an identity in authorDeny (above); those commits are not pushed yet: rewrite them with the command above, then push again"
   fi
 
   # Protected if any config names this branch: the pushed commit's, the remote tip's or the working tree's (a commit
@@ -420,8 +522,61 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   fi
   wt_protected="$(python3 "$config" --root "$root" get protectedBranch 2>/dev/null)" || wt_protected=""
   [ -n "$wt_protected" ] && [ "$remote_ref" = "refs/heads/$wt_protected" ] && is_protected=true
+  # C12: exploration branches (spikeBranch) never go into another branch. The prefix comes from a config the push
+  # cannot rewrite: the branch's remote tip, else (a new branch) the remote protected branch's tip; only with neither
+  # (a first push) from the pushed commit, and then "" there cannot turn the rule off (the schema default applies).
+  # Judged: on the protected branch, everything it gains (a spike already on another remote branch, merged by a PR or
+  # pushed without hooks, must not reach it); on another branch, what no non-spike remote branch has yet (a spike
+  # branch pushed earlier does not hide its own commits).
+  spike_rev=""
+  prot_tip="$(git rev-parse -q --verify "refs/remotes/$remote/$protected^{commit}" 2>/dev/null)" || prot_tip=""
+  for cand in "$known" "$prot_tip"; do
+    [ -n "$cand" ] || continue
+    if python3 "$config" --root "$root" --rev "$cand" validate >/dev/null 2>&1; then spike_rev="$cand"; break; fi
+  done
+  if [ -n "$spike_rev" ]; then
+    spike_prefix="$(python3 "$config" --root "$root" --rev "$spike_rev" spike-branch --prefix)" \
+      || fail "cannot read 'spikeBranch' from .claude/gw.json in commit ${spike_rev:0:7}; fix that config and push again: python3 $config --root $root --rev ${spike_rev:0:7} validate"
+  else
+    spike_rev="${rev_args[1]:-}"  # E84: empty = the working tree's config (a WIP with an invalid one)
+    spike_prefix="$(python3 "$config" --root "$root" ${rev_args[@]+"${rev_args[@]}"} spike-branch --prefix)" \
+      || fail "cannot read 'spikeBranch' from .claude/gw.json in commit ${local_sha:0:7}; commit a valid one and push again: python3 $config --root $root --rev ${local_sha:0:7} validate"
+    if [ -z "$spike_prefix" ]; then
+      spike_prefix="$(python3 "$config" default spikeBranch)" \
+        || fail "cannot read the default of 'spikeBranch' from the workflow's schema; reinstall the workflow: /gw-update"
+    fi
+  fi
+  spike_args=()
+  [ -z "$spike_rev" ] || spike_args=(--rev "$spike_rev")
+  spike_target=false
+  if [ -n "$spike_prefix" ]; then
+    python3 "$config" --root "$root" ${spike_args[@]+"${spike_args[@]}"} spike-branch "$branch" && spike_target=true
+    # an empty prefix at the pushed commit (first push) was replaced by the default: compare by hand then
+    case "$branch" in "$spike_prefix"?*) spike_target=true ;; esac
+  fi
+  if [ -n "$spike_prefix" ] && [ "$branch" != "$remote_ref" ] && [ "$spike_target" = false ]; then
+    others=""
+    if [ "$is_protected" != true ]; then
+      for ref in $(git for-each-ref --format='%(refname)' refs/remotes/); do
+        short="${ref#refs/remotes/}"; short="${short#*/}"
+        case "$short" in "$spike_prefix"?*) ;; *) others="$others $ref" ;; esac
+      done
+    fi
+    printf '%s\n' "$local_sha" > "$work/spike_tips"
+    # shellcheck disable=SC2086  # one sha or ref per word
+    for ref in $known $others; do printf '^%s\n' "$ref" >> "$work/spike_tips"; done
+    git rev-list --stdin < "$work/spike_tips" > "$work/spike_gains" \
+      || fail "cannot list the commits ${local_sha:0:7} brings to $branch; fetch and retry: git fetch $remote"
+    if [ -s "$work/spike_gains" ]; then
+      python3 "$config" --root "$root" ${spike_args[@]+"${spike_args[@]}"} spike-check --commits - < "$work/spike_gains" \
+        || fail "the push brings an exploration branch's work into $branch (above); a spike is never merged into a working branch or $protected" \
+                "drop it from $branch (git reset --hard <commit before the merge>), then: python3 $scripts/task.py new <id> and redo it with tests, or throw the spike away: git branch -D <spike branch>"
+    fi
+  fi
   this_tree="$(git rev-parse "$local_sha^{tree}" 2>/dev/null)" || this_tree=""
-  if [ "$checked" != "$local_sha:$is_protected" ]; then
+  if [ "$wip" = true ]; then
+    :  # E84: no check, related tests or front.py for a WIP: head (announced above); the guards before this point ran
+  elif [ "$checked" != "$local_sha:$is_protected" ]; then
     scope="full"
     if [ "$is_protected" != "true" ]; then  # D49: a branch push runs only relatedTests unless the environment changes
       if [ -z "$new" ] && [ "$local_sha" != "$remote_sha" ]; then
@@ -453,6 +608,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
         fi ;;
       *) fail "unexpected answer from config.py push-scope: '$scope'; reinstall the workflow scripts: /gw-update" ;;
     esac
+    run_front "$local_sha"
     checked="$local_sha:$is_protected"
   fi
 
@@ -526,4 +682,99 @@ if [ -f "$scripts/related-tests.sh" ] && [ -n "$checkdir" ] && [ "$full_ref" = "
   sort -u -o "$work/changed_full" "$work/changed_full"
   GW_RELATED_KINDS="$related_kinds" bash "$scripts/related-tests.sh" "$work/changed_full" "$checkdir" < "$work/input" || fail "the related tests failed; fix them, commit and push again: git push"
 fi
+ci_warn() {  # D62: a warning about a red CI on the pushed branches; never fails the push
+  [ -f "$scripts/ci-status.py" ] || return 0
+  local on secs onpush url repo
+  local key=prepushCiWarn why
+  if on="$(python3 "$config" --root "$root" get "$key" 2>"$work/ci-config")"; then
+    [ "$on" = "true" ] || return 0
+    key=prepushCiWarnTimeout
+    secs="$(python3 "$config" --root "$root" get "$key" 2>"$work/ci-config")" && key=""
+  fi
+  if [ -n "$key" ]; then  # config.py checks the whole file: its first problem names the key at fault
+    why="$(sed -e 's/^ *//' -e 's/^gw config: //' "$work/ci-config" 2>/dev/null | awk 'NR == 1 { first = $0 } NR == 2 { print; exit } END { if (NR == 1) print first }' | cut -c 1-200)"
+    printf 'pre-push: CI warning skipped: %s could not be read: %s; see why: python3 %q validate\n' "$key" "${why:-no detail}" "$config"
+    return 0
+  fi
+  onpush="$(python3 "$config" --root "$root" get ciOnPush 2>/dev/null)" || onpush=true
+  # The repo pushed to: the remote's configured URL (before any insteadOf), else the location git gives the hook.
+  url="$(git config --get "remote.$remote.pushurl" 2>/dev/null || git config --get "remote.$remote.url" 2>/dev/null || printf '%s' "$pushurl")"
+  repo="$(printf '%s\n' "$url" | sed -n -E 's#^.*github\.com[:/]+([^/]+)/([^/]+[^/.])(\.git)?/?$#\1/\2#p' | sed 's/\.git$//')"
+  [ -n "$repo" ] || return 0  # not a GitHub remote: nothing to read
+  # In the background and waited for, so a signal to this hook runs its trap at once and cleanup() passes it on.
+  python3 - "$scripts/ci-status.py" "$root" "$secs" "$work/input" "$repo" "$onpush" <<'PY' 2>/dev/null &
+import json, os, shlex, signal, subprocess, sys, time
+script, root, secs, refs, repo, onpush = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4], sys.argv[5], sys.argv[6]
+signal.signal(signal.SIGINT, signal.default_int_handler)  # a background job starts with SIGINT ignored
+signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))  # so the finally below kills ci-status and its gh or curl
+signal.signal(signal.SIGHUP, lambda *_: sys.exit(129))
+cmd = "python3 " + shlex.quote(os.path.abspath(script))  # absolute: it works from any folder
+wf = os.path.join(root, ".github", "workflows")
+expects_ci = onpush != "false" and os.path.isdir(wf) and any(n.endswith((".yml", ".yaml")) for n in os.listdir(wf))
+targets = {}  # remote sha -> the branches at it, in push order: one read per commit, every branch named
+for line in open(refs):
+    f = line.split()
+    if len(f) < 4 or set(f[1]) == {"0"} or set(f[3]) == {"0"} or not f[2].startswith("refs/heads/"):
+        continue  # a deletion, a new branch (no CI yet) or a tag
+    if subprocess.run(["git", "-C", root, "merge-base", "--is-ancestor", f[3], f[1]], stdout=subprocess.DEVNULL,
+                      stderr=subprocess.DEVNULL).returncode != 0:
+        continue  # a force push (or a tip not in this clone): its CI is about a commit this push drops
+    names = targets.setdefault(f[3], [])
+    if f[2][len("refs/heads/"):] not in names:
+        names.append(f[2][len("refs/heads/"):])
+
+
+def kill_group(proc):  # even when ci-status.py already ended: a gh or curl it left may still hold the pipe open
+    if proc is not None:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except OSError:
+            pass  # ESRCH: the group is already gone
+
+
+deadline = time.monotonic() + secs
+for sha, names in targets.items():
+    branch = ", ".join(names)
+    left = deadline - time.monotonic()
+    late = f"pre-push: CI of {branch} not read within {secs} s (prepushCiWarnTimeout); see it with: {cmd} --repo {repo} --sha {sha[:12]}"
+    if left <= 0:
+        print(late)
+        break
+    proc = None
+    try:  # Ctrl-C (KeyboardInterrupt), SIGTERM or SIGHUP: the group it leads must not outlive the push
+        proc = subprocess.Popen([sys.executable, script, "--root", root, "--repo", repo, "--sha", sha, "--json"],
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, text=True,
+                                start_new_session=True)
+        out, _ = proc.communicate(timeout=left)
+    except subprocess.TimeoutExpired:
+        kill_group(proc)
+        try:
+            proc.communicate(timeout=1)  # a grandchild out of the group may still hold the pipe: do not wait for it
+        except subprocess.TimeoutExpired:
+            pass
+        print(late)
+        break
+    finally:
+        kill_group(proc)
+    try:
+        report = json.loads(out)
+    except ValueError:
+        continue
+    state = report.get("state")
+    if state == "red":
+        why = "GitHub never started its jobs (Actions quota or payments)" if report.get("unstarted") else \
+            "; ".join(report.get("problems") or [])[:300]
+        print(f"pre-push: WARNING: the last CI of {branch} (commit {sha[:7]}) is red: {why}")
+    elif state == "none" and expects_ci:  # the project has workflows that run on push: a CI that never started is red
+        print(f"pre-push: WARNING: no CI has reported on the last commit of {branch} ({sha[:7]}), though "
+              ".github/workflows runs on push: GitHub may not have started it (Actions quota or payments)")
+    else:
+        continue  # green, running, no CI expected or could not be read: nothing to say
+    print(f"  the push goes on; read the failure: {cmd} --repo {repo} --sha {sha[:12]} --failed")
+PY
+  cipid=$!
+  wait "$cipid" || true
+  cipid=""
+}
+ci_warn
 echo "pre-push: all green."

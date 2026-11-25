@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# galivelop-workflow v0.6.0
+# galivelop-workflow v0.9.0
 """Token ledger (B1/B2): `metrics.py record` appends the tokens the Claude Code transcripts show to a ledger in the repo.
 
 Run as a `Stop` hook (hook JSON on stdin: `session_id`, `transcript_path`, `stop_hook_active`) or by hand
@@ -43,12 +43,13 @@ period twice is an error (exit 2).
 
 `metrics.py quality --period day|week|month|quarter [--date D] [--write]` (B8) sets quality signals beside the spend of
 each task id. Spend comes from the period's ledger rows; the signals only from the messages of the commits in the
-history from HEAD (no merges) whose committer date (UTC) falls in the period and that have a `Refs:` trailer (the others
-are ignored). Per id: `commits`; `red` (subject starts with the `commitWipPrefix`, `WIP:` by default: the check was red); `rework` (commits whose
+history from HEAD whose committer date (UTC) falls in the period and that have a `Refs:` trailer (the others are
+ignored; a merge with `Refs:` adds only its findings and retries, D141). Per id: `commits`; `red` (subject starts with the `commitWipPrefix`, `WIP:` by default: the check was red); `rework` (commits whose
 Conventional Commits type, after a `WIP: ` prefix, is in `metrics.quality.reworkTypes`, and git reverts `Revert "..."`,
 not counting the first commit of the id in the whole history); `findings` and `retries` (the sums of the integer values
 of the trailers `metrics.quality.findingsTrailer` and `retriesTrailer`, matched case-insensitively; a value that is not a
-non-negative integer is ignored and listed under "Ignored trailers"). A second table gives the same by model: the signals
+non-negative integer is ignored and listed under "Ignored trailers"; a commit or merge with several ids counts its
+whole value for each of them, so the rows do not add up to the reviews' total). A second table gives the same by model: the signals
 of the ids each model spent on (an id counts for every model that spent on it). It prints the report; `--write` saves it
 as `<reports>/<daily|weekly|monthly|quarterly>/<name>-quality.md`. Nothing in the period (no commits with `Refs:` and no
 ledger rows) says so on stderr and writes nothing (exit 0); no git repository or a git failure, or a bad config, exit 2.
@@ -59,6 +60,14 @@ the days with rows of that model, and only when there are at least `minDays` of 
 the model in that span has a price, else tokens. Above `factor` x the mean it prints one line per model and day, with
 the command that shows where it went; nothing to say prints nothing. `factor` 0 turns it off. Always exits 0 except on
 a bad config (exit 2).
+
+`metrics.py stage-ledger [--root R]` (B36, run by the `pre-commit` hook) adds the ledger to the commit being made, so it
+needs no commit of its own: `git add` of that one path when `metrics.record` and `metrics.commitLedger` are on, the
+ledger is inside the work tree (an absolute path or one leaving it with `../` is skipped), modified or new and not ignored by git, something else is staged (a work commit: never a ledger-only commit,
+nor an amend that only rewords), no merge, cherry-pick, revert or rebase is in progress, and the commit uses the whole
+index (`git commit`, `-a`, `-i`; `git commit <paths>` and `--only` use a temporary index, `next-index-*`, and are left
+alone, so a commit of selected paths takes only those). A skip says why on stderr only when the ledger has changes; an
+unreadable config warns and skips (exit 0); a failing `git add` exits 1 (the hook refuses the commit).
 
 The record hook never blocks a stop and never fails silently: on any error it exits 0 and prints a `systemMessage` JSON object on
 stdout that names `python3 <here>/doctor.py`. A successful record prints nothing; with `stop_hook_active` it records
@@ -479,14 +488,15 @@ def alerts(root, cfg, today):
     return out
 
 
-def git(root, *args):
+def git(root, *args, ok=(0,)):
+    """stdout of git; with `ok` holding more than 0, the exit code (for a git call that answers with it)."""
     try:
         r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, timeout=GIT_TIMEOUT)
     except (OSError, subprocess.SubprocessError) as exc:
         raise MetricsError(f"git {args[0]} could not run ({exc})")
-    if r.returncode != 0:
+    if r.returncode not in ok:
         raise MetricsError(f"git {' '.join(args)} failed: {(r.stderr or r.stdout).strip() or 'exit ' + str(r.returncode)}")
-    return r.stdout
+    return r.returncode if len(ok) > 1 else r.stdout
 
 
 def trailers_of(root, message):
@@ -529,20 +539,23 @@ COUNT_RE = re.compile(r"^[0-9]+$")
 
 
 def history_commits(root):
-    """The commits of the history from HEAD, newest first, without merges: [{"sha", "day" (UTC date text), "subject",
-    "trailers"}] for those with a `Refs:` trailer ("refs" holds their ids). No commits yet gives []."""
+    """The commits of the history from HEAD, newest first: [{"sha", "day" (UTC date text), "subject", "trailers",
+    "merge"}] for those with a `Refs:` trailer ("refs" holds their ids). Merges are kept with "merge": True (D141): a
+    review's fixes are often merged with `Findings:` on the merge, and only those trailers count from them. No commits
+    yet gives []."""
     git(root, "rev-parse", "--git-dir")  # raises MetricsError outside a repository
     try:
         git(root, "rev-parse", "--verify", "-q", "HEAD")
     except MetricsError:
         return []
-    out = git(root, "log", "--no-merges", "--format=%H%x1f%ct%x1f%B%x00")
+    out = git(root, "log", "--format=%H%x1f%P%x1f%ct%x1f%B%x00")
     commits = []
     for record_text in out.split("\x00"):
         record_text = record_text.strip("\n")
         if not record_text:
             continue
         sha, _, rest = record_text.partition("\x1f")
+        parents, _, rest = rest.partition("\x1f")
         stamp, _, message = rest.partition("\x1f")
         if "refs" not in message.lower():
             continue  # cheap filter before running git interpret-trailers
@@ -554,7 +567,7 @@ def history_commits(root):
         refs = refs_of(trailers)
         if refs:
             commits.append({"sha": sha, "day": day, "subject": message.strip().split("\n", 1)[0].strip(),
-                            "trailers": trailers, "refs": refs})
+                            "trailers": trailers, "refs": refs, "merge": len(parents.split()) > 1})
     return commits
 
 
@@ -576,10 +589,10 @@ def commit_type(subject, wip="WIP: "):
 def commit_signals(commits, first, last, quality, wip="WIP: "):
     """({id: {"commits", "red", "rework", "findings", "retries"}}, [(sha7, "Key: value") of ignored trailers]) of the
     commits (newest first, all the history) whose day is in first..last. The first commit of an id is the oldest of
-    the whole list that names it; it is never rework."""
+    the whole list that names it; it is never rework. A merge (D141) adds only its findings and retries."""
     oldest = {}
     for c in commits:  # newest first: the last write is the oldest commit
-        for ref in c["refs"]:
+        for ref in ([] if c.get("merge") else c["refs"]):
             oldest[ref] = c["sha"]
     rework_types = {t.lower() for t in quality["reworkTypes"]}
     names = {"findings": quality["findingsTrailer"].lower(), "retries": quality["retriesTrailer"].lower()}
@@ -601,11 +614,13 @@ def commit_signals(commits, first, last, quality, wip="WIP: "):
                     ignored.append((c["sha"][:7], f"{key}: {value}"))
         for ref in sorted(set(c["refs"])):
             acc = signals.setdefault(ref, dict.fromkeys(("commits", "red", "rework", "findings", "retries"), 0))
+            acc["findings"] += sums["findings"]
+            acc["retries"] += sums["retries"]
+            if c.get("merge"):
+                continue
             acc["commits"] += 1
             acc["red"] += 1 if red else 0
             acc["rework"] += 1 if is_rework and oldest[ref] != c["sha"] else 0
-            acc["findings"] += sums["findings"]
-            acc["retries"] += sums["retries"]
     return signals, sorted(set(ignored))
 
 
@@ -851,6 +866,72 @@ def run_alert(args):
     return 0
 
 
+IN_PROGRESS = (("MERGE_HEAD", "a merge"), ("CHERRY_PICK_HEAD", "a cherry-pick"), ("REVERT_HEAD", "a revert"),
+               ("rebase-merge", "a rebase"), ("rebase-apply", "a rebase or git am"))
+
+
+def git_path(root, name):
+    path = git(root, "rev-parse", "--git-path", name).strip()
+    return path if os.path.isabs(path) else os.path.join(str(root), path)
+
+
+def stage_ledger(root, cfg, index_file=None):
+    """B36: add the ledger to the commit being made. Returns (staged, why): staged True when `git add` ran; why says
+    why not (None when the ledger has no changes, so there is nothing worth saying). Raises MetricsError if git fails."""
+    settings = config.metrics(cfg)
+    if not (settings["record"] and settings["commitLedger"]):
+        return False, None
+    rel = posixpath.normpath(settings["ledger"])
+    if rel.startswith("/") or rel == ".." or rel.startswith("../"):
+        return False, None  # outside the work tree: not in git, like an ignored ledger
+    tracked = bool(git(root, "ls-files", "--", rel).strip())
+    if tracked:
+        changed = bool(git(root, "diff", "--name-only", "--", rel).strip())
+        if changed and not os.path.isfile(os.path.join(str(root), *rel.split("/"))):
+            return False, f"{rel} was deleted; a deletion is never staged for you"
+    else:
+        if not os.path.isfile(os.path.join(str(root), *rel.split("/"))):
+            return False, None
+        if git(root, "check-ignore", "--no-index", "-q", "--", rel, ok=(0, 1)) == 0:
+            return False, None  # ignored on purpose: the project keeps it out of git
+        changed = True
+    if not changed:
+        return False, None
+    for name, what in IN_PROGRESS:
+        if os.path.exists(git_path(root, name)):
+            return False, f"{what} is in progress; commit the ledger after it: git add {rel}"
+    if index_file and os.path.basename(index_file) not in ("index", "index.lock"):
+        return False, f"the commit names its paths (git commit <paths> / --only); it goes with the next one"
+    others = [n for n in git(root, "diff", "--cached", "--name-only", "--no-renames").splitlines() if n and n != rel]
+    if not others:
+        return False, None  # a ledger-only commit or an amend that only rewords: not a work commit
+    git(root, "add", "--", rel)
+    return True, None
+
+
+def run_stage_ledger(args):
+    try:
+        root = config.find_root(args.root)
+        cfg = config.load(root)
+    except config.ConfigError as exc:
+        print(f"pre-commit: WARNING: cannot read metrics from .claude/gw.json ({' '.join(str(exc).split())}), so the "
+              f"token ledger is not added to this commit; fix it: python3 {os.path.join(HERE, 'config.py')} --root "
+              f"{args.root or '.'} validate", file=sys.stderr)
+        return 0
+    try:
+        staged, why = stage_ledger(cfg["_root"], cfg, os.environ.get("GIT_INDEX_FILE"))
+    except (MetricsError, OSError) as exc:
+        print(f"pre-commit: cannot add the token ledger to the commit: {exc}; add it by hand (git add "
+              f"{config.metrics(cfg)['ledger']}) or turn it off with metrics.commitLedger false", file=sys.stderr)
+        return 1
+    ledger = posixpath.normpath(config.metrics(cfg)["ledger"])
+    if staged:
+        print(f"pre-commit: added the token ledger {ledger} to this commit (metrics.commitLedger)", file=sys.stderr)
+    elif why:
+        print(f"pre-commit: the token ledger is not added: {why}", file=sys.stderr)
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="metrics.py", description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="command", required=True)
@@ -885,8 +966,11 @@ def main(argv=None):
     qp.add_argument("--write", action="store_true", help="also save it as <name>-quality.md under metrics.reports/...")
     qp.add_argument("--root", help="project root (default: see config.find_root)")
     qp.set_defaults(func=run_quality)
+    sl = sub.add_parser("stage-ledger", help="pre-commit hook (B36): add the changed ledger to the work commit being made")
+    sl.add_argument("--root", help="project root (default: see config.find_root)")
+    sl.set_defaults(func=run_stage_ledger)
     args = ap.parse_args(argv)
-    if args.command in ("price", "report", "compare", "alert", "quality"):
+    if args.command in ("stage-ledger", "price", "report", "compare", "alert", "quality"):
         return args.func(args)
     try:
         return args.func(args)

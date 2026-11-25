@@ -4,7 +4,7 @@ description: "Turn the current conversation into a spec: no interview, just synt
 disable-model-invocation: true
 license: MIT (see LICENSE-mattpocock-skills)
 metadata:
-  version: "0.6.0"
+  version: "0.9.0"
   source: "mattpocock/skills@5beb35b"
 ---
 
@@ -88,7 +88,7 @@ This section is the only change to the upstream skill. Where the text above name
 or `/setup-matt-pocock-skills`, this section wins: the workflow has neither a tracker nor that setup.
 
 - **Destination:** write the spec to `docs/specs/<YYYY-MM-DD>-<slug>.md` (slug from the feature, folder created if
-  needed) in the project's `language` (`.claude/gw.json`) and report the path. No triage label.
+  needed) in the project's docs language (`languages.docs.primary`; `.claude/gw.json`) and report the path. No triage label.
 - If the project note (`.claude/gw/to-spec.md`) names another folder or a tracker, use that instead.
 - If the project keeps a plan (`plan` in `.claude/gw.json`), link the spec from the plan task it belongs to, in the
   same commit.

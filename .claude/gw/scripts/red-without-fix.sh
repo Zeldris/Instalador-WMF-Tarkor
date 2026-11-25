@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.6.0
+# galivelop-workflow v0.9.0
 # Checks that a new test FAILS without the fix it covers (a test that passes either way proves nothing).
-# With the fix still uncommitted: it stashes the fix files, runs the test command (it must fail), restores them and
+# With the fix still uncommitted: it copies the fix files aside (no git stash), puts back their HEAD version, runs the test command (it must fail), restores them and
 # runs it again (it must pass).
 #   bash red-without-fix.sh [--fix-at COMMIT] [--fails-with REGEX] [--reject-compile-red] [--compile-re REGEX]
 #                           [--ran-one REGEX] "<test command>" <fix-file>...
@@ -26,7 +26,7 @@
 #                         built-in one; for a runner it does not know). redWithoutFix.testRegex does the same for test code.
 # Make the command run exactly the new test (by its exact name): a filter that matches nothing may "pass" without
 # running it. Without --fix-at every fix file must have uncommitted changes (a new, untracked file counts).
-# The test must NOT be uncommitted in a fix file: stashing the fix would take the test with it and the check could not
+# The test must NOT be uncommitted in a fix file: reverting the fix would take the test with it and the check could not
 # tell (it may report "also passes WITHOUT the fix"). So a fix file whose uncommitted changes touch test code (a
 # `def test_`, `it(`, `#[test]`... line changed, or enclosing a changed line, or in a new file) is refused with exit 2:
 # commit the test first (`git add -p` for just its hunks, or move it to its own file) and pass only the fix files.
@@ -109,8 +109,8 @@ enclosing() {  # <file>; line numbers on stdin -> the lines above each one that 
     { t = $1 + 0; if (t < 1 || t > n) next; m = ind(L[t])
       for (i = t - 1; i >= 1 && m > 0; i--) if (L[i] !~ /^[ \t]*$/ && ind(L[i]) < m) { print L[i]; m = ind(L[i]) } }'
 }
-kindchg="uncommitted"; verb="stashing"
-[ -z "$fixat" ] || { kindchg="committed"; verb="reverting"; }
+kindchg="uncommitted"
+[ -z "$fixat" ] || kindchg="committed"
 # Text and data files (nonTestExtensions of .claude/gw.json) hold no test code: prose such as "improve it (URL)" would
 # match `it(`. The extension is what follows the last dot of the file name, compared in lower case; a name without a
 # dot (Makefile) or with only a leading one (.env) has none and is always searched.
@@ -138,17 +138,20 @@ for f in "$@"; do
     hit=""
   fi
   [ -z "$hit" ] || {
-    echo "red-without-fix: $f has $kindchg changes that touch test code ($hit); $verb the fix would remove that test too, so the check could not tell if the test covers the fix. Put the test in its own file or commit it first (git add -p), then rerun with only the fix files: bash $0 \"$cmd\" <fix-file>..." >&2; exit 2; }
+    echo "red-without-fix: $f has $kindchg changes that touch test code ($hit); reverting the fix would remove that test too, so the check could not tell if the test covers the fix. Put the test in its own file or commit it first (git add -p), then rerun with only the fix files: bash $0 \"$cmd\" <fix-file>..." >&2; exit 2; }
 done
 out="$(mktemp -d "${TMPDIR:-/tmp}/gw-rojo.XXXXXX")" || { echo "red-without-fix: cannot create a temp dir; free space and retry" >&2; exit 2; }
 restored=""
 if [ -n "$fixat" ]; then
   restore() {
     [ -z "$restored" ] || return 0
+    if git checkout -q HEAD -- "$@"; then restored=1; return 0; fi
     restored=1
-    git checkout -q HEAD -- "$@" || { echo "red-without-fix: could not restore the fix files; run: git checkout HEAD -- $*" >&2; return 1; }
+    echo "red-without-fix: could not restore the fix files; run: git checkout HEAD -- $*" >&2; return 1
   }
   trap 'restore "$@"; rm -rf "$out"' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
   for f in "$@"; do
     if git cat-file -e "$fixc^:$f" 2> /dev/null; then
       git checkout -q "$fixc^" -- "$f" || { echo "red-without-fix: cannot revert $f; restore with: git checkout HEAD -- $f" >&2; exit 2; }
@@ -157,17 +160,68 @@ if [ -n "$fixat" ]; then
     fi
   done
 else
-  stashes_before="$(git stash list | grep -c .)"
-  git stash push --quiet --include-untracked -- "$@" || { rm -rf "$out"; echo "red-without-fix: cannot stash the fix files; check: git status" >&2; exit 2; }
-  if [ "$(git stash list | grep -c .)" -le "$stashes_before" ]; then
-    rm -rf "$out"; echo "red-without-fix: nothing was stashed; check the fix files: git status -- $*" >&2; exit 2
-  fi
+  # No git stash (it is shared by every worktree of the repo): copy each fix file into a folder inside this worktree's
+  # git dir (it survives a reboot, unlike /tmp), put the HEAD version in its place (a file HEAD does not have is
+  # removed) and always put the copy back, also on a failed script, a killed test, Ctrl-C, SIGTERM or SIGHUP. Only the
+  # files already reverted are touched on the way back. The index is never touched.
+  for f in "$@"; do
+    { [ ! -d "$f" ] || [ -L "$f" ]; } || { rm -rf "$out"; echo "red-without-fix: $f is a directory; name the fix files one by one: git status --porcelain -- $f" >&2; exit 2; }
+  done
+  gitdir="$(git rev-parse --absolute-git-dir 2>/dev/null)" || { rm -rf "$out"; echo "red-without-fix: cannot find the git dir; check: git rev-parse --git-dir" >&2; exit 2; }
+  saved="$(mktemp -d "$gitdir/gw-red-saved.XXXXXX")" || { rm -rf "$out"; echo "red-without-fix: cannot create a folder in $gitdir; free space and retry" >&2; exit 2; }
+  reverted=0; keep=""
   restore() {
     [ -z "$restored" ] || return 0
+    keep=1  # set first: a signal that lands in the middle of this loop must not delete the copies
     restored=1
-    git stash pop --quiet || { echo "red-without-fix: could not restore the fix files; they are in the stash: git stash list; git stash pop" >&2; return 1; }
+    local_fail=""; n=0
+    for f in "$@"; do
+      n=$((n + 1))
+      [ "$n" -le "$reverted" ] || break
+      rm -f -- "$f"
+      if [ -f "$saved/$n.link" ]; then
+        mkdir -p -- "$(dirname -- "$f")" && ln -s -- "$(cat "$saved/$n.link")" "$f" || local_fail=1
+      elif [ -f "$saved/$n" ]; then
+        mkdir -p -- "$(dirname -- "$f")" && cp -p -- "$saved/$n" "$f" && touch -- "$f" || local_fail=1
+      fi  # else: the fix deleted it
+    done
+    [ -z "$local_fail" ] || { echo "red-without-fix: could not restore the fix files; the copies are in $saved (N = Nth file given): copy them back by hand" >&2; return 1; }
+    keep=""
   }
-  trap 'restore; rm -rf "$out"' EXIT
+  trap 'restore "$@"; if [ -n "$keep" ]; then rm -rf "$out"; echo "red-without-fix: the fix files may be only partly restored; the copies are in $saved (N = Nth file given, none for a file the fix deleted): copy them back by hand" >&2; else rm -rf "$out" "$saved"; fi' EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  n=0
+  for f in "$@"; do
+    n=$((n + 1))
+    if [ -L "$f" ]; then
+      printf '%s' "$(readlink -- "$f")" > "$saved/$n.link" || { echo "red-without-fix: cannot save $f; nothing was changed; free space and retry" >&2; exit 2; }
+      echo "red-without-fix: fix file $n saved: $f -> $saved/$n.link (if this run dies, recreate the link by hand)"
+    elif [ -e "$f" ]; then
+      { cp -p -- "$f" "$saved/$n.tmp" && mv -f -- "$saved/$n.tmp" "$saved/$n"; } || { echo "red-without-fix: cannot save $f; nothing was changed; free space and retry" >&2; exit 2; }
+      echo "red-without-fix: fix file $n saved: $f -> $saved/$n (if this run dies, copy it back by hand)"
+    else
+      echo "red-without-fix: fix file $n: $f does not exist (the fix deletes it); nothing to save"
+    fi
+  done
+  n=0
+  for f in "$@"; do
+    n=$((n + 1))
+    reverted=$n
+    rm -f -- "$f"
+    entry="$(git ls-tree HEAD -- "$f" 2>/dev/null)"
+    if [ -n "$entry" ]; then
+      mode="${entry%% *}"
+      mkdir -p -- "$(dirname -- "$f")"
+      if [ "$mode" = 120000 ]; then
+        ln -s -- "$(git cat-file blob "HEAD:$f")" "$f" || { echo "red-without-fix: cannot revert $f; the fix is restored on exit" >&2; exit 2; }
+      else
+        git cat-file --filters "HEAD:$f" > "$f" || { echo "red-without-fix: cannot revert $f; the fix is restored on exit" >&2; exit 2; }
+        if [ "$mode" = 100755 ]; then chmod +x -- "$f"; else chmod -x -- "$f"; fi
+      fi
+    fi  # else: new file, HEAD has no version of it
+  done
 fi
 bash -c "$cmd" > "$out/without.log" 2>&1 < /dev/null
 without=$?

@@ -23,6 +23,8 @@ resort: the log folder of the home directory's cloud start (`-home-user`). Pass 
 Short current session (B29): without `--session`, if the session found has fewer than `measure.minCalls` calls in the
 period (default 5, config `measure.minCalls`, 0 = off; e.g. right after a `/clear`), the newest previous session of the
 same git branch (log lines carry `gitBranch`) with calls in the period is measured instead, and the output says so.
+With an explicit period, logs of another branch are never picked; when the current log has no `gitBranch` yet, the
+repo's checked-out branch stands in for it (a detached HEAD: no branch filter).
 
 Tokens of a result are estimated from its size (characters / contextGuard.charsPerToken, 3.5 by default; an image counts ~1,600). API usage is exact.
 """
@@ -89,10 +91,11 @@ def session_logs(root):
 
 def default_min_calls(root):
     """The schema default of `measure.minCalls` (one datum, one place): from the workflow's schema next to this
-    script (the repo's `schema/` or an installed `.claude/gw/schema/`) or the project's own; 0 (off) if none is found."""
+    script (the repo's `schema/` or an installed `.claude/gw/schema/`, also from the `.agents/skills/` copy) or the project's own; 0 (off) if none is found."""
     here = os.path.dirname(os.path.abspath(__file__))
     for path in (os.path.join(here, '..', '..', '..', 'schema', 'gw.schema.json'),
                  os.path.join(here, '..', '..', '..', 'gw', 'schema', 'gw.schema.json'),
+                 os.path.join(here, '..', '..', '..', '..', '.claude', 'gw', 'schema', 'gw.schema.json'),  # the .agents/skills copy
                  os.path.join(root, '.claude', 'gw', 'schema', 'gw.schema.json')):
         try:
             with open(path, encoding='utf-8') as f:
@@ -157,6 +160,39 @@ def chars_per_token(root):
     return CHARS_PER_TOKEN
 
 
+def fixed_startup(root, path):
+    """E76: tokens of the fixed startup (system prompt, tools, MCP) of the last measured startup of `path`, from the
+    workflow's own estimate (context_guard.py, installed copy first, then this repo's: one datum, one place). It is the
+    startup minus the project's part (log, AGENTS.md/CLAUDE.md, skills, conversation carried over); the SessionStart
+    hook output stays in it, since the session log does not keep it. Returns
+    (tokens or None, reason when None); fails open: a copy that fails (an old install without `Measure`) gives way
+    to the next one, and with none left the result is None."""
+    failed = None
+    for rel in ('.claude/gw/scripts', 'scripts'):
+        guard = os.path.join(root, rel, 'context_guard.py')
+        if not os.path.isfile(guard):
+            continue
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location('gw_context_guard', guard)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            try:
+                cfg = mod.config.load(root)
+            except Exception:  # no or bad config: the estimate takes the defaults
+                cfg = None
+            parts = mod.Measure(root, cfg, path).culprits()
+        except BaseException as exc:  # fails open (SystemExit too, from an import): try the next copy
+            if isinstance(exc, KeyboardInterrupt):
+                raise
+            failed = f'{rel}/context_guard.py failed: {exc!r}'
+            continue
+        if not parts:
+            return None, 'no measured startup in the session log'
+        return next((t for label, t, _ in parts if label == mod.SYSTEM), None), 'no system part in the estimate'
+    return None, failed or 'no context_guard.py of the workflow in .claude/gw/scripts/ or scripts/'
+
+
 def branch_of(path):
     """The LAST `gitBranch` a log has (a session may switch branch: its branch is the one it ends on), or None."""
     branch = None
@@ -180,7 +216,7 @@ def newest_session(root):
     return max(logs, key=lambda p: (os.path.getmtime(p), p)) if logs else None
 
 
-def previous_session(path, root, since):
+def previous_session(path, root, since, cut=False):
     """The newest other log of the project whose branch is the one of `path` and that has calls in the period
     (ties in mtime: the greater file name); (that log or None, the branch or None)."""
     branch = branch_of(path)
@@ -189,23 +225,34 @@ def previous_session(path, root, since):
     others = sorted((p for p in session_logs(os.path.abspath(root)) if os.path.abspath(p) != os.path.abspath(path)),
                     key=lambda p: (os.path.getmtime(p), p), reverse=True)
     for p in others:
-        if branch_of(p) == branch and responses_of(p, since):
+        if branch_of(p) == branch and responses_of(p, cut_since(p, since, cut)):
             return p, branch
     return None, branch
 
 
-def default_session(root, since=None):
-    """Newest `.jsonl` of the root's log folder or of a parent folder's; exits if there is none.
-    With `since`, the one with most responses from that moment on (the newest file may be a later session that
+def default_session(root, since=None, cut=False):
+    """The session in progress: the newest `.jsonl` of the root's log folder, of a parent folder's or of the cloud
+    start folder (D144; on a tie in mtime the repo's own folder wins, D139); exits if there is none.
+    With the default period (`cut`) that session whatever its calls; with an explicit period the one with most responses from that moment on (the newest file may be a later session that
     does not cover the period); the newest if none has any."""
     root = os.path.abspath(root)
     candidates = session_logs(root)
     if not candidates:
         sys.exit(f'No sessions in ~/.claude/projects/{folder_of(root)}/ or its parent folders (use --session)')
-    path = max(candidates, key=os.path.getmtime)
-    if since:
-        covered = {p: len(responses_of(p, since)) for p in candidates}
-        if max(covered.values()) > 0:
+    own_folder = folder_of(root)
+    path = max(candidates, key=lambda p: (os.path.getmtime(p), os.path.basename(os.path.dirname(p)) == own_folder))
+    if since and not cut:  # explicit period: the log covering it, D139's folder preference, never another branch's (D151)
+        # the log's own branch; a session without `gitBranch` (just started) falls back to the repo's current branch
+        branch = branch_of(path) or git('symbolic-ref', '--short', '-q', 'HEAD', cwd=root)
+        if branch:  # a log of another branch is out; one without `gitBranch` is not discarded
+            candidates = [p for p in candidates if p == path or branch_of(p) in (None, branch)]
+        covered = {p: len(responses_of(p, cut_since(p, since, cut))) for p in candidates}
+        # D139: the repo's own log folder first; a parent folder's (a session opened above the repo) only when
+        # none of the repo's logs has calls in the period.
+        own = [p for p in candidates if os.path.basename(os.path.dirname(p)) == own_folder and covered[p] > 0]
+        if own:
+            candidates = own
+        if max(covered[p] for p in candidates) > 0:
             path = max(candidates, key=lambda p: (covered[p], os.path.getmtime(p)))
     folder = os.path.basename(os.path.dirname(path))
     cloud_start = os.environ.get('CLAUDE_CODE_REMOTE') == 'true' and folder == '-home-user'  # where the cloud starts
@@ -213,6 +260,52 @@ def default_session(root, since=None):
         print(f'(warning: log from a session opened outside the repo, in folder {folder}; '
               f'if it is not this session, pass --session)', file=sys.stderr)
     return path
+
+
+# D138: a /clear is a user line made of command tags (`<command-name>`/`<command-message>`, in either order): the
+# line starts with a command tag and has the `/clear` name tag anywhere; a mention inside prose is not one.
+CLEAR_TAG = re.compile(r'<command-name>\s*/clear\s*</command-name>')
+
+
+def cut_since(path, since, cut):
+    """D138: the start of the stretch reported for a log: just after its last /clear or compaction when `cut`
+    (neither --since nor --hours), else `since`. The minCalls fallback and the session choice use it too."""
+    brk = last_break(path) if cut else None
+    return brk[0] + dt.timedelta(microseconds=1) if brk else since  # the marker itself is not a call
+
+
+def last_break(path):
+    """D138: moment of the last `/clear` (a user line with `<command-name>/clear</command-name>`) or compaction
+    (`compact_boundary`) of a log; (UTC datetime, 'clear' | 'compaction') or None."""
+    found = None
+    try:
+        with open(path, encoding='utf-8') as log:
+            for line in log:
+                if '/clear</command-name>' not in line and 'command-message>clear<' not in line and 'compact_boundary' not in line:
+                    continue  # cheap filter before parsing
+                try:
+                    d = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(d, dict) or d.get('isSidechain') or not d.get('timestamp'):
+                    continue
+                content = (d.get('message') or {}).get('content')
+                if isinstance(content, list):
+                    content = ' '.join(b.get('text') or '' for b in content if isinstance(b, dict))
+                if d.get('type') == 'system' and d.get('subtype') == 'compact_boundary':
+                    kind = 'compaction'
+                elif d.get('type') == 'user' and isinstance(content, str) and \
+                        content.lstrip().startswith('<command-') and CLEAR_TAG.search(content):
+                    kind = 'clear'
+                else:
+                    continue
+                try:
+                    found = (parse_time(d['timestamp']), kind)
+                except ValueError:
+                    continue
+    except OSError:
+        pass
+    return found
 
 
 def tokens_of(content):
@@ -240,6 +333,8 @@ def input_summary(entry, name=None):
 
 
 FILE_RE = re.compile(r'(?<![\w/.-])((?:[\w.-]+/)*[\w.-]+\.(?:[a-z]{1,5}))(?![\w/])')
+# `git config user.email <address>` names keys and values, not files (retro of the 0.7.0, T3).
+GIT_CONFIG = re.compile(r'\bgit\s+config\s[^;&|\n"\']*')
 READS = re.compile(r'(?:^|[|;&(]\s*|\s)(?:cat|sed|head|tail|grep|rg|awk|wc|less|nl|cut)\s')
 CD = re.compile(r'^\s*cd\s+(\S+)\s*&&')
 # What comes right after an interpreter (or `./`) is executed, not read: `bash scripts/run.sh grep ...`.
@@ -257,7 +352,7 @@ def files_read(name, entry, root):
         base = cd.group(1) if cd else ''
         executed = {os.path.normpath(e) for e in EXECUTES.findall(command)}
         paths = [p if p.startswith('/') or not base else os.path.join(base, p)
-                 for p in FILE_RE.findall(command) if os.path.normpath(p) not in executed]
+                 for p in FILE_RE.findall(GIT_CONFIG.sub(' ', command)) if os.path.normpath(p) not in executed]
     else:
         return []
     prefix = root.rstrip('/') + '/'
@@ -338,8 +433,10 @@ def main():
         description='Where the tokens of a Claude Code session went: API usage, context curve, heavy results, '
                     'repeats, per-file reads, per-model and per-subagent split. Standard library only.')
     ap.add_argument('--session', metavar='PATH.jsonl',
-                    help='session log to read (default: newest of the repo folder or its parent folders)')
-    ap.add_argument('--hours', type=float, default=24, help='period in hours, 0 = the whole session (default 24)')
+                    help='session log to read (default: the newest, the session in progress, of the repo folder, its parent folders and the cloud start folder)')
+    ap.add_argument('--hours', type=float, default=None,
+                    help='period in hours, 0 = the whole session (default: from the last /clear or compaction of the '
+                         'session log, else 24)')
     ap.add_argument('--since', metavar='ISO|SHA',
                     help='only from that moment (commit: its date; ISO-8601 date, no zone = UTC); replaces --hours')
     ap.add_argument('--top', type=int, default=12, help='rows per list (default 12)')
@@ -353,16 +450,17 @@ def main():
     since = None
     if a.since:
         since = since_moment(a.since)
-    elif a.hours > 0:
-        since = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=a.hours)
-    path = a.session or default_session(root, since)
+    elif a.hours is None or a.hours > 0:
+        since = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=24 if a.hours is None else a.hours)
+    cut = a.since is None and a.hours is None  # D138: stretch since the last /clear or compaction
+    path = a.session or default_session(root, since, cut)
     note = None
     threshold = 0 if a.session else min_calls(root)
     current = newest_session(root) if threshold else None  # the session in progress, not the one with most calls
     if current:
-        have = len(responses_of(current, since))
+        have = len(responses_of(current, cut_since(current, since, cut)))
         if have < threshold:
-            before, branch = previous_session(current, root, since)
+            before, branch = previous_session(current, root, since, cut)
             if before:
                 note = (f'Note: the current session has {have} calls (under measure.minCalls = {threshold}); '
                         f'measuring the previous session of branch {branch}: {os.path.basename(before)}')
@@ -372,6 +470,9 @@ def main():
                 note = (f'Note: the current session has {have} calls (under measure.minCalls = {threshold}) and '
                         f'there is no previous session of {"branch " + branch if branch else "its branch"}: '
                         f'measuring {os.path.basename(path)}')
+
+    start = last_break(path) if cut else None
+    since = cut_since(path, since, cut)
 
     usage = collections.Counter()
     api_calls = 0
@@ -469,7 +570,8 @@ def main():
 
     total_in = usage['input_tokens'] + usage['cache_creation_input_tokens'] + usage['cache_read_input_tokens']
     period = ('whole session' if not since else f'since {since:%Y-%m-%d %H:%M} UTC' if a.since
-              else f'last {a.hours:g} h')
+              else f'since the last {"/clear" if start[1] == "clear" else "compaction"} ({since:%Y-%m-%d %H:%M} UTC)'
+              if start else f'last {24 if a.hours is None else a.hours:g} h')
     print(f'Session: {os.path.basename(path)}  |  period: {period}')
     if note:
         print(note)
@@ -481,6 +583,21 @@ def main():
     print(f'Average context per call: {total_in / api_calls:,.0f} tokens  ->  every extra call costs that '
           f'(at cache price, ~{total_in / api_calls / 10:,.0f} tokens of normal input)')
     print(f'Average output per call: {usage["output_tokens"] / api_calls:,.0f} tokens (includes reasoning)')
+    # E76: the fixed startup (system prompt, tools, MCP) rides on every call and hides what the project can cut.
+    # A subagent's log has only sidechain lines, which context_guard skips: its startup is not measured there.
+    system, why = (None, 'the split does not apply to a subagent log') if own_log else fixed_startup(root, path)
+    if system is None:
+        print(f'Fixed startup: unknown ({why})')
+    else:
+        # Only real calls carry it: the synthetic messages (API errors, "No response requested") have no model.
+        real_calls = sum(1 for model, ctx in zip(call_models, contexts) if model and ctx)
+        fixed = min(system * real_calls, total_in)
+        print(f'Fixed startup (system prompt, tools, MCP; per call, neither /clear nor the project shrinks it, so the '
+              f'total falls only with fewer calls or fewer MCP servers and connectors; it also holds the SessionStart '
+              f'hook output, which the log does not keep): ~{system:,} tokens per call x {real_calls} calls = '
+              f'{fixed:,} input ({100 * fixed / max(total_in, 1):.0f} %)')
+        print(f'Project cost (the rest: instructions, log, skills, conversation, results): '
+              f'{total_in - fixed:,} input ({100 * (total_in - fixed) / max(total_in, 1):.0f} %)')
     # Curve between compactions: the floor is the fixed context (instructions, tools, summary) and the ceiling is
     # how far it grows before compacting. A ceiling far above the floor says compaction comes too late.
     stretches, closed, start = [], [], 0  # closed: the stretch ended in a compaction (it peaked where compaction fires)

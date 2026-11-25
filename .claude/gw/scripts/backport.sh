@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.6.0
+# galivelop-workflow v0.9.0
 # Brings commits from a minor's branch onto the current PATCH branch (D81).
 #   bash backport.sh [--from <branch>] [--refs <id>[,<id>]] [<sha>...]
 #  - Refuses to start (exit 2, with the command that fixes it) on: no shas, an unknown sha or branch, a dirty tree
@@ -50,7 +50,7 @@ logfile="$(cfg log)" || die "cannot read 'log'; fix the config: python3 $config 
 roadmaps="$(cfg roadmapFiles)" || die "cannot read 'roadmapFiles'; fix the config: python3 $config --root $root validate"
 proposals="$(cfg proposalsDir)" || die "cannot read 'proposalsDir'; fix the config: python3 $config --root $root validate"
 commitrefs="$(cfg commitRefs)" || die "cannot read 'commitRefs'; fix the config: python3 $config --root $root validate"
-lang="$(cfg language)" || die "cannot read 'language'; fix the config: python3 $config --root $root validate"
+lang="$(cfg languages.docs.primary)" || die "cannot read 'languages.docs.primary'; fix the config: python3 $config --root $root validate"
 # The files whose conflicts take this branch's side: the log and the path of each roadmap file (JSON lines).
 rpaths="$(printf '%s\n' "$roadmaps" | python3 -c '
 import json, sys

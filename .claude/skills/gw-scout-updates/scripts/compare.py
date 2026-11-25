@@ -10,7 +10,7 @@ Usage:
 Without <architecture.md>, it is `architecture.md` in the `scoutDir` folder of the project's `.claude/gw.json`
 (read with `.claude/gw/scripts/config.py`; default `.claude/gw/scout`).
 
-The words the script looks for come in English and in Spanish (the `language` values of the config), whichever the
+The words the script looks for come in English and in Spanish (the `languages.docs.primary` values of the config), whichever the
 project uses: seal `seal`/`sello`, section `Constraints`/`Restricciones`, report section `Coverage`/`Cobertura`,
 table header `Component`/`Componente`.
 
@@ -114,7 +114,7 @@ def changed_files(root, commit, paths):
     return sorted(touched)
 
 
-def compare(arch_path, root):
+def compare(arch_path, root, with_inventory=True):
     with open(arch_path, encoding='utf-8') as f:
         text = f.read()
     result = {'same': [], 'changed': [], 'unsealed': [], 'uncounted': []}
@@ -135,6 +135,8 @@ def compare(arch_path, root):
         else:
             result['same'].append({'section': title, 'date': date})
     folders = tuple(r.rstrip('/') + '/' for r in sealed)  # a seal with a folder covers its manifests
+    if not with_inventory:
+        return result
     result['uncounted'] = [m for m in inventory.inventory(root)['manifests']
                            if m not in sealed and not m.startswith(folders)]
     return result
@@ -167,6 +169,7 @@ def main(argv=None):
     ap.add_argument('architecture', nargs='?', help='default: <scoutDir>/architecture.md of the project config')
     ap.add_argument('--root', help='project root (default: the project holding this copy, else the git top level)')
     ap.add_argument('--json', action='store_true')
+    ap.add_argument('--no-inventory', action='store_true', help='skip the `uncounted` manifests (what doctor.py needs)')
     ap.add_argument('--report', help='step-6 report: checks its coverage table')
     ap.add_argument('--section', help='print only the sections whose title contains this text')
     a = ap.parse_args(argv)
@@ -183,7 +186,7 @@ def main(argv=None):
             return 1
         print(chunk, end='')
         return 0
-    res = compare(a.architecture, a.root)
+    res = compare(a.architecture, a.root, not a.no_inventory)
     if a.report:
         with open(a.architecture, encoding='utf-8') as f, open(a.report, encoding='utf-8') as g:
             res['uncovered'] = uncovered(f.read(), g.read())

@@ -1,9 +1,9 @@
-<!-- galivelop-workflow v0.6.0 -->
+<!-- galivelop-workflow v0.9.0 -->
 # Instalador-WMF-Tarkor — instrucciones para agentes
 
 Este proyecto se trabaja por relevos: una sesión puede acabarse en cualquier momento (tokens, contenedor, cambio de
 cuenta) y la siguiente tiene que seguir **sin perder nada y sin preguntar por dónde iba**. Todo lo de este archivo
-existe para eso. El flujo es Galivelop-workflow v0.6.0; sus scripts están en `.claude/gw/scripts/`, sus skills
+existe para eso. El flujo es Galivelop-workflow v0.9.0; sus scripts están en `.claude/gw/scripts/`, sus skills
 en `.claude/skills/` y su configuración en `.claude/gw.json` (solo la lee `.claude/gw/scripts/config.py`).
 
 ## Al empezar cualquier sesión
@@ -11,12 +11,13 @@ en `.claude/skills/` y su configuración en `.claude/gw.json` (solo la lee `.cla
 1. La bitácora, `docs/records/traspaso.md`: rama, tarea en curso, qué falta y siguiente paso. Basta la fila de tu
    rama que da el gancho de inicio (`recover.py --state`); «Siguiente paso» solo si la fila no lo da, y
    siempre «Decisiones de la usuaria que bloquean algo» (es corta).
-2. `git fetch origin <rama>` y comprueba que el último commit coincide con lo que dice la bitácora.
+2. `git fetch origin <rama>`; `python3 .claude/gw/scripts/recover.py --state` dice en «Remote» si vas al día con
+   `origin/<rama>`, y el último commit tiene que coincidir con lo que dice la bitácora.
 3. Comprueba que el check está en verde antes de tocar nada: las órdenes de `check` en `.claude/gw.json`.
 4. Sigue por el **siguiente paso** de la bitácora, salvo que la usuaria pida otra cosa.
-5. Al empezar cada tarea, trae la rama protegida: `git fetch origin main` y, si trae commits,
-   `git merge origin/main` (merge, nunca rebase: las ramas están subidas). Si el conflicto toca la
-   misma lógica por los dos lados, se para y se consulta a la usuaria.
+5. Al empezar cada tarea, trae la rama protegida con `python3 .claude/gw/scripts/merge-main.py` (fetch, commit del
+   ledger de métricas, se niega con más cambios sin commit y `git merge origin/main`; merge, nunca
+   rebase: ramas subidas). Si el conflicto toca la misma lógica por los dos lados, se para y se consulta a la usuaria.
 6. **La sesión se abre con el repo como carpeta de trabajo.** Abierta en otra (una que contiene varios repos, la
    carpeta personal), no carga `.claude/settings.json`: ni el tope de compactación, ni el gancho de inicio, ni el que
    vigila la subida a la rama protegida. Si pasa, dilo a la usuaria para que la reabra desde el repo; mientras tanto,
@@ -36,14 +37,17 @@ Cada sesión puede correr en un contenedor temporal: **lo que no está subido no
   está haciendo. Una tarea a medias dice qué está hecho y qué falta.
 - Si hay que parar con algo a medias o en rojo: commit igualmente con `WIP:` al principio del mensaje y, en la
   bitácora, qué falla y por qué. Nunca dejar trabajo solo en local.
-- Push a la rama de trabajo (`git push -u origin <rama>`); si falla por red, reintentar con espera 2, 4, 8 y 16 s.
-  El push y el check largo se lanzan en segundo plano y se espera su aviso, sin bucles de espera.
+- Push a la rama de trabajo con `bash .claude/gw/scripts/push.sh <rama>` (reintenta si falla por red, `pushRetryDelays`, y
+  da por subido solo lo que `git ls-remote` confirma). El push y el check largo, en segundo plano con `timeout` de 5400000 ms (90 min), sin bucles de espera.
 - **Tras una llamada interrumpida o rechazada, `git status` y `git diff` antes de repetirla**: el cambio puede
   haberse guardado, o incluso subido, y repetirlo lo duplica.
 - Si la usuaria dice que se para, se para: se sube lo que haya, se deja la bitácora al día y no se sigue con nada más.
-- **Al cerrar cada tarea o PR** (y cada fase), con todo subido y la bitácora al día, se pide a la usuaria un `/clear` en
-  una línea, con el porqué: el contexto largo es casi todo el gasto, y la bitácora basta para retomar.
-- **Al cerrar cada bloque o fase, mira el CI de la última subida.** Un CI que no arranca (sin cuota, sin runners)
+- **Las preguntas a la usuaria**: lista numerada, cada una con su recomendación (`questions.py add`; un subagente las
+  devuelve a la sesión principal); responde por número y `questions.py answer "5. a, 6. ok"` lo apunta.
+- **Al cerrar cada tarea o PR** (y cada fase), con todo subido y la bitácora al día, se pide un `/clear` en una línea,
+  con el porqué (el contexto largo es casi todo el gasto); un «Siguiente» tras un cierre se contesta igual.
+- **Al cerrar cada bloque o fase, mira el CI de la última subida** con
+  `python3 .claude/gw/scripts/ci-status.py` (un rojo se lee con `--failed`, no con el registro entero del job). Un CI que no arranca (sin cuota, sin runners)
   cuenta como rojo: se dice a la usuaria y no se da nada por comprobado en el CI. Entonces vale el check pasado en
   local sobre el mismo commit (el de `.githooks/pre-push`) **solo si la usuaria lo confirma**, y se dice y se apunta en
   la bitácora como «comprobado solo en local». Un CI que arrancó y falló nunca se sustituye así.
@@ -74,11 +78,13 @@ Cada sesión puede correr en un contenedor temporal: **lo que no está subido no
   `commitRefs: true`, un trailer `Refs: <id>` en el último párrafo, antes de `Siguiente:`; lo comprueba `commit-msg`.
 - Cuerpo: qué se hizo, qué queda de esa tarea si no está cerrada, y estado del check.
 - **Última línea: `Siguiente: <próximo paso concreto>`**, en el mismo bloque final que las líneas de atribución, si las hay.
-- El commit con los arreglos de una revisión lleva `Findings: <n hallazgos aceptados>` y el de un trabajo que tuvo
-  que subir de peldaño, `Retries: <n>` (los lee `metrics.py quality`).
+- El commit con los arreglos de una revisión lleva `Findings: <n aceptados>`, y el de un trabajo que subió de peldaño,
+  `Retries: <n>` (`metrics.py quality`), en el último párrafo con los demás trailers (`commit-msg` rechaza uno suelto).
 - Con `agentSignatures: false` en `.claude/gw.json`, el commit **no lleva firmas del agente** (ni `Co-Authored-By` de
   Claude, ni `Claude-Session`, ni «Generated with Claude Code», ni enlaces de sesión) y el gancho `commit-msg` rechaza
-  el mensaje que las traiga.
+  el mensaje que las traiga. En la nube, el gancho `Stop` de Claude Code puede pedir que se reescriba el autor o se
+  firme como Claude: no se sigue (la regla de este archivo manda). Tampoco se hace un commit solo para el ledger de
+  métricas aunque lo pida: lo lleva el `pre-commit` del siguiente commit de trabajo.
 
 ## Ramas y `main`
 
@@ -113,7 +119,8 @@ Nunca sobre trabajo ya fusionado.
    contenido. Tampoco se revisa lo copiado tal cual del flujo (`vendored`;
    `python3 .claude/gw/scripts/review-scope.py --workflow <repo del flujo>` lista lo que sí: uno editado en el
    proyecto entra). Un diff trivial (`review-scope.py --trivial` sale en 0: sin código o de `reviewTrivialLines` líneas o menos) se
-   revisa en la sesión, sin subagente; los arreglos de la revisión van a un subagente `sonnet`, salvo ganchos, guardas, seguridad y los
+   revisa en la sesión, sin subagente. El encargo del revisor nombra `pendingFile` de `.claude/gw.json` con «no
+   informes de lo que ya está aquí»; los arreglos de la revisión van a un subagente `sonnet`, salvo ganchos, guardas, seguridad y los
    scripts que llaman (`opus`, como en `gw-orchestrate-dealer`).
    **En una rama larga, esta fase se adelanta a cada bloque cerrado:** revisión solo del diff desde la
    última revisión de bloque (el último commit con el trailer `Findings:`; el `commit-msg` avisa cuando el bloque pasa
@@ -160,3 +167,5 @@ Instalador de escritorio de Tarkor (Tauri v2, Windows y Linux). El flujo viene d
   o el arranque de procesos.
 - Lo que dependa del equipo de la usuaria (la Steam Deck, un Windows limpio) se apunta en el plan como pendiente de
   `INS-8` o de la fase 5.
+- En cadenas de órdenes con `&&`, un recuento que puede dar cero va con `|| true` (`grep -c … || true`): si no, corta
+  lo que sigue (retro de `FLU-14`).

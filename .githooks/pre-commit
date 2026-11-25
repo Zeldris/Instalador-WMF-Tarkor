@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.6.0
+# galivelop-workflow v0.9.0
 # Git pre-commit hook (copied into projects as .githooks/pre-commit; enable with: git config core.hooksPath .githooks).
 #   - No secrets in a commit: by file (.env except .env.example/.sample/.template, *.pem, *.key, *.p12, *.pfx, *.jks,
 #     id_rsa and friends, .netrc, and the local private list .claude/gw.local.json) and by added content (well-known
@@ -14,6 +14,22 @@
 #   - With logRows on: the staged log changes only the committing branch's own row (and the free ones), not
 #     another branch's (handoff.py own-row --staged; the pre-push checks it again). Skipped on a detached HEAD
 #     (WARNING) and while closing a merge/cherry-pick/rebase.
+#   - E41, first of all: neither the author nor the committer (git var GIT_AUTHOR_IDENT/GIT_COMMITTER_IDENT, so
+#     GIT_AUTHOR_*/GIT_COMMITTER_* and --amend count as in git) matches the config's authorDeny (config.py
+#     author-check); an empty list checks nothing. Fails closed without the identity; an unreadable gw.json uses the
+#     authorDeny committed at HEAD (E55); only without a readable one there either (first commit, file absent) it warns and
+#     skips it, like protectedPaths (commit-msg refuses a commit that is not WIP:). It covers git commit only: a clean
+#     merge, cherry-pick, revert or rebase skips this hook, so the pre-push checks every commit it pushes, and
+#     --range (CI) every commit of the range, with the base's authorDeny (a PR cannot empty it for itself).
+#   - B36, first (so the checks below see it): the token ledger metrics.ledger rides with the commit being made when it
+#     has changes (metrics.py stage-ledger: metrics.record and metrics.commitLedger on, not ignored, something else
+#     staged, no merge/cherry-pick/revert/rebase in progress, not git commit <paths>/--only). Fails closed without
+#     python3 or metrics.py; an unreadable gw.json warns and skips it.
+#   - C13 (scopeGuard, not off): staged files outside `## Files` of the current task's record (branch agent/<id>-..., else
+#     the mark gw/current-task) are warned about, or refused in block mode (scope-guard.py --staged; outside Claude Code
+#     too). Skipped while closing a merge/cherry-pick/rebase, and with no task, no record or no Files section.
+#   - D169 (installedCopyWarn, default on): a staged scripts/<file> that differs from its copy .claude/gw/scripts/<file> is
+#     warned about (never refused): the copy is stale, run python3 scripts/apply.py . Not in CI mode.
 #   - With logRows on, while concluding a merge: it does not keep two different tasks under one task id, one from each
 #     side (handoff.py clash --merging; the pre-push checks every new merge and the protected branch).
 # CI mode: pre-commit --range BASE..HEAD scans what the range adds instead of the staged changes (run the base
@@ -46,6 +62,45 @@ else
   fix_line="move the value to an environment variable, then stage again: git add -p"
 fi
 diff_of() { git diff "$range" "$@"; }
+
+# E41 in CI: the authors and committers of the range, against the base's authorDeny (a base without a readable
+# gw.json, as in the PR that adds the workflow, warns and skips it).
+if [ "$ci" = "1" ]; then
+  if [ -d "$root/.claude/gw/scripts" ]; then scripts="$root/.claude/gw/scripts"; else scripts="$root/scripts"; fi
+  rc=0
+  git rev-list "$range" | python3 "$scripts/config.py" --root "$root" --rev "${range%%..*}" author-check --commits - || rc=$?
+  if [ "$rc" = "2" ]; then
+    echo "pre-commit: WARNING: cannot read authorDeny from .claude/gw.json at ${range%%..*}, so the authors are not checked" >&2
+  elif [ "$rc" != "0" ]; then
+    exit 1
+  fi
+fi
+
+# B36: the token ledger goes with this commit (metrics.py stage-ledger decides when), before the checks below read it.
+if [ "$ci" = "0" ]; then
+  command -v python3 >/dev/null 2>&1 \
+    || { echo "pre-commit: python3 is not on PATH and the workflow's hooks need it; install Python 3.8+ or put it on PATH" >&2; exit 1; }
+  if [ -d "$root/.claude/gw/scripts" ]; then scripts="$root/.claude/gw/scripts"; else scripts="$root/scripts"; fi
+  for f in metrics.py config.py; do
+    [ -f "$scripts/$f" ] || { echo "pre-commit: $scripts/$f is missing; reinstall the workflow scripts: /gw-update" >&2; exit 1; }
+  done
+  # E41: exit 1 = a denied or unknown identity; exit 2 = unreadable gw.json (its fix is on stderr): warn and go on, as
+  # protectedPaths does, so a WIP: handoff still commits (commit-msg refuses the rest).
+  python3 "$scripts/config.py" --root "$root" author-check; rc=$?
+  if [ "$rc" = "2" ]; then
+    # E55: the working-tree gw.json is unreadable (a commit could be emptying authorDeny): use the one committed at HEAD.
+    python3 "$scripts/config.py" --root "$root" --rev HEAD author-check; rc=$?
+    if [ "$rc" = "2" ]; then
+      echo "pre-commit: WARNING: cannot read authorDeny from .claude/gw.json, nor from HEAD, so the author is not checked; commit-msg refuses a commit that is not WIP:. Fix it: python3 $scripts/config.py --root $root validate" >&2
+    elif [ "$rc" != "0" ]; then
+      echo "pre-commit: refused using authorDeny from HEAD, because .claude/gw.json in the working tree is unreadable (fix it: python3 $scripts/config.py --root $root validate)" >&2
+      exit 1
+    fi
+  elif [ "$rc" != "0" ]; then
+    exit 1
+  fi
+  python3 "$scripts/metrics.py" stage-ledger --root "$root" || exit 1
+fi
 
 names="$(diff_of --name-only --no-renames --diff-filter=ACMR)" || { echo "pre-commit: git diff failed; check the range: git log $range" >&2; exit 1; }
 bad_files="$(printf '%s\n' "$names" \
@@ -153,12 +208,36 @@ if [ "${CLAUDECODE:-}" = "1" ] && [ "$ci" = "0" ]; then
   fi
 fi
 
+# D169: a staged scripts/ file that differs from its installed copy (apply.py . not run yet): warn, never refuse.
+if [ "$ci" = "0" ] && [ -d "$root/.claude/gw/scripts" ] && [ -d "$root/scripts" ] \
+   && python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import config; sys.exit(0 if config.is_workflow(sys.argv[2]) else 1)' \
+        "$root/.claude/gw/scripts" "$root" 2>/dev/null; then
+  # only in the workflow repo: a project's own scripts/ has no copy to refresh (and no apply.py to refresh it with)
+  scripts="$root/.claude/gw/scripts"
+  if [ "$(python3 "$scripts/config.py" --root "$root" get installedCopyWarn 2>/dev/null)" != "false" ]; then
+    stale=""
+    while IFS= read -r path; do
+      case "$path" in scripts/*) ;; *) continue ;; esac
+      # the copy as staged, not as on disk: `git add scripts/<f>` without the copy must still warn
+      copy_id="$(git rev-parse -q --verify ":.claude/gw/$path" 2>/dev/null)" || continue
+      [ "$(git rev-parse ":$path")" = "$copy_id" ] || stale="$stale$path"$'\n'
+    done <<<"$(git diff --cached --no-renames --name-only --diff-filter=ACM)"
+    if [ -n "$stale" ]; then
+      echo "pre-commit: WARNING: these staged scripts/ files differ from their installed copy in .claude/gw/scripts/, so the hooks run the old ones:" >&2
+      printf '%s' "$stale" | sed 's/^/  /' >&2
+      echo "pre-commit: refresh the copies and stage them: python3 scripts/apply.py . && git add -A" >&2
+    fi
+  fi
+fi
+
 # Tasks closed in the plan, recorded in the log's "Done" before the commit exists (not after, with --amend).
 if [ "$ci" = "0" ]; then
   if [ -d "$root/.claude/gw/scripts" ]; then scripts="$root/.claude/gw/scripts"; else scripts="$root/scripts"; fi
-  for f in handoff.py config.py; do
+  for f in handoff.py config.py scope-guard.py questions-guard.py questions.py task.py; do
     [ -f "$scripts/$f" ] || { echo "pre-commit: $scripts/$f is missing; reinstall the workflow scripts: /gw-update" >&2; exit 1; }
   done
+  # C13: staged files outside `## Files` of the current task's record (scopeGuard: warn, or refuse in block mode).
+  python3 "$scripts/scope-guard.py" --staged --root "$root" || exit 1
   python3 "$scripts/handoff.py" --root "$root" closed --staged >&2 || exit 1
   python3 "$scripts/handoff.py" --root "$root" own-row --staged >&2 || exit 1
   python3 "$scripts/handoff.py" --root "$root" clash --merging >&2 || exit 1

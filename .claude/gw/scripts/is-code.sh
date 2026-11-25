@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# galivelop-workflow v0.6.0
+# galivelop-workflow v0.9.0
 # Lists the files that are code among those changed between two commits: everything that matches none of the
 # config's `content` regexes (Python syntax, on repo-relative paths). The review mark file and the local CI log
 # (`ciLocalLog`, written by ci-local.py --record) are never code; the workflow's own policy and guards always are, whatever `content` says (.claude/gw.json, .claude/settings.json,
@@ -7,6 +7,8 @@
 # Only code needs /code-review (plan §5.3). Used by .githooks/pre-push and the PR hook.
 #   bash is-code.sh [--rev REV] A B   # A empty = from the empty tree (a brand-new branch)
 #   bash is-code.sh [--rev REV] --explain PATH...   # says, for each path, code or content and why (REV: HEAD)
+#   bash is-code.sh [--rev REV] --list PATH...      # prints only the paths that are code, one per line (REV: HEAD);
+#                                                   # commit-message.py (taskRecord, C11) asks this about the staged files
 # The config (`content`, `reviewMark`, `ciLocalLog`) is read as commit REV has it (default B, the commit being checked), never
 # from the working tree: an uncommitted edit cannot turn the pushed code into content.
 # (--explicar, the old name of --explain, still works in 0.x, with a warning.)
@@ -72,9 +74,10 @@ if [ "${1:-}" = "--explicar" ]; then
   shift
   set -- --explain "$@"
 fi
-if [ "${1:-}" = "--explain" ]; then
+if [ "${1:-}" = "--explain" ] || [ "${1:-}" = "--list" ]; then
+  mode="explain"; [ "$1" = "--list" ] && mode="list"
   shift
-  [ "$#" -gt 0 ] || { echo "is-code: usage: bash $0 [--rev <commit>] --explain <path>..." >&2; exit 2; }
+  [ "$#" -gt 0 ] || { echo "is-code: usage: bash $0 [--rev <commit>] --explain|--list <path>..." >&2; exit 2; }
   [ -n "$rev" ] || rev="HEAD"
   paths="$rev"
   content="$(python3 "$config" --root "$root" --rev "$rev" get content --json)" || {
@@ -83,7 +86,7 @@ if [ "${1:-}" = "--explain" ]; then
     echo "is-code: cannot read reviewMark of $rev; fix it: python3 $config --root $root --rev $rev validate" >&2; exit 2; }
   cilog="$(python3 "$config" --root "$root" --rev "$rev" --paths-at "$paths" get ciLocalLog)" || {
     echo "is-code: cannot read ciLocalLog of $rev; fix it: python3 $config --root $root --rev $rev validate" >&2; exit 2; }
-  printf '%s\n' "$@" | python3 -c "$classify" "$content" "$mark" explain "$cilog"
+  printf '%s\n' "$@" | python3 -c "$classify" "$content" "$mark" "$mode" "$cilog"
   rc=$?; [ "$rc" -eq 0 ] || classify_failed "$rc"
   exit 0
 fi

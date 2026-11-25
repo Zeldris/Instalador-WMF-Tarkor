@@ -8,6 +8,8 @@ name: App
 on:
   push:
     branches-ignore: [main]
+    # Un push que solo cambia el libro de tokens no relanza el CI (FLU-13; como check.yml desde la v0.8.2).
+    paths-ignore: ["docs/metrics/ledger.jsonl"]
   pull_request:
 
 permissions:
