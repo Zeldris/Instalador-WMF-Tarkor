@@ -10,11 +10,11 @@ cada commit.**
 
 | | |
 |---|---|
-| **Actualizado** | 2026-11-25 |
+| **Actualizado** | 2026-11-26 |
 | **Ramas de trabajo** | Cada sesión, su rama con su fila «Tarea en curso» (`QA-136` de Tarkor): `claude/installer-docs-review-09e7vs` (rehecha desde `main` el 2026-10-26). Las skills, ganchos y `settings.json` de `.claude/` van versionados con `git add` normal; a `main` se pasa **por pull request**. |
 | **Último commit en `main`** | Fusión del PR #16 (2026-11-12, `5d3fcf3`): `INS-44`, `INS-45` e `INS-57` (borrar datos al desinstalar en Windows y Linux, hoja de estilos), con la confirmación de la usuaria y el CI de GitHub en verde. |
 | **Hito** | Fase 0 del [plan](../05-plan-de-trabajo.md): faltan `INS-7` y `INS-8` (necesitan la Steam Deck o un Windows). La fase 2 (SQLite) no está en el juego: su PR #1 se cerró sin fusionar y se rehace en `INS-60`. |
-| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | INS-68 hecha (falta su paso a main): la línea de uso en GB sale de ollama::gb y pending.md ya no lista lo que cerró. Siguiente: fase 1 de las tres de AGENTS.md (/code-review del diff contra origin/main desde la última revisión de bloque, fa4d4bc) y, con la confirmación de la usuaria, el PR a main. Presupuesto de compactaciones: 2. |
+| **Tarea en curso · `claude/installer-docs-review-09e7vs`** | INS-68 hecha (falta su paso a main). Fase 1 del bloque desde fa4d4bc revisada: sin hallazgos. El e2e rendimiento estaba en rojo en el CI desde 5d086d9: esperaba «4,7 GB» y la app da GB de 1024³ («4,4 GB»); arreglada la expectativa, e2e local en curso. Siguiente: e2e en verde en local y en el CI; luego fase 2 (gw-opt-tokens y retro, presentadas a la usuaria) y, con su confirmación, el PR a main. |
 | **Tarea en curso · `claude/gw-update-0.8.0`** | Al fusionarse, rama terminada: no queda nada pendiente en ella. |
 | **Tarea en curso · `claude/flu-13-ledger-ci`** | Rama abandonada sin fusionar: `FLU-13` la cerró `FLU-15` (v0.8.2 del flujo). |
 | **Tarea en curso · `claude/gw-update-0.8.1`** | Al fusionarse, rama terminada: no queda nada pendiente en ella. |

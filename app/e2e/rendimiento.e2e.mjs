@@ -218,8 +218,8 @@ async function recorrido() {
   comprobar(true, '2. tras reiniciar el motor con el perfil nuevo, Ajustes vuelve a decir dónde corre la IA')
 
   // 3. Modelos sobrantes.
-  const borrar = await veTexto(/Borrar modelos que ya no uso \(4[.,]7 GB\)/, 15000)
-  comprobar(/Borrar modelos que ya no uso \(4[.,]7 GB\)/.test(borrar), '3. sale «Borrar modelos que ya no uso (4,7 GB)» (el qwen2.5:7b de antes)')
+  const borrar = await veTexto(/Borrar modelos que ya no uso \(4[.,]4 GB\)/, 15000)
+  comprobar(/Borrar modelos que ya no uso \(4[.,]4 GB\)/.test(borrar), '3. sale «Borrar modelos que ya no uso (4,4 GB)» (el qwen2.5:7b de antes: 4,7e9 bytes en GB de 1024³)')
   await captura('sobrantes')
   await pulsar(boton('Borrar modelos que ya no uso'))
   await desaparece(boton('Borrar modelos que ya no uso'), 15000)
